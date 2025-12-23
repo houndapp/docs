@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["backend",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"enum\" href=\"backend/cli/enum.LogFormats.html\" title=\"enum backend::cli::LogFormats\">LogFormats</a>",1,["backend::cli::LogFormats"]],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"backend/cli/struct.Cli.html\" title=\"struct backend::cli::Cli\">Cli</a>",1,["backend::cli::Cli"]],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"backend/struct.Client.html\" title=\"struct backend::Client\">Client</a>",1,["backend::Client"]],["impl&lt;'backend&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"backend/struct.AuthenticatedClient.html\" title=\"struct backend::AuthenticatedClient\">AuthenticatedClient</a>&lt;'backend&gt;",1,["backend::AuthenticatedClient"]]]],["hound",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"hound/message/struct.Message.html\" title=\"struct hound::message::Message\">Message</a>",1,["hound::message::Message"]]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1207,307]}
