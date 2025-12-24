@@ -1,2 +1,2 @@
-createSrcSidebar('[["backend",["",[["server",[],["trailbase.rs","webrtc.rs"]]],["cli.rs","lib.rs","server.rs"]]],["hound",["",[],["lib.rs","message.rs"]]],["overlay",["",[],["main.rs"]]]]');
-//{"start":19,"fragment_lengths":[93,42,32]}
+createSrcSidebar('[["backend",["",[["server",[],["trailbase.rs","webrtc.rs"]]],["cli.rs","lib.rs","server.rs"]]],["hound",["",[["commands",[],["messages.rs"]]],["commands.rs","lib.rs"]]],["overlay",["",[],["main.rs"]]]]');
+//{"start":19,"fragment_lengths":[93,74,32]}

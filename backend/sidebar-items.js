@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["cli","server"],"struct":["AuthenticatedClient","Client"]};
+window.SIDEBAR_ITEMS = {"mod":["cli","server","trailbase_client"],"struct":["AuthenticatedClient","Client"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["run","setup"],"mod":["message"]};
+window.SIDEBAR_ITEMS = {"fn":["run","setup"],"mod":["commands"]};
