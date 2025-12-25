@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["backend",[["impl ToSchema for <a class=\"struct\" href=\"backend/server/auth/struct.Claims.html\" title=\"struct backend::server::auth::Claims\">Claims</a>"],["impl ToSchema for <a class=\"struct\" href=\"backend/server/auth/struct.FinishLoginRequest.html\" title=\"struct backend::server::auth::FinishLoginRequest\">FinishLoginRequest</a>"],["impl ToSchema for <a class=\"struct\" href=\"backend/server/auth/struct.FinishLoginResponse.html\" title=\"struct backend::server::auth::FinishLoginResponse\">FinishLoginResponse</a>"],["impl ToSchema for <a class=\"struct\" href=\"backend/server/auth/struct.FinishRegisterRequest.html\" title=\"struct backend::server::auth::FinishRegisterRequest\">FinishRegisterRequest</a>"],["impl ToSchema for <a class=\"struct\" href=\"backend/server/auth/struct.StartLoginRequest.html\" title=\"struct backend::server::auth::StartLoginRequest\">StartLoginRequest</a>"],["impl ToSchema for <a class=\"struct\" href=\"backend/server/auth/struct.StartLoginResponse.html\" title=\"struct backend::server::auth::StartLoginResponse\">StartLoginResponse</a>"],["impl ToSchema for <a class=\"struct\" href=\"backend/server/auth/struct.StartRegisterRequest.html\" title=\"struct backend::server::auth::StartRegisterRequest\">StartRegisterRequest</a>"],["impl ToSchema for <a class=\"struct\" href=\"backend/server/auth/struct.StartRegisterResponse.html\" title=\"struct backend::server::auth::StartRegisterResponse\">StartRegisterResponse</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1473]}

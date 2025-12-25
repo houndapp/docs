@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["serve"],"mod":["trailbase","webrtc"]};
+window.SIDEBAR_ITEMS = {"mod":["auth","webrtc"],"struct":["ApiDoc","State"]};

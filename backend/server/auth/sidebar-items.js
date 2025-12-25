@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["finish_login","finish_register","start_login","start_register"],"struct":["Auth","Claims","FinishLoginRequest","FinishLoginResponse","FinishRegisterRequest","InFlightRegistration","StartLoginRequest","StartLoginResponse","StartRegisterRequest","StartRegisterResponse"],"type":["DateTime"]};

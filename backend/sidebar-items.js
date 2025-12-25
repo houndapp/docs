@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["cli","server","trailbase_client"],"struct":["AuthenticatedClient","Client"]};
+window.SIDEBAR_ITEMS = {"enum":["Commands","LogFormats"],"mod":["server"],"struct":["Cli"]};
