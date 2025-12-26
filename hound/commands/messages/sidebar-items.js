@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["list_messages","post_message","subscribe_to_messages"],"struct":["Message"]};

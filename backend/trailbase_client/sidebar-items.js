@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["CompareOp","DbEvent","Error","ValueOrFilterGroup"],"struct":["Client","Filter","ListArguments","ListResponse","Pagination","ReadArguments","RecordApi","Tokens","User"],"trait":["ReadArgumentsTrait","RecordId","Stream"]};
