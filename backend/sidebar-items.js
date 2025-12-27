@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Commands","LogFormats"],"mod":["server"],"struct":["Cli"]};
+window.SIDEBAR_ITEMS = {"enum":["Commands","DbCommands","LogFormats"],"mod":["entity","server"],"struct":["Cli"]};

@@ -1,2 +1,2 @@
-createSrcSidebar('[["backend",["",[["server",[],["auth.rs","webrtc.rs"]]],["lib.rs","server.rs"]]],["hound",["",[],["lib.rs"]]],["overlay",["",[],["main.rs"]]]]');
-//{"start":19,"fragment_lengths":[79,29,32]}
+createSrcSidebar('[["backend",["",[["entity",[],["community.rs","community_member.rs","community_message.rs","community_space.rs","mod.rs","passkey.rs","prelude.rs","sea_orm_active_enums.rs","user.rs"]],["server",[],["auth.rs","webrtc.rs"]]],["lib.rs","server.rs"]]],["hound",["",[],["lib.rs"]]],["migration",["",[],["lib.rs","m20220101_000001_create_table.rs"]]],["overlay",["",[],["main.rs"]]]]');
+//{"start":19,"fragment_lengths":[247,29,68,32]}

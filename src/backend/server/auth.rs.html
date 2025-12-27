@@ -359,13 +359,13 @@
 <a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">use </span>serde_json::json;
 <a href=#360 id=360 data-nosnippet>360</a>    <span class="kw">use </span>uuid::Uuid;
 <a href=#361 id=361 data-nosnippet>361</a>
-<a href=#362 id=362 data-nosnippet>362</a>    <span class="kw">pub fn </span>app_state() -&gt; State {
-<a href=#363 id=363 data-nosnippet>363</a>        State::new(<span class="string">"localhost"</span>, <span class="string">"http://localhost:3000"</span>).unwrap()
+<a href=#362 id=362 data-nosnippet>362</a>    <span class="kw">pub async fn </span>app_state() -&gt; State {
+<a href=#363 id=363 data-nosnippet>363</a>        State::new(<span class="string">"localhost"</span>, <span class="string">"http://localhost:3000"</span>).<span class="kw">await</span>.unwrap()
 <a href=#364 id=364 data-nosnippet>364</a>    }
 <a href=#365 id=365 data-nosnippet>365</a>
 <a href=#366 id=366 data-nosnippet>366</a>    <span class="attr">#[tokio::test]
 <a href=#367 id=367 data-nosnippet>367</a>    </span><span class="kw">async fn </span>test_start_registration_success() {
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">let </span>state = app_state();
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">let </span>state = app_state().<span class="kw">await</span>;
 <a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">let </span>(app, <span class="kw">_</span>) = state.router();
 <a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span>server = TestServer::new(app).unwrap();
 <a href=#371 id=371 data-nosnippet>371</a>
@@ -395,7 +395,7 @@
 <a href=#395 id=395 data-nosnippet>395</a>
 <a href=#396 id=396 data-nosnippet>396</a>    <span class="attr">#[tokio::test]
 <a href=#397 id=397 data-nosnippet>397</a>    </span><span class="kw">async fn </span>test_start_registration_invalid_request() {
-<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span>state = app_state();
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span>state = app_state().<span class="kw">await</span>;
 <a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span>(app, <span class="kw">_</span>) = state.router();
 <a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">let </span>server = TestServer::new(app).unwrap();
 <a href=#401 id=401 data-nosnippet>401</a>
@@ -407,7 +407,7 @@
 <a href=#407 id=407 data-nosnippet>407</a>
 <a href=#408 id=408 data-nosnippet>408</a>    <span class="attr">#[tokio::test]
 <a href=#409 id=409 data-nosnippet>409</a>    </span><span class="kw">async fn </span>test_finish_registration_missing_state() {
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span>state = app_state();
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span>state = app_state().<span class="kw">await</span>;
 <a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">let </span>(app, <span class="kw">_</span>) = state.router();
 <a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">let </span>server = TestServer::new(app).unwrap();
 <a href=#413 id=413 data-nosnippet>413</a>
@@ -425,7 +425,7 @@
 <a href=#425 id=425 data-nosnippet>425</a>
 <a href=#426 id=426 data-nosnippet>426</a>    <span class="attr">#[tokio::test]
 <a href=#427 id=427 data-nosnippet>427</a>    </span><span class="kw">async fn </span>test_concurrent_registrations() {
-<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span>state = app_state();
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span>state = app_state().<span class="kw">await</span>;
 <a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">let </span>(app, <span class="kw">_</span>) = state.router();
 <a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">let </span>server = Arc::new(TestServer::new(app).unwrap());
 <a href=#431 id=431 data-nosnippet>431</a>
@@ -471,7 +471,7 @@
 <a href=#471 id=471 data-nosnippet>471</a>
 <a href=#472 id=472 data-nosnippet>472</a>    <span class="attr">#[tokio::test]
 <a href=#473 id=473 data-nosnippet>473</a>    </span><span class="kw">async fn </span>test_registration_state_cleanup_after_finish() {
-<a href=#474 id=474 data-nosnippet>474</a>        <span class="kw">let </span>state = app_state();
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="kw">let </span>state = app_state().<span class="kw">await</span>;
 <a href=#475 id=475 data-nosnippet>475</a>        <span class="kw">let </span>(app, <span class="kw">_</span>) = state.router();
 <a href=#476 id=476 data-nosnippet>476</a>        <span class="kw">let </span>server = TestServer::new(app).unwrap();
 <a href=#477 id=477 data-nosnippet>477</a>
@@ -517,7 +517,7 @@
 <a href=#517 id=517 data-nosnippet>517</a>
 <a href=#518 id=518 data-nosnippet>518</a>    <span class="attr">#[tokio::test]
 <a href=#519 id=519 data-nosnippet>519</a>    </span><span class="kw">async fn </span>test_invalid_json_in_finish() {
-<a href=#520 id=520 data-nosnippet>520</a>        <span class="kw">let </span>state = app_state();
+<a href=#520 id=520 data-nosnippet>520</a>        <span class="kw">let </span>state = app_state().<span class="kw">await</span>;
 <a href=#521 id=521 data-nosnippet>521</a>        <span class="kw">let </span>(app, <span class="kw">_</span>) = state.router();
 <a href=#522 id=522 data-nosnippet>522</a>        <span class="kw">let </span>server = TestServer::new(app).unwrap();
 <a href=#523 id=523 data-nosnippet>523</a>

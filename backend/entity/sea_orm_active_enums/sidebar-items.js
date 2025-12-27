@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CommunitySpaceKind","CommunitySpaceKindVariant"],"struct":["CommunitySpaceKindEnum","CommunitySpaceKindIter","CommunitySpaceKindVariantIter"]};

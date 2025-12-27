@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Community","CommunityMember","CommunityMessage","CommunitySpace","CommunitySpaceKind","CommunitySpaceKindVariant","Passkey","User"],"struct":["CommunitySpaceKindEnum","CommunitySpaceKindIter","CommunitySpaceKindVariantIter","Migration"]};

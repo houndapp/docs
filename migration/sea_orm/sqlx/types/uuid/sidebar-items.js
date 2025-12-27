@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Variant","Version"],"macro":["uuid"],"mod":["fmt","serde","timestamp"],"struct":["Builder","ContextV7","Error","NoContext","NonNilUuid","Timestamp","Uuid"],"trait":["ClockSequence"],"type":["Bytes"]};

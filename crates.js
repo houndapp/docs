@@ -1,2 +1,2 @@
-window.ALL_CRATES = ["backend","hound","overlay"];
-//{"start":21,"fragment_lengths":[9,8,10]}
+window.ALL_CRATES = ["backend","hound","migration","overlay"];
+//{"start":21,"fragment_lengths":[9,8,12,10]}
