@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["ChronoUnixTimestamp","ChronoUnixTimestampMillis","JsonField","TimeUnixTimestamp","TimeUnixTimestampMillis"],"trait":["DefaultActiveValue","DefaultActiveValueNone","DefaultActiveValueNotSet"]};
+window.SIDEBAR_ITEMS = {"struct":["ChronoUnixTimestamp","ChronoUnixTimestampMillis","TimeUnixTimestamp","TimeUnixTimestampMillis"],"trait":["DefaultActiveValue","DefaultActiveValueNone","DefaultActiveValueNotSet"]};

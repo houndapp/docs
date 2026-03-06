@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Json"],"struct":["BigDecimal","DateTime","Decimal","FixedOffset","Local","NaiveDate","NaiveDateTime","NaiveTime","OffsetDateTime","PrimitiveDateTime","Utc","Uuid"]};
+window.SIDEBAR_ITEMS = {"enum":["Json"],"struct":["DateTime","Decimal","FixedOffset","Local","NaiveDate","NaiveDateTime","NaiveTime","OffsetDateTime","PrimitiveDateTime","Utc","Uuid"]};

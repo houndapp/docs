@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["entity","prelude"],"struct":["Page","PaginationParameters"],"trait":["PaginatorExt"],"type":["DbResult"]};

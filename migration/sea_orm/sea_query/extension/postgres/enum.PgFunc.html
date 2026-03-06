@@ -352,7 +352,7 @@ If the value is <code>None</code> the argument is omitted from the query, and he
 
 <span class="macro">assert_eq!</span>(
     query.to_string(PostgresQueryBuilder),
-    <span class="string">r#"SELECT ANY(ARRAY[0,1])"#
+    <span class="string">r#"SELECT ANY(ARRAY [0,1])"#
 </span>);</code></pre></div>
 
 <div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>sea_query::{tests_cfg::<span class="kw-2">*</span>, <span class="kw-2">*</span>};
@@ -377,7 +377,7 @@ If the value is <code>None</code> the argument is omitted from the query, and he
 
 <span class="macro">assert_eq!</span>(
     query.to_string(PostgresQueryBuilder),
-    <span class="string">r#"SELECT SOME(ARRAY[0,1])"#
+    <span class="string">r#"SELECT SOME(ARRAY [0,1])"#
 </span>);</code></pre></div>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.all" class="method"><h4 class="code-header">pub fn <a href="#method.all" class="fn">all</a>&lt;T&gt;(expr: T) -&gt; <a class="struct" href="../../../../struct.FunctionCall.html" title="struct migration::FunctionCall">FunctionCall</a><div class="where">where
     T: <a class="trait" href="https://doc.rust-lang.org/1.90.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="enum" href="../../../../enum.Expr.html" title="enum migration::Expr">Expr</a>&gt;,</div></h4></section></summary><div class="docblock"><p>Call <code>ALL</code> function. Postgres only.</p>
@@ -389,7 +389,7 @@ If the value is <code>None</code> the argument is omitted from the query, and he
 
 <span class="macro">assert_eq!</span>(
     query.to_string(PostgresQueryBuilder),
-    <span class="string">r#"SELECT ALL(ARRAY[0,1])"#
+    <span class="string">r#"SELECT ALL(ARRAY [0,1])"#
 </span>);</code></pre></div>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.starts_with" class="method"><h4 class="code-header">pub fn <a href="#method.starts_with" class="fn">starts_with</a>&lt;T, P&gt;(text: T, prefix: P) -&gt; <a class="struct" href="../../../../struct.FunctionCall.html" title="struct migration::FunctionCall">FunctionCall</a><div class="where">where
     T: <a class="trait" href="https://doc.rust-lang.org/1.90.0/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="enum" href="../../../../enum.Expr.html" title="enum migration::Expr">Expr</a>&gt;,

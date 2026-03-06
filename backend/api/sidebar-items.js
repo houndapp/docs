@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ApiError"],"fn":["openapi","router","serve","socket_io"],"mod":["auth","community","data","middleware","profile","space","user","webrtc","well_known"],"struct":["Api","Inner","SecurityAddon"],"type":["ApiResult"]};

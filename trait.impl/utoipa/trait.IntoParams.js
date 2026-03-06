@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["backend",[["impl IntoParams for <a class=\"struct\" href=\"backend/api/community/struct.DeleteCommunityParameters.html\" title=\"struct backend::api::community::DeleteCommunityParameters\">DeleteCommunityParameters</a>"],["impl IntoParams for <a class=\"struct\" href=\"backend/api/community/struct.GetCommunityMembersParameters.html\" title=\"struct backend::api::community::GetCommunityMembersParameters\">GetCommunityMembersParameters</a>"],["impl IntoParams for <a class=\"struct\" href=\"backend/api/community/struct.JoinCommunityParameters.html\" title=\"struct backend::api::community::JoinCommunityParameters\">JoinCommunityParameters</a>"],["impl IntoParams for <a class=\"struct\" href=\"backend/api/community/struct.LeaveCommunityParameters.html\" title=\"struct backend::api::community::LeaveCommunityParameters\">LeaveCommunityParameters</a>"],["impl IntoParams for <a class=\"struct\" href=\"backend/api/data/struct.PaginationParameters.html\" title=\"struct backend::api::data::PaginationParameters\">PaginationParameters</a>"],["impl IntoParams for <a class=\"struct\" href=\"backend/api/profile/struct.FindProfileParameters.html\" title=\"struct backend::api::profile::FindProfileParameters\">FindProfileParameters</a>"],["impl IntoParams for <a class=\"struct\" href=\"backend/api/space/model/struct.DeleteCommunitySpaceParameters.html\" title=\"struct backend::api::space::model::DeleteCommunitySpaceParameters\">DeleteCommunitySpaceParameters</a>"],["impl IntoParams for <a class=\"struct\" href=\"backend/api/space/model/struct.GetCommunitySpacesParameters.html\" title=\"struct backend::api::space::model::GetCommunitySpacesParameters\">GetCommunitySpacesParameters</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1697]}

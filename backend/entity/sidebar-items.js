@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["community","community_member","community_message","community_space","passkey","prelude","sea_orm_active_enums","user"]};
