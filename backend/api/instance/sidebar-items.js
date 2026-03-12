@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["get_instance","post_provision","router"],"struct":["InstanceModel","PostProvisionRequest"]};
