@@ -974,7 +974,7 @@
 <a href=#974 id=974 data-nosnippet>974</a>            .<span class="kw">await</span>;
 <a href=#975 id=975 data-nosnippet>975</a>
 <a href=#976 id=976 data-nosnippet>976</a>        <span class="macro">assert_eq!</span>(response.status_code(), <span class="number">200</span>);
-<a href=#977 id=977 data-nosnippet>977</a>        <span class="kw">let </span>msg: CommunitySpaceMessageResponse = response.json();
+<a href=#977 id=977 data-nosnippet>977</a>        <span class="kw">let </span>msg: CompleteCommunitySpaceMessage = response.json();
 <a href=#978 id=978 data-nosnippet>978</a>        <span class="macro">assert_eq!</span>(msg.space_id, community.default_space);
 <a href=#979 id=979 data-nosnippet>979</a>        <span class="macro">assert_eq!</span>(msg.user_id, user.id);
 <a href=#980 id=980 data-nosnippet>980</a>        <span class="macro">assert_eq!</span>(msg.contents, <span class="string">"Hello, world!"</span>);
