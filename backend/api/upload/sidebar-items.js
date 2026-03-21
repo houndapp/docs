@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ATTACHMENT_MIME_TYPES","AVATAR_MIME_TYPES","TAG"],"fn":["check_magic","collect_bounded","mime_to_ext","process_upload","router","upload_attachment","upload_avatar"],"struct":["UploadAttachmentParams","UploadAvatarParams","UploadResponse"]};

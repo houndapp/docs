@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Storage","StorageError"],"struct":["LocalStorage","S3Storage"]};
