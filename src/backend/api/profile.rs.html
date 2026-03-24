@@ -112,10 +112,10 @@
 <a href=#112 id=112 data-nosnippet>112</a>    State(api): State&lt;Api&gt;,
 <a href=#113 id=113 data-nosnippet>113</a>    Json(body): Json&lt;PatchAvatarRequest&gt;,
 <a href=#114 id=114 data-nosnippet>114</a>) -&gt; ApiResult&lt;StatusCode&gt; {
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>key = api
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>upload = api
 <a href=#116 id=116 data-nosnippet>116</a>        .reference_upload(body.avatar_upload_id, claims.sub)
 <a href=#117 id=117 data-nosnippet>117</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#118 id=118 data-nosnippet>118</a>    api.set_global_avatar(claims.sub, key).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#118 id=118 data-nosnippet>118</a>    api.set_global_avatar(claims.sub, upload.key).<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#119 id=119 data-nosnippet>119</a>    <span class="prelude-val">Ok</span>(StatusCode::NO_CONTENT)
 <a href=#120 id=120 data-nosnippet>120</a>}
 <a href=#121 id=121 data-nosnippet>121</a>

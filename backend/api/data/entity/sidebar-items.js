@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["community","community_member","community_settings","community_space","community_space_message","instance","passkey","prelude","profile","role","sea_orm_active_enums","upload","user"]};
+window.SIDEBAR_ITEMS = {"mod":["community","community_member","community_settings","community_space","community_space_message","community_space_message_attachment","community_space_message_history","instance","passkey","prelude","profile","role","sea_orm_active_enums","upload","user"]};
