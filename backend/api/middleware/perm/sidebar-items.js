@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["instance"],"struct":["ManageChannels","ManageCommunity","ManageMessages","ManageRoles","ManageUsers","ReadHistory","SendMessages","ViewChannels"]};

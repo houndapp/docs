@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["delete_role","delete_role_member","get_roles","patch_role","post_role","post_role_member","put_role_permissions"],"struct":["PatchRoleRequest","PostRoleMemberRequest","PostRoleRequest","PutRolePermissionsRequest","RoleResponse"]};

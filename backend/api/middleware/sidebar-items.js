@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["LoggedIn","MaybeLoggedIn","RefreshToken"]};
+window.SIDEBAR_ITEMS = {"fn":["path_param_id"],"mod":["perm"],"struct":["CommunityPermission","InstancePerm","LoggedIn","MaybeLoggedIn","Organiser","RefreshToken","SpaceAccess","SpacePermission"],"trait":["InstancePermissionMarker","PermissionMarker"]};

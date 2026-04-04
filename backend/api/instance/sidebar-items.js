@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["get_instance","post_provision","router"],"struct":["InstanceModel","PostProvisionRequest"]};
+window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["get_instance","post_provision","put_user_permissions","router"],"struct":["InstanceModel","PostProvisionRequest","PutUserPermissionsRequest"]};

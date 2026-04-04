@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CommunitySpaceKind","CommunitySpaceKindVariant"],"struct":["CommunitySpaceKindEnum","CommunitySpaceKindIter","CommunitySpaceKindVariantIter"]};
+window.SIDEBAR_ITEMS = {"enum":["CommunitySpaceKind","CommunitySpaceKindVariant","InstancePermission","InstancePermissionVariant","Permission","PermissionVariant"],"struct":["CommunitySpaceKindEnum","CommunitySpaceKindIter","CommunitySpaceKindVariantIter","InstancePermissionEnum","InstancePermissionIter","InstancePermissionVariantIter","PermissionEnum","PermissionIter","PermissionVariantIter"]};
