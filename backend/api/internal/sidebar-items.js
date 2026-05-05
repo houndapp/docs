@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["post_sfu_register","router"],"struct":["SfuRegisterRequest"]};

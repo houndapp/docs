@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["voice_join","voice_leave","voice_list_capture_targets","voice_send_frame"],"struct":["JoinPeer","JoinProfile","JoinResponse","VoiceJoinResult"]};

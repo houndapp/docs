@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["passkey_device_name","run","setup"]};
+window.SIDEBAR_ITEMS = {"fn":["passkey_device_name","run","setup"],"mod":["voice"]};

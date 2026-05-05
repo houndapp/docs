@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_signaling","serve"],"type":["ClientMap"]};

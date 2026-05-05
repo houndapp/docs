@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FLAG_KEYFRAME","HEADER_SIZE","HOUND_ALPN","MAX_FRAG_PAYLOAD"],"enum":["ServerHandshake","TrackTypeByte"],"fn":["build_header","emit_frame","encode_message","parse_track_type","read_message","receive_loop"],"struct":["AckPeer","HelloCodecs","HelloMsg","SfuClient","SfuReadyPayload"]};

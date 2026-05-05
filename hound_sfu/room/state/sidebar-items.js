@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["PeerInfo","Room"],"trait":["FrameSink"],"type":["PeerId","UserId"]};

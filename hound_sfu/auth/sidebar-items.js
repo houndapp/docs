@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TokenError"],"fn":["constant_time_eq","generate_relay_token","verify_relay_token"],"struct":["RelayTokenClaims"],"type":["HmacSha256"]};

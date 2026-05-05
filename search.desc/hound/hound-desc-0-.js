@@ -1,1 +1,0 @@
-searchState.loadedDescShard("hound", 0, "hound.chat Native API\nThe entrypoint for the native app.\nCustomises the tauri setup for hound.")
