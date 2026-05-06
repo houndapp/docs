@@ -174,7 +174,7 @@
 <a href=#174 id=174 data-nosnippet>174</a>// `scap` supports macOS (ScreenCaptureKit), Windows (DXGI + WASAPI), and
 <a href=#175 id=175 data-nosnippet>175</a>// Linux (PipeWire). It is only compiled in on those platforms so we don't
 <a href=#176 id=176 data-nosnippet>176</a>// pull in heavy native dependencies on unsupported targets.
-<a href=#177 id=177 data-nosnippet>177</a></span><span class="attr">#[cfg(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"windows"</span>, target_os = <span class="string">"linux"</span>))]
+<a href=#177 id=177 data-nosnippet>177</a></span><span class="attr">#[cfg(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"linux"</span>))]
 <a href=#178 id=178 data-nosnippet>178</a></span><span class="kw">mod </span>scap_capturer;
 <a href=#179 id=179 data-nosnippet>179</a>
 <a href=#180 id=180 data-nosnippet>180</a><span class="comment">// ─── PlatformCapturer alias ───────────────────────────────────────────────────

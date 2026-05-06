@@ -95,7 +95,7 @@
 <a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">pub </span>sfu_node_id: <span class="prelude-ty">Option</span>&lt;String&gt;,
 <a href=#96 id=96 data-nosnippet>96</a>
 <a href=#97 id=97 data-nosnippet>97</a>    <span class="doccomment">/// Allowed CORS origins (e.g. https://app.hound.chat). Multiple values can be specified.
-<a href=#98 id=98 data-nosnippet>98</a>    </span><span class="attr">#[clap(long, env, value_delimiter = <span class="string">','</span>, default_values_t = <span class="macro">vec!</span>[<span class="string">"https://app.hound.chat"</span>.to_string()]</span>)]
+<a href=#98 id=98 data-nosnippet>98</a>    </span><span class="attr">#[clap(long, env, value_delimiter = <span class="string">','</span>, default_values_t = <span class="macro">vec!</span>[<span class="string">"https://app.hound.chat"</span>.to_string(), <span class="string">"tauri://localhost"</span>.to_string()]</span>)]
 <a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">pub </span>cors_origins: Vec&lt;String&gt;,
 <a href=#100 id=100 data-nosnippet>100</a>
 <a href=#101 id=101 data-nosnippet>101</a>    <span class="doccomment">/// Database migration mode to run before starting the API server.
