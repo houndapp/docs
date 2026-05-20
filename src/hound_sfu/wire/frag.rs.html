@@ -271,10 +271,10 @@
 <a href=#271 id=271 data-nosnippet>271</a>        // proper LRU here — just remove an arbitrary entry. For real-time
 <a href=#272 id=272 data-nosnippet>272</a>        // media this is fine: stale frames are already useless by the time
 <a href=#273 id=273 data-nosnippet>273</a>        // eviction kicks in.
-<a href=#274 id=274 data-nosnippet>274</a>        </span><span class="kw">if </span><span class="self">self</span>.pending.len() &gt;= <span class="self">self</span>.max_pending {
-<a href=#275 id=275 data-nosnippet>275</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(key) = <span class="self">self</span>.pending.keys().next().copied() {
-<a href=#276 id=276 data-nosnippet>276</a>                <span class="self">self</span>.pending.remove(<span class="kw-2">&amp;</span>key);
-<a href=#277 id=277 data-nosnippet>277</a>            }
+<a href=#274 id=274 data-nosnippet>274</a>        </span><span class="kw">if </span><span class="self">self</span>.pending.len() &gt;= <span class="self">self</span>.max_pending
+<a href=#275 id=275 data-nosnippet>275</a>            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(key) = <span class="self">self</span>.pending.keys().next().copied()
+<a href=#276 id=276 data-nosnippet>276</a>        {
+<a href=#277 id=277 data-nosnippet>277</a>            <span class="self">self</span>.pending.remove(<span class="kw-2">&amp;</span>key);
 <a href=#278 id=278 data-nosnippet>278</a>        }
 <a href=#279 id=279 data-nosnippet>279</a>
 <a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">let </span>key = FrameKey::from_header(<span class="kw-2">&amp;</span>header);
@@ -285,7 +285,7 @@
 <a href=#285 id=285 data-nosnippet>285</a>
 <a href=#286 id=286 data-nosnippet>286</a>        <span class="comment">// Guard against a mismatched frag_total (shouldn't happen with a
 <a href=#287 id=287 data-nosnippet>287</a>        // well-behaved sender, but prevents an out-of-bounds panic).
-<a href=#288 id=288 data-nosnippet>288</a>        </span><span class="kw">if </span>payload.len() &gt; <span class="number">0 </span>&amp;&amp; header.<span class="macro">frag_total !</span>= pending.total {
+<a href=#288 id=288 data-nosnippet>288</a>        </span><span class="kw">if </span>!payload.is_empty() &amp;&amp; header.<span class="macro">frag_total !</span>= pending.total {
 <a href=#289 id=289 data-nosnippet>289</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#290 id=290 data-nosnippet>290</a>        }
 <a href=#291 id=291 data-nosnippet>291</a>
