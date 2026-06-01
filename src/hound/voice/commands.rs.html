@@ -136,183 +136,180 @@
 <a href=#136 id=136 data-nosnippet>136</a>            source,
 <a href=#137 id=137 data-nosnippet>137</a>        })<span class="question-mark">?</span>;
 <a href=#138 id=138 data-nosnippet>138</a>
-<a href=#139 id=139 data-nosnippet>139</a>    <span class="comment">// Connect to the SFU if the backend provided its node ID.
-<a href=#140 id=140 data-nosnippet>140</a>    //
-<a href=#141 id=141 data-nosnippet>141</a>    // When the backend advertises an `sfu_node_id`, the SFU is deployed and a
-<a href=#142 id=142 data-nosnippet>142</a>    // failure to reach it is a hard error — NOT something to swallow. Previously
-<a href=#143 id=143 data-nosnippet>143</a>    // a failed connect was logged and the join "succeeded" with no media path,
-<a href=#144 id=144 data-nosnippet>144</a>    // so the UI showed the user as connected while no audio or video ever
-<a href=#145 id=145 data-nosnippet>145</a>    // flowed: a silent failure that looked exactly like a working call. We now
-<a href=#146 id=146 data-nosnippet>146</a>    // surface it so the user (and the logs) see why the call is dead.
-<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="kw">let </span>sfu = <span class="kw">match </span><span class="kw-2">&amp;</span>body.sfu_node_id {
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="prelude-val">Some</span>(node_id) =&gt; {
-<a href=#149 id=149 data-nosnippet>149</a>            <span class="kw">let </span>relay_url: iroh::RelayUrl =
-<a href=#150 id=150 data-nosnippet>150</a>                body.relay_url.parse().map_err(|<span class="kw">_</span>| VoiceError::SfuConnect {
-<a href=#151 id=151 data-nosnippet>151</a>                    reason: <span class="macro">format!</span>(<span class="string">"invalid relay URL: {}"</span>, body.relay_url),
-<a href=#152 id=152 data-nosnippet>152</a>                })<span class="question-mark">?</span>;
-<a href=#153 id=153 data-nosnippet>153</a>            <span class="kw">let </span>client = SfuClient::connect(relay_url, node_id, <span class="kw-2">&amp;</span>body.relay_token, app.clone())
-<a href=#154 id=154 data-nosnippet>154</a>                .<span class="kw">await
-<a href=#155 id=155 data-nosnippet>155</a>                </span>.inspect_err(|e| <span class="macro">tracing::error!</span>(<span class="string">"SFU connect failed: {e}"</span>))<span class="question-mark">?</span>;
-<a href=#156 id=156 data-nosnippet>156</a>            <span class="macro">tracing::info!</span>(peer_id = client.peer_id, <span class="string">"connected to SFU"</span>);
-<a href=#157 id=157 data-nosnippet>157</a>            <span class="prelude-val">Some</span>(Arc::new(client))
-<a href=#158 id=158 data-nosnippet>158</a>        }
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="prelude-val">None </span>=&gt; {
-<a href=#160 id=160 data-nosnippet>160</a>            <span class="comment">// No SFU configured on the backend at all. This is a deployment
-<a href=#161 id=161 data-nosnippet>161</a>            // state, not a transient failure; log loudly so it is not mistaken
-<a href=#162 id=162 data-nosnippet>162</a>            // for a working call, but allow the (media-less) join to proceed.
-<a href=#163 id=163 data-nosnippet>163</a>            </span><span class="macro">tracing::warn!</span>(
-<a href=#164 id=164 data-nosnippet>164</a>                <span class="string">"backend returned no sfu_node_id — joining WITHOUT a media path; \
-<a href=#165 id=165 data-nosnippet>165</a>                 no audio or video will flow until the SFU is configured"
-<a href=#166 id=166 data-nosnippet>166</a>            </span>);
-<a href=#167 id=167 data-nosnippet>167</a>            <span class="prelude-val">None
-<a href=#168 id=168 data-nosnippet>168</a>        </span>}
-<a href=#169 id=169 data-nosnippet>169</a>    };
-<a href=#170 id=170 data-nosnippet>170</a>
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="comment">// Always confirm with the backend — this triggers the voice:join broadcast
-<a href=#172 id=172 data-nosnippet>172</a>    // to other participants. sfu_peer_id is None when we have no SFU connection
-<a href=#173 id=173 data-nosnippet>173</a>    // (relay-only mode or SFU not configured); participants still appear, they
-<a href=#174 id=174 data-nosnippet>174</a>    // just won't have video mapped until an SFU session is established.
-<a href=#175 id=175 data-nosnippet>175</a>    </span>{
-<a href=#176 id=176 data-nosnippet>176</a>        <span class="attr">#[derive(serde::Serialize)]
-<a href=#177 id=177 data-nosnippet>177</a>        </span><span class="kw">struct </span>ConfirmRequest {
-<a href=#178 id=178 data-nosnippet>178</a>            sfu_peer_id: <span class="prelude-ty">Option</span>&lt;u16&gt;,
-<a href=#179 id=179 data-nosnippet>179</a>        }
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"{api_base}/space/{space_id}/voice/confirm"</span>);
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">let </span>peer_id = sfu.as_ref().map(|c| c.peer_id <span class="kw">as </span>u16);
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="macro">tracing::info!</span>(sfu_peer_id = <span class="question-mark">?</span>peer_id, <span class="string">"confirming voice join with backend"</span>);
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">match </span>reqwest::Client::new()
-<a href=#184 id=184 data-nosnippet>184</a>            .post(<span class="kw-2">&amp;</span>url)
-<a href=#185 id=185 data-nosnippet>185</a>            .bearer_auth(<span class="kw-2">&amp;</span>access_token)
-<a href=#186 id=186 data-nosnippet>186</a>            .json(<span class="kw-2">&amp;</span>ConfirmRequest {
-<a href=#187 id=187 data-nosnippet>187</a>                sfu_peer_id: peer_id,
-<a href=#188 id=188 data-nosnippet>188</a>            })
-<a href=#189 id=189 data-nosnippet>189</a>            .send()
-<a href=#190 id=190 data-nosnippet>190</a>            .<span class="kw">await
-<a href=#191 id=191 data-nosnippet>191</a>        </span>{
-<a href=#192 id=192 data-nosnippet>192</a>            <span class="prelude-val">Ok</span>(resp) <span class="kw">if </span>resp.status().is_success() =&gt; {
-<a href=#193 id=193 data-nosnippet>193</a>                <span class="macro">tracing::info!</span>(<span class="string">"voice confirm succeeded"</span>);
-<a href=#194 id=194 data-nosnippet>194</a>            }
-<a href=#195 id=195 data-nosnippet>195</a>            <span class="prelude-val">Ok</span>(resp) =&gt; {
-<a href=#196 id=196 data-nosnippet>196</a>                <span class="kw">let </span>status = resp.status().as_u16();
-<a href=#197 id=197 data-nosnippet>197</a>                <span class="kw">let </span>body = resp.text().<span class="kw">await</span>.unwrap_or_default();
-<a href=#198 id=198 data-nosnippet>198</a>                <span class="macro">tracing::warn!</span>(status, body, <span class="string">"voice confirm returned non-2xx"</span>);
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="comment">// Connect to the SFU. Both failure paths below are hard errors rather than
+<a href=#140 id=140 data-nosnippet>140</a>    // silent degradations: without an SFU session the call carries no audio or
+<a href=#141 id=141 data-nosnippet>141</a>    // video and the local encoder never starts (it gates on the SFU-assigned
+<a href=#142 id=142 data-nosnippet>142</a>    // peer id), so the UI would show a connected-looking call with 0 fps / 0
+<a href=#143 id=143 data-nosnippet>143</a>    // kbps and no way to tell why. We surface the real reason instead.
+<a href=#144 id=144 data-nosnippet>144</a>    </span><span class="kw">let </span>node_id = body.sfu_node_id.as_deref().ok_or_else(|| {
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="comment">// The backend stores the SFU node id in memory and only learns it when
+<a href=#146 id=146 data-nosnippet>146</a>        // the SFU POSTs `/internal/sfu/register` on startup. A `None` here means
+<a href=#147 id=147 data-nosnippet>147</a>        // the SFU never registered (not running, `BACKEND_URL` unset on the SFU,
+<a href=#148 id=148 data-nosnippet>148</a>        // or the backend restarted and lost the in-memory value).
+<a href=#149 id=149 data-nosnippet>149</a>        </span><span class="macro">tracing::error!</span>(
+<a href=#150 id=150 data-nosnippet>150</a>            <span class="string">"backend returned no sfu_node_id — the SFU has not registered with the backend; \
+<a href=#151 id=151 data-nosnippet>151</a>             no media path is available"
+<a href=#152 id=152 data-nosnippet>152</a>        </span>);
+<a href=#153 id=153 data-nosnippet>153</a>        VoiceError::SfuConnect {
+<a href=#154 id=154 data-nosnippet>154</a>            reason: <span class="string">"voice server unavailable (the SFU has not registered with the backend)"
+<a href=#155 id=155 data-nosnippet>155</a>                </span>.to_owned(),
+<a href=#156 id=156 data-nosnippet>156</a>        }
+<a href=#157 id=157 data-nosnippet>157</a>    })<span class="question-mark">?</span>;
+<a href=#158 id=158 data-nosnippet>158</a>
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span>relay_url: iroh::RelayUrl = body.relay_url.parse().map_err(|<span class="kw">_</span>| VoiceError::SfuConnect {
+<a href=#160 id=160 data-nosnippet>160</a>        reason: <span class="macro">format!</span>(<span class="string">"invalid relay URL: {}"</span>, body.relay_url),
+<a href=#161 id=161 data-nosnippet>161</a>    })<span class="question-mark">?</span>;
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">let </span>client = SfuClient::connect(relay_url, node_id, <span class="kw-2">&amp;</span>body.relay_token, app.clone())
+<a href=#163 id=163 data-nosnippet>163</a>        .<span class="kw">await
+<a href=#164 id=164 data-nosnippet>164</a>        </span>.inspect_err(|e| <span class="macro">tracing::error!</span>(<span class="string">"SFU connect failed: {e}"</span>))<span class="question-mark">?</span>;
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="macro">tracing::info!</span>(peer_id = client.peer_id, <span class="string">"connected to SFU"</span>);
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span>sfu = <span class="prelude-val">Some</span>(Arc::new(client));
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="comment">// Always confirm with the backend — this triggers the voice:join broadcast
+<a href=#169 id=169 data-nosnippet>169</a>    // to other participants. sfu_peer_id is None when we have no SFU connection
+<a href=#170 id=170 data-nosnippet>170</a>    // (relay-only mode or SFU not configured); participants still appear, they
+<a href=#171 id=171 data-nosnippet>171</a>    // just won't have video mapped until an SFU session is established.
+<a href=#172 id=172 data-nosnippet>172</a>    </span>{
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="attr">#[derive(serde::Serialize)]
+<a href=#174 id=174 data-nosnippet>174</a>        </span><span class="kw">struct </span>ConfirmRequest {
+<a href=#175 id=175 data-nosnippet>175</a>            sfu_peer_id: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+<a href=#176 id=176 data-nosnippet>176</a>        }
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"{api_base}/space/{space_id}/voice/confirm"</span>);
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">let </span>peer_id = sfu.as_ref().map(|c| c.peer_id <span class="kw">as </span>u16);
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">tracing::info!</span>(sfu_peer_id = <span class="question-mark">?</span>peer_id, <span class="string">"confirming voice join with backend"</span>);
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">match </span>reqwest::Client::new()
+<a href=#181 id=181 data-nosnippet>181</a>            .post(<span class="kw-2">&amp;</span>url)
+<a href=#182 id=182 data-nosnippet>182</a>            .bearer_auth(<span class="kw-2">&amp;</span>access_token)
+<a href=#183 id=183 data-nosnippet>183</a>            .json(<span class="kw-2">&amp;</span>ConfirmRequest {
+<a href=#184 id=184 data-nosnippet>184</a>                sfu_peer_id: peer_id,
+<a href=#185 id=185 data-nosnippet>185</a>            })
+<a href=#186 id=186 data-nosnippet>186</a>            .send()
+<a href=#187 id=187 data-nosnippet>187</a>            .<span class="kw">await
+<a href=#188 id=188 data-nosnippet>188</a>        </span>{
+<a href=#189 id=189 data-nosnippet>189</a>            <span class="prelude-val">Ok</span>(resp) <span class="kw">if </span>resp.status().is_success() =&gt; {
+<a href=#190 id=190 data-nosnippet>190</a>                <span class="macro">tracing::info!</span>(<span class="string">"voice confirm succeeded"</span>);
+<a href=#191 id=191 data-nosnippet>191</a>            }
+<a href=#192 id=192 data-nosnippet>192</a>            <span class="prelude-val">Ok</span>(resp) =&gt; {
+<a href=#193 id=193 data-nosnippet>193</a>                <span class="kw">let </span>status = resp.status().as_u16();
+<a href=#194 id=194 data-nosnippet>194</a>                <span class="kw">let </span>body = resp.text().<span class="kw">await</span>.unwrap_or_default();
+<a href=#195 id=195 data-nosnippet>195</a>                <span class="macro">tracing::warn!</span>(status, body, <span class="string">"voice confirm returned non-2xx"</span>);
+<a href=#196 id=196 data-nosnippet>196</a>            }
+<a href=#197 id=197 data-nosnippet>197</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#198 id=198 data-nosnippet>198</a>                <span class="macro">tracing::warn!</span>(<span class="string">"voice confirm request failed: {e}"</span>);
 <a href=#199 id=199 data-nosnippet>199</a>            }
-<a href=#200 id=200 data-nosnippet>200</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#201 id=201 data-nosnippet>201</a>                <span class="macro">tracing::warn!</span>(<span class="string">"voice confirm request failed: {e}"</span>);
-<a href=#202 id=202 data-nosnippet>202</a>            }
-<a href=#203 id=203 data-nosnippet>203</a>        }
-<a href=#204 id=204 data-nosnippet>204</a>    }
+<a href=#200 id=200 data-nosnippet>200</a>        }
+<a href=#201 id=201 data-nosnippet>201</a>    }
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="comment">// Store the session so other commands can check we're connected.
+<a href=#204 id=204 data-nosnippet>204</a>    </span><span class="kw-2">*</span>state.session.lock().<span class="kw">await </span>= <span class="prelude-val">Some</span>(ActiveSession { space_id, sfu });
 <a href=#205 id=205 data-nosnippet>205</a>
-<a href=#206 id=206 data-nosnippet>206</a>    <span class="comment">// Store the session so other commands can check we're connected.
-<a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw-2">*</span>state.session.lock().<span class="kw">await </span>= <span class="prelude-val">Some</span>(ActiveSession { space_id, sfu });
-<a href=#208 id=208 data-nosnippet>208</a>
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="macro">tracing::info!</span>(%space_id, relay_url=%body.relay_url, <span class="string">"joined voice channel"</span>);
-<a href=#210 id=210 data-nosnippet>210</a>
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="prelude-val">Ok</span>(VoiceJoinResult {
-<a href=#212 id=212 data-nosnippet>212</a>        profile: body.profile,
-<a href=#213 id=213 data-nosnippet>213</a>        peers: body.peers,
-<a href=#214 id=214 data-nosnippet>214</a>        relay_url: body.relay_url,
-<a href=#215 id=215 data-nosnippet>215</a>        relay_token: body.relay_token,
-<a href=#216 id=216 data-nosnippet>216</a>    })
-<a href=#217 id=217 data-nosnippet>217</a>}
-<a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a><span class="doccomment">/// Leave the current voice channel.
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="macro">tracing::info!</span>(%space_id, relay_url=%body.relay_url, <span class="string">"joined voice channel"</span>);
+<a href=#207 id=207 data-nosnippet>207</a>
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="prelude-val">Ok</span>(VoiceJoinResult {
+<a href=#209 id=209 data-nosnippet>209</a>        profile: body.profile,
+<a href=#210 id=210 data-nosnippet>210</a>        peers: body.peers,
+<a href=#211 id=211 data-nosnippet>211</a>        relay_url: body.relay_url,
+<a href=#212 id=212 data-nosnippet>212</a>        relay_token: body.relay_token,
+<a href=#213 id=213 data-nosnippet>213</a>    })
+<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a><span class="doccomment">/// Leave the current voice channel.
+<a href=#217 id=217 data-nosnippet>217</a>///
+<a href=#218 id=218 data-nosnippet>218</a>/// Clears session state and notifies the backend. Safe to call even if not
+<a href=#219 id=219 data-nosnippet>219</a>/// connected (returns `Ok(())` in that case).
 <a href=#220 id=220 data-nosnippet>220</a>///
-<a href=#221 id=221 data-nosnippet>221</a>/// Clears session state and notifies the backend. Safe to call even if not
-<a href=#222 id=222 data-nosnippet>222</a>/// connected (returns `Ok(())` in that case).
-<a href=#223 id=223 data-nosnippet>223</a>///
-<a href=#224 id=224 data-nosnippet>224</a>/// # Errors
-<a href=#225 id=225 data-nosnippet>225</a>///
-<a href=#226 id=226 data-nosnippet>226</a>/// * [`VoiceError::LeaveFailed`] — backend returned a non-2xx response.
-<a href=#227 id=227 data-nosnippet>227</a>/// * [`VoiceError::Network`] — request failed at the transport level.
-<a href=#228 id=228 data-nosnippet>228</a></span><span class="attr">#[tauri::command]
-<a href=#229 id=229 data-nosnippet>229</a></span><span class="kw">pub async fn </span>voice_leave(
-<a href=#230 id=230 data-nosnippet>230</a>    api_base: String,
-<a href=#231 id=231 data-nosnippet>231</a>    access_token: String,
-<a href=#232 id=232 data-nosnippet>232</a>    state: State&lt;<span class="lifetime">'_</span>, VoiceState&gt;,
-<a href=#233 id=233 data-nosnippet>233</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), VoiceError&gt; {
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">let </span>space_id = {
-<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = state.session.lock().<span class="kw">await</span>;
-<a href=#236 id=236 data-nosnippet>236</a>        <span class="kw">match </span>guard.take() {
-<a href=#237 id=237 data-nosnippet>237</a>            <span class="prelude-val">Some</span>(s) =&gt; s.space_id,
-<a href=#238 id=238 data-nosnippet>238</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(()), <span class="comment">// not connected — nothing to do
-<a href=#239 id=239 data-nosnippet>239</a>        </span>}
-<a href=#240 id=240 data-nosnippet>240</a>    };
-<a href=#241 id=241 data-nosnippet>241</a>
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"{api_base}/space/{space_id}/voice/leave"</span>);
-<a href=#243 id=243 data-nosnippet>243</a>
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">let </span>response = reqwest::Client::new()
-<a href=#245 id=245 data-nosnippet>245</a>        .post(<span class="kw-2">&amp;</span>url)
-<a href=#246 id=246 data-nosnippet>246</a>        .bearer_auth(<span class="kw-2">&amp;</span>access_token)
-<a href=#247 id=247 data-nosnippet>247</a>        .send()
-<a href=#248 id=248 data-nosnippet>248</a>        .<span class="kw">await
-<a href=#249 id=249 data-nosnippet>249</a>        </span>.map_err(|source| VoiceError::Network {
-<a href=#250 id=250 data-nosnippet>250</a>            endpoint: <span class="string">"voice/leave"</span>,
-<a href=#251 id=251 data-nosnippet>251</a>            source,
-<a href=#252 id=252 data-nosnippet>252</a>        })<span class="question-mark">?</span>;
-<a href=#253 id=253 data-nosnippet>253</a>
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">if </span>!response.status().is_success() {
-<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(VoiceError::LeaveFailed {
-<a href=#256 id=256 data-nosnippet>256</a>            status: response.status().as_u16(),
-<a href=#257 id=257 data-nosnippet>257</a>        });
-<a href=#258 id=258 data-nosnippet>258</a>    }
-<a href=#259 id=259 data-nosnippet>259</a>
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="macro">tracing::info!</span>(%space_id, <span class="string">"left voice channel"</span>);
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="prelude-val">Ok</span>(())
-<a href=#262 id=262 data-nosnippet>262</a>}
-<a href=#263 id=263 data-nosnippet>263</a>
-<a href=#264 id=264 data-nosnippet>264</a><span class="doccomment">/// List capturable screens and windows on this device.
+<a href=#221 id=221 data-nosnippet>221</a>/// # Errors
+<a href=#222 id=222 data-nosnippet>222</a>///
+<a href=#223 id=223 data-nosnippet>223</a>/// * [`VoiceError::LeaveFailed`] — backend returned a non-2xx response.
+<a href=#224 id=224 data-nosnippet>224</a>/// * [`VoiceError::Network`] — request failed at the transport level.
+<a href=#225 id=225 data-nosnippet>225</a></span><span class="attr">#[tauri::command]
+<a href=#226 id=226 data-nosnippet>226</a></span><span class="kw">pub async fn </span>voice_leave(
+<a href=#227 id=227 data-nosnippet>227</a>    api_base: String,
+<a href=#228 id=228 data-nosnippet>228</a>    access_token: String,
+<a href=#229 id=229 data-nosnippet>229</a>    state: State&lt;<span class="lifetime">'_</span>, VoiceState&gt;,
+<a href=#230 id=230 data-nosnippet>230</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), VoiceError&gt; {
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">let </span>space_id = {
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = state.session.lock().<span class="kw">await</span>;
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">match </span>guard.take() {
+<a href=#234 id=234 data-nosnippet>234</a>            <span class="prelude-val">Some</span>(s) =&gt; s.space_id,
+<a href=#235 id=235 data-nosnippet>235</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(()), <span class="comment">// not connected — nothing to do
+<a href=#236 id=236 data-nosnippet>236</a>        </span>}
+<a href=#237 id=237 data-nosnippet>237</a>    };
+<a href=#238 id=238 data-nosnippet>238</a>
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"{api_base}/space/{space_id}/voice/leave"</span>);
+<a href=#240 id=240 data-nosnippet>240</a>
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="kw">let </span>response = reqwest::Client::new()
+<a href=#242 id=242 data-nosnippet>242</a>        .post(<span class="kw-2">&amp;</span>url)
+<a href=#243 id=243 data-nosnippet>243</a>        .bearer_auth(<span class="kw-2">&amp;</span>access_token)
+<a href=#244 id=244 data-nosnippet>244</a>        .send()
+<a href=#245 id=245 data-nosnippet>245</a>        .<span class="kw">await
+<a href=#246 id=246 data-nosnippet>246</a>        </span>.map_err(|source| VoiceError::Network {
+<a href=#247 id=247 data-nosnippet>247</a>            endpoint: <span class="string">"voice/leave"</span>,
+<a href=#248 id=248 data-nosnippet>248</a>            source,
+<a href=#249 id=249 data-nosnippet>249</a>        })<span class="question-mark">?</span>;
+<a href=#250 id=250 data-nosnippet>250</a>
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">if </span>!response.status().is_success() {
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(VoiceError::LeaveFailed {
+<a href=#253 id=253 data-nosnippet>253</a>            status: response.status().as_u16(),
+<a href=#254 id=254 data-nosnippet>254</a>        });
+<a href=#255 id=255 data-nosnippet>255</a>    }
+<a href=#256 id=256 data-nosnippet>256</a>
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="macro">tracing::info!</span>(%space_id, <span class="string">"left voice channel"</span>);
+<a href=#258 id=258 data-nosnippet>258</a>    <span class="prelude-val">Ok</span>(())
+<a href=#259 id=259 data-nosnippet>259</a>}
+<a href=#260 id=260 data-nosnippet>260</a>
+<a href=#261 id=261 data-nosnippet>261</a><span class="doccomment">/// List capturable screens and windows on this device.
+<a href=#262 id=262 data-nosnippet>262</a>///
+<a href=#263 id=263 data-nosnippet>263</a>/// Returns an empty list on platforms where capture is not yet supported
+<a href=#264 id=264 data-nosnippet>264</a>/// (rather than an error) so the UI can show "no targets" gracefully.
 <a href=#265 id=265 data-nosnippet>265</a>///
-<a href=#266 id=266 data-nosnippet>266</a>/// Returns an empty list on platforms where capture is not yet supported
-<a href=#267 id=267 data-nosnippet>267</a>/// (rather than an error) so the UI can show "no targets" gracefully.
-<a href=#268 id=268 data-nosnippet>268</a>///
-<a href=#269 id=269 data-nosnippet>269</a>/// # Errors
-<a href=#270 id=270 data-nosnippet>270</a>///
-<a href=#271 id=271 data-nosnippet>271</a>/// * [`VoiceError::StateNotInitialised`] — Tauri state was not set up.
-<a href=#272 id=272 data-nosnippet>272</a></span><span class="attr">#[tauri::command]
-<a href=#273 id=273 data-nosnippet>273</a></span><span class="kw">pub async fn </span>voice_list_capture_targets() -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;CaptureTarget&gt;, VoiceError&gt; {
-<a href=#274 id=274 data-nosnippet>274</a>    PlatformCapturer::list_targets().map_err(|e| {
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="macro">tracing::warn!</span>(<span class="string">"list_capture_targets: {e}"</span>);
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="comment">// Map capture errors to voice errors. CaptureError::Unsupported returns
-<a href=#277 id=277 data-nosnippet>277</a>        // an empty list (handled above) — only OS errors reach here.
-<a href=#278 id=278 data-nosnippet>278</a>        </span>VoiceError::NotConnected {
-<a href=#279 id=279 data-nosnippet>279</a>            operation: <span class="string">"list capture targets"</span>,
-<a href=#280 id=280 data-nosnippet>280</a>        }
-<a href=#281 id=281 data-nosnippet>281</a>    })
-<a href=#282 id=282 data-nosnippet>282</a>}
-<a href=#283 id=283 data-nosnippet>283</a>
-<a href=#284 id=284 data-nosnippet>284</a><span class="doccomment">/// Send an encoded media frame to the SFU over QUIC.
+<a href=#266 id=266 data-nosnippet>266</a>/// # Errors
+<a href=#267 id=267 data-nosnippet>267</a>///
+<a href=#268 id=268 data-nosnippet>268</a>/// * [`VoiceError::StateNotInitialised`] — Tauri state was not set up.
+<a href=#269 id=269 data-nosnippet>269</a></span><span class="attr">#[tauri::command]
+<a href=#270 id=270 data-nosnippet>270</a></span><span class="kw">pub async fn </span>voice_list_capture_targets() -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;CaptureTarget&gt;, VoiceError&gt; {
+<a href=#271 id=271 data-nosnippet>271</a>    PlatformCapturer::list_targets().map_err(|e| {
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="macro">tracing::warn!</span>(<span class="string">"list_capture_targets: {e}"</span>);
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="comment">// Map capture errors to voice errors. CaptureError::Unsupported returns
+<a href=#274 id=274 data-nosnippet>274</a>        // an empty list (handled above) — only OS errors reach here.
+<a href=#275 id=275 data-nosnippet>275</a>        </span>VoiceError::NotConnected {
+<a href=#276 id=276 data-nosnippet>276</a>            operation: <span class="string">"list capture targets"</span>,
+<a href=#277 id=277 data-nosnippet>277</a>        }
+<a href=#278 id=278 data-nosnippet>278</a>    })
+<a href=#279 id=279 data-nosnippet>279</a>}
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a><span class="doccomment">/// Send an encoded media frame to the SFU over QUIC.
+<a href=#282 id=282 data-nosnippet>282</a>///
+<a href=#283 id=283 data-nosnippet>283</a>/// Called by the TypeScript frontend (via the MediaWorker → VoiceClient →
+<a href=#284 id=284 data-nosnippet>284</a>/// `invoke`) whenever the local encoder produces a new frame.
 <a href=#285 id=285 data-nosnippet>285</a>///
-<a href=#286 id=286 data-nosnippet>286</a>/// Called by the TypeScript frontend (via the MediaWorker → VoiceClient →
-<a href=#287 id=287 data-nosnippet>287</a>/// `invoke`) whenever the local encoder produces a new frame.
-<a href=#288 id=288 data-nosnippet>288</a>///
-<a href=#289 id=289 data-nosnippet>289</a>/// * `frame` — raw encoded payload bytes (no header — we add it here)
-<a href=#290 id=290 data-nosnippet>290</a>/// * `is_keyframe` — if true, the frame is sent reliably (QUIC stream);
-<a href=#291 id=291 data-nosnippet>291</a>///   otherwise unreliably (QUIC datagram)
-<a href=#292 id=292 data-nosnippet>292</a>/// * `track` — one of `"cam-video"`, `"cam-audio"`, `"scr-video"`, `"scr-audio"`
-<a href=#293 id=293 data-nosnippet>293</a>///
-<a href=#294 id=294 data-nosnippet>294</a>/// # Errors
-<a href=#295 id=295 data-nosnippet>295</a>///
-<a href=#296 id=296 data-nosnippet>296</a>/// * [`VoiceError::NotConnected`] — `voice_join` has not been called.
-<a href=#297 id=297 data-nosnippet>297</a>/// * [`VoiceError::SfuSend`] — the QUIC send failed.
-<a href=#298 id=298 data-nosnippet>298</a></span><span class="attr">#[tauri::command]
-<a href=#299 id=299 data-nosnippet>299</a></span><span class="kw">pub async fn </span>voice_send_frame(
-<a href=#300 id=300 data-nosnippet>300</a>    frame: Vec&lt;u8&gt;,
-<a href=#301 id=301 data-nosnippet>301</a>    is_keyframe: bool,
-<a href=#302 id=302 data-nosnippet>302</a>    track: String,
-<a href=#303 id=303 data-nosnippet>303</a>    state: State&lt;<span class="lifetime">'_</span>, VoiceState&gt;,
-<a href=#304 id=304 data-nosnippet>304</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), VoiceError&gt; {
-<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">let </span>session = state.session.lock().<span class="kw">await</span>;
-<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">let </span>sfu = session
-<a href=#307 id=307 data-nosnippet>307</a>        .as_ref()
-<a href=#308 id=308 data-nosnippet>308</a>        .and_then(|s| s.sfu.as_ref())
-<a href=#309 id=309 data-nosnippet>309</a>        .ok_or(VoiceError::NotConnected {
-<a href=#310 id=310 data-nosnippet>310</a>            operation: <span class="string">"send frame"</span>,
-<a href=#311 id=311 data-nosnippet>311</a>        })<span class="question-mark">?
-<a href=#312 id=312 data-nosnippet>312</a>        </span>.clone();
-<a href=#313 id=313 data-nosnippet>313</a>    <span class="comment">// Drop the lock before the async send so other commands aren't blocked.
-<a href=#314 id=314 data-nosnippet>314</a>    </span>drop(session);
-<a href=#315 id=315 data-nosnippet>315</a>
-<a href=#316 id=316 data-nosnippet>316</a>    sfu.send_frame(<span class="kw-2">&amp;</span>frame, <span class="kw-2">&amp;</span>track, is_keyframe).<span class="kw">await
-<a href=#317 id=317 data-nosnippet>317</a></span>}
+<a href=#286 id=286 data-nosnippet>286</a>/// * `frame` — raw encoded payload bytes (no header — we add it here)
+<a href=#287 id=287 data-nosnippet>287</a>/// * `is_keyframe` — if true, the frame is sent reliably (QUIC stream);
+<a href=#288 id=288 data-nosnippet>288</a>///   otherwise unreliably (QUIC datagram)
+<a href=#289 id=289 data-nosnippet>289</a>/// * `track` — one of `"cam-video"`, `"cam-audio"`, `"scr-video"`, `"scr-audio"`
+<a href=#290 id=290 data-nosnippet>290</a>///
+<a href=#291 id=291 data-nosnippet>291</a>/// # Errors
+<a href=#292 id=292 data-nosnippet>292</a>///
+<a href=#293 id=293 data-nosnippet>293</a>/// * [`VoiceError::NotConnected`] — `voice_join` has not been called.
+<a href=#294 id=294 data-nosnippet>294</a>/// * [`VoiceError::SfuSend`] — the QUIC send failed.
+<a href=#295 id=295 data-nosnippet>295</a></span><span class="attr">#[tauri::command]
+<a href=#296 id=296 data-nosnippet>296</a></span><span class="kw">pub async fn </span>voice_send_frame(
+<a href=#297 id=297 data-nosnippet>297</a>    frame: Vec&lt;u8&gt;,
+<a href=#298 id=298 data-nosnippet>298</a>    is_keyframe: bool,
+<a href=#299 id=299 data-nosnippet>299</a>    track: String,
+<a href=#300 id=300 data-nosnippet>300</a>    state: State&lt;<span class="lifetime">'_</span>, VoiceState&gt;,
+<a href=#301 id=301 data-nosnippet>301</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), VoiceError&gt; {
+<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">let </span>session = state.session.lock().<span class="kw">await</span>;
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">let </span>sfu = session
+<a href=#304 id=304 data-nosnippet>304</a>        .as_ref()
+<a href=#305 id=305 data-nosnippet>305</a>        .and_then(|s| s.sfu.as_ref())
+<a href=#306 id=306 data-nosnippet>306</a>        .ok_or(VoiceError::NotConnected {
+<a href=#307 id=307 data-nosnippet>307</a>            operation: <span class="string">"send frame"</span>,
+<a href=#308 id=308 data-nosnippet>308</a>        })<span class="question-mark">?
+<a href=#309 id=309 data-nosnippet>309</a>        </span>.clone();
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="comment">// Drop the lock before the async send so other commands aren't blocked.
+<a href=#311 id=311 data-nosnippet>311</a>    </span>drop(session);
+<a href=#312 id=312 data-nosnippet>312</a>
+<a href=#313 id=313 data-nosnippet>313</a>    sfu.send_frame(<span class="kw-2">&amp;</span>frame, <span class="kw-2">&amp;</span>track, is_keyframe).<span class="kw">await
+<a href=#314 id=314 data-nosnippet>314</a></span>}
 </code></pre></div></section></main></body></html>
