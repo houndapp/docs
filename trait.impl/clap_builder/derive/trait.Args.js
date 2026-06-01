@@ -1,9 +1,9 @@
 (function() {
-    var implementors = Object.fromEntries([["backend",[["impl Args for <a class=\"struct\" href=\"backend/struct.Cli.html\" title=\"struct backend::Cli\">Cli</a>"]]]]);
+    var implementors = Object.fromEntries([["backend",[["impl Args for <a class=\"struct\" href=\"backend/struct.Cli.html\" title=\"struct backend::Cli\">Cli</a>"]]],["houndctl",[["impl Args for <a class=\"struct\" href=\"houndctl/commands/auth/struct.AuthArgs.html\" title=\"struct houndctl::commands::auth::AuthArgs\">AuthArgs</a>"],["impl Args for <a class=\"struct\" href=\"houndctl/commands/communities/struct.CommunitiesArgs.html\" title=\"struct houndctl::commands::communities::CommunitiesArgs\">CommunitiesArgs</a>"],["impl Args for <a class=\"struct\" href=\"houndctl/commands/db/struct.DbArgs.html\" title=\"struct houndctl::commands::db::DbArgs\">DbArgs</a>"],["impl Args for <a class=\"struct\" href=\"houndctl/commands/instance/struct.InstanceArgs.html\" title=\"struct houndctl::commands::instance::InstanceArgs\">InstanceArgs</a>"],["impl Args for <a class=\"struct\" href=\"houndctl/commands/messages/struct.MessagesArgs.html\" title=\"struct houndctl::commands::messages::MessagesArgs\">MessagesArgs</a>"],["impl Args for <a class=\"struct\" href=\"houndctl/commands/spaces/struct.SpacesArgs.html\" title=\"struct houndctl::commands::spaces::SpacesArgs\">SpacesArgs</a>"],["impl Args for <a class=\"struct\" href=\"houndctl/commands/users/struct.UsersArgs.html\" title=\"struct houndctl::commands::users::UsersArgs\">UsersArgs</a>"],["impl Args for <a class=\"struct\" href=\"houndctl/struct.Cli.html\" title=\"struct houndctl::Cli\">Cli</a>"]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":57,"fragment_lengths":[122]}
+//{"start":57,"fragment_lengths":[122,1298]}

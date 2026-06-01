@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AuthCommand"],"fn":["open_browser","run","wait_for_callback"],"struct":["AuthArgs"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LOGIN_HTML"],"fn":["api_finish","api_start","health","login_page","main"],"struct":["AppError","AppState","FinishBody","FinishOk","LoginQuery","StartBody"],"type":["Result"]};

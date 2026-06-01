@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MessagesCommand"],"fn":["run"],"struct":["MessagesArgs"]};

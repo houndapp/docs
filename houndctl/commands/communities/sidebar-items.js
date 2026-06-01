@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CommunitiesCommand"],"fn":["run"],"struct":["CommunitiesArgs"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["InstanceCommand"],"fn":["run"],"struct":["InstanceArgs"]};
