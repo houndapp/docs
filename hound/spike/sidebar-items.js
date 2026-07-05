@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["HEADER"],"fn":["spike_render_start","spike_render_stop"],"static":["GENERATION"]};

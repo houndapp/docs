@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["auth","room","sfu","wire"]};
+window.SIDEBAR_ITEMS = {"mod":["auth","moq_relay","room","sfu","wire"]};

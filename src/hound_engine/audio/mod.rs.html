@@ -1,0 +1,168 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/engine/src/audio/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_engine/audio/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Portable audio engine services
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! The pieces of the audio stack that are pure engine logic — built ON TOP of
+<a href=#4 id=4 data-nosnippet>4</a>//! the platform backends, not part of them:
+<a href=#5 id=5 data-nosnippet>5</a>//!
+<a href=#6 id=6 data-nosnippet>6</a>//! * [`apm`] — the full-duplex audio-processing module (AEC3 + NS + AGC2,
+<a href=#7 id=7 data-nosnippet>7</a>//!   pure-Rust `sonora`), shared between the mic capture path
+<a href=#8 id=8 data-nosnippet>8</a>//!   (`process_capture`) and the playout bus (`process_render`).
+<a href=#9 id=9 data-nosnippet>9</a>//! * [`mix`] — the mixed-playout bus: ONE output device stream per call and
+<a href=#10 id=10 data-nosnippet>10</a>//!   ONE coherent AEC render reference, summing every remote peer's due PCM.
+<a href=#11 id=11 data-nosnippet>11</a>//! * [`level_from_rms`] — the perceptual speaking-level mapping for UI meters.
+<a href=#12 id=12 data-nosnippet>12</a>//!
+<a href=#13 id=13 data-nosnippet>13</a>//! All of it is platform-agnostic (the only device contact is through the
+<a href=#14 id=14 data-nosnippet>14</a>//! injected output sink), which is why a new platform backend gets working
+<a href=#15 id=15 data-nosnippet>15</a>//! multi-party audio + AEC for free.
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">pub mod </span>apm;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub mod </span>mix;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub mod </span>starve;
+<a href=#20 id=20 data-nosnippet>20</a>
+<a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// One-shot reopen delay for audio endpoints on a non-48 kHz device (a Bluetooth
+<a href=#22 id=22 data-nosnippet>22</a>/// headset in HFP/hands-free mode). The SCO link is frequently still establishing
+<a href=#23 id=23 data-nosnippet>23</a>/// when a stream first opens; the stream then runs SILENTLY — no error fires, so
+<a href=#24 id=24 data-nosnippet>24</a>/// the dead-stream reopen never triggers. A single reopen this long after open
+<a href=#25 id=25 data-nosnippet>25</a>/// lands on the settled route. Applies to BOTH directions (playout in the mix
+<a href=#26 id=26 data-nosnippet>26</a>/// bus, capture in the client mic loop); 48 kHz devices never arm it.
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">pub const </span>ROUTE_WARMUP_DELAY: std::time::Duration = std::time::Duration::from_millis(<span class="number">1200</span>);
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">pub use </span>apm::Apm;
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">pub use </span>mix::{BusProducer, PlayoutBus};
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Promote the CURRENT thread to real-time audio scheduling and hold the policy
+<a href=#33 id=33 data-nosnippet>33</a>/// for the thread's whole lifetime (the handle is stashed in a thread-local).
+<a href=#34 id=34 data-nosnippet>34</a>///
+<a href=#35 id=35 data-nosnippet>35</a>/// Intended as a `tokio::runtime::Builder::on_thread_start` hook for the dedicated
+<a href=#36 id=36 data-nosnippet>36</a>/// audio-receive/fill runtime: each per-peer pump decodes Opus and fills its mix
+<a href=#37 id=37 data-nosnippet>37</a>/// jitter buffer, and if a CPU-heavy screen-share decode/scale/render load
+<a href=#38 id=38 data-nosnippet>38</a>/// deschedules that fill, the RT mix thread finds the buffer dry at its pull tick
+<a href=#39 id=39 data-nosnippet>39</a>/// and the call audibly stutters (`mix_starve`). The mix bus (the playout side) is
+<a href=#40 id=40 data-nosnippet>40</a>/// already RT; this extends the same guarantee to the producer side so video load
+<a href=#41 id=41 data-nosnippet>41</a>/// can't starve voice — "audio is sacred". The work is bounded and mostly parked on
+<a href=#42 id=42 data-nosnippet>42</a>/// the network, so RT promotion is safe (no busy-loop to starve the system).
+<a href=#43 id=43 data-nosnippet>43</a>///
+<a href=#44 id=44 data-nosnippet>44</a>/// Best-effort: on failure (no entitlement, unsupported platform) it logs and the
+<a href=#45 id=45 data-nosnippet>45</a>/// thread runs at normal priority — never a hard error. Idempotent per thread.
+<a href=#46 id=46 data-nosnippet>46</a>///
+<a href=#47 id=47 data-nosnippet>47</a>/// NOTE: this protects the decode+fill half of the audio receive path. The QUIC
+<a href=#48 id=48 data-nosnippet>48</a>/// socket reads feeding it run on the shared connection runtime; if THAT is the
+<a href=#49 id=49 data-nosnippet>49</a>/// descheduled link under load, this alone won't fully cure `mix_starve`.
+<a href=#50 id=50 data-nosnippet>50</a></span><span class="kw">pub fn </span>promote_current_thread_for_audio_fill() {
+<a href=#51 id=51 data-nosnippet>51</a>    <span class="kw">use </span><span class="kw">crate</span>::types::SAMPLE_RATE;
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">use </span>std::cell::RefCell;
+<a href=#53 id=53 data-nosnippet>53</a>
+<a href=#54 id=54 data-nosnippet>54</a>    <span class="macro">thread_local!</span> {
+<a href=#55 id=55 data-nosnippet>55</a>        <span class="comment">// Holds the RT policy handle for the thread's lifetime. Keeping it alive is
+<a href=#56 id=56 data-nosnippet>56</a>        // belt-and-suspenders (the mach backend has no demote-on-drop, but Windows
+<a href=#57 id=57 data-nosnippet>57</a>        // MMCSS frees the task when its handle drops), and makes the promotion
+<a href=#58 id=58 data-nosnippet>58</a>        // outlive this function call.
+<a href=#59 id=59 data-nosnippet>59</a>        </span><span class="kw">static </span>RT_HANDLE: RefCell&lt;<span class="prelude-ty">Option</span>&lt;audio_thread_priority::RtPriorityHandle&gt;&gt; =
+<a href=#60 id=60 data-nosnippet>60</a>            <span class="kw">const </span>{ RefCell::new(<span class="prelude-val">None</span>) };
+<a href=#61 id=61 data-nosnippet>61</a>    }
+<a href=#62 id=62 data-nosnippet>62</a>
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="comment">// A 10 ms-equivalent audio quantum (matches the mix tick cadence) as the RT
+<a href=#64 id=64 data-nosnippet>64</a>    // period hint — the fill produces 20 ms Opus frames, but a tighter period biases
+<a href=#65 id=65 data-nosnippet>65</a>    // the scheduler toward running it promptly when a frame lands.
+<a href=#66 id=66 data-nosnippet>66</a>    </span><span class="kw">let </span>frames_hint = (SAMPLE_RATE.hz() / <span class="number">100</span>).max(<span class="number">1</span>);
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">match </span>audio_thread_priority::promote_current_thread_to_real_time(frames_hint, SAMPLE_RATE.hz())
+<a href=#68 id=68 data-nosnippet>68</a>    {
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="prelude-val">Ok</span>(handle) =&gt; {
+<a href=#70 id=70 data-nosnippet>70</a>            RT_HANDLE.with_borrow_mut(|slot| <span class="kw-2">*</span>slot = <span class="prelude-val">Some</span>(handle));
+<a href=#71 id=71 data-nosnippet>71</a>            <span class="macro">tracing::info!</span>(<span class="string">"voice: audio-rx fill thread promoted to real-time priority"</span>);
+<a href=#72 id=72 data-nosnippet>72</a>        }
+<a href=#73 id=73 data-nosnippet>73</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#74 id=74 data-nosnippet>74</a>            <span class="macro">tracing::warn!</span>(<span class="string">"voice: audio-rx RT priority unavailable ({e:?}) — normal priority"</span>);
+<a href=#75 id=75 data-nosnippet>75</a>        }
+<a href=#76 id=76 data-nosnippet>76</a>    }
+<a href=#77 id=77 data-nosnippet>77</a>}
+<a href=#78 id=78 data-nosnippet>78</a>
+<a href=#79 id=79 data-nosnippet>79</a><span class="doccomment">/// Map a linear RMS amplitude (`0.0..=1.0`, as [`crate::types::PcmFrame::rms`]
+<a href=#80 id=80 data-nosnippet>80</a>/// returns — i16 full-scale = 1.0) to a perceptual `0.0..=1.0` meter level for
+<a href=#81 id=81 data-nosnippet>81</a>/// speaking-level UI.
+<a href=#82 id=82 data-nosnippet>82</a>///
+<a href=#83 id=83 data-nosnippet>83</a>/// ## Mapping chosen: dBFS-windowed
+<a href=#84 id=84 data-nosnippet>84</a>///
+<a href=#85 id=85 data-nosnippet>85</a>/// We convert to dBFS (`20·log10(rms)`) and linearly map a **−60 dB … 0 dB**
+<a href=#86 id=86 data-nosnippet>86</a>/// window onto `0.0..=1.0`: `level = (dbfs + 60) / 60`, clamped. This is the
+<a href=#87 id=87 data-nosnippet>87</a>/// right mapping for a voice meter: loudness perception is logarithmic, so a
+<a href=#88 id=88 data-nosnippet>88</a>/// dB window gives a meter where normal speech sits in the upper-middle and
+<a href=#89 id=89 data-nosnippet>89</a>/// quiet-room noise sits near the bottom — unlike a raw-linear meter where
+<a href=#90 id=90 data-nosnippet>90</a>/// everything below a shout looks dead. −60 dBFS is the practical noise floor
+<a href=#91 id=91 data-nosnippet>91</a>/// (below it a quiet room and silence are indistinguishable); 0 dBFS is full
+<a href=#92 id=92 data-nosnippet>92</a>/// scale. A true-zero RMS maps to exactly 0.0 (silence reads empty, not −∞).
+<a href=#93 id=93 data-nosnippet>93</a>///
+<a href=#94 id=94 data-nosnippet>94</a>/// Pure and total: no NaN/Inf escapes (silence short-circuits, the result is
+<a href=#95 id=95 data-nosnippet>95</a>/// always clamped to `0.0..=1.0`).
+<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">pub fn </span>level_from_rms(rms: f32) -&gt; f32 {
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">if </span>rms &lt;= <span class="number">0.0 </span>{
+<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">return </span><span class="number">0.0</span>;
+<a href=#99 id=99 data-nosnippet>99</a>    }
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let </span>dbfs = <span class="number">20.0 </span>* rms.log10();
+<a href=#101 id=101 data-nosnippet>101</a>    ((dbfs + <span class="number">60.0</span>) / <span class="number">60.0</span>).clamp(<span class="number">0.0</span>, <span class="number">1.0</span>)
+<a href=#102 id=102 data-nosnippet>102</a>}
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a><span class="attr">#[cfg(test)]
+<a href=#105 id=105 data-nosnippet>105</a></span><span class="kw">mod </span>tests {
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// Silence (and any non-positive RMS) reads as an empty meter — never −∞ dB.
+<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="attr">#[test]
+<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">fn </span>level_silence_is_zero() {
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="macro">assert_eq!</span>(level_from_rms(<span class="number">0.0</span>), <span class="number">0.0</span>);
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="macro">assert_eq!</span>(
+<a href=#113 id=113 data-nosnippet>113</a>            level_from_rms(-<span class="number">0.5</span>),
+<a href=#114 id=114 data-nosnippet>114</a>            <span class="number">0.0</span>,
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="string">"guard against a bogus negative rms"
+<a href=#116 id=116 data-nosnippet>116</a>        </span>);
+<a href=#117 id=117 data-nosnippet>117</a>    }
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="doccomment">/// Full-scale RMS (1.0) maps to a full meter (0 dBFS → 1.0).
+<a href=#120 id=120 data-nosnippet>120</a>    </span><span class="attr">#[test]
+<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="kw">fn </span>level_full_scale_is_one() {
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">assert_eq!</span>(level_from_rms(<span class="number">1.0</span>), <span class="number">1.0</span>);
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="doccomment">/// The window floor: −60 dBFS (rms = 1e-3) maps to ~0.0, and anything quieter
+<a href=#126 id=126 data-nosnippet>126</a>    /// clamps to 0.0 rather than going negative.
+<a href=#127 id=127 data-nosnippet>127</a>    </span><span class="attr">#[test]
+<a href=#128 id=128 data-nosnippet>128</a>    </span><span class="kw">fn </span>level_floor_clamps() {
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="comment">// 10^(-60/20) = 1e-3 → dbfs == -60 → (−60+60)/60 == 0.
+<a href=#130 id=130 data-nosnippet>130</a>        </span><span class="kw">let </span>at_floor = level_from_rms(<span class="number">1e-3</span>);
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="macro">assert!</span>(
+<a href=#132 id=132 data-nosnippet>132</a>            at_floor.abs() &lt; <span class="number">1e-4</span>,
+<a href=#133 id=133 data-nosnippet>133</a>            <span class="string">"−60 dBFS sits at the meter floor, got {at_floor}"
+<a href=#134 id=134 data-nosnippet>134</a>        </span>);
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="comment">// Quieter than the floor clamps, never goes negative.
+<a href=#136 id=136 data-nosnippet>136</a>        </span><span class="macro">assert_eq!</span>(level_from_rms(<span class="number">1e-5</span>), <span class="number">0.0</span>);
+<a href=#137 id=137 data-nosnippet>137</a>    }
+<a href=#138 id=138 data-nosnippet>138</a>
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="doccomment">/// The mapping is monotonic: louder input always reads as a higher (or equal,
+<a href=#140 id=140 data-nosnippet>140</a>    /// at the clamp) meter level — the property a level meter must have.
+<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="attr">#[test]
+<a href=#142 id=142 data-nosnippet>142</a>    </span><span class="kw">fn </span>level_is_monotonic() {
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">let </span>samples = [<span class="number">0.0f32</span>, <span class="number">1e-4</span>, <span class="number">1e-3</span>, <span class="number">1e-2</span>, <span class="number">0.05</span>, <span class="number">0.1</span>, <span class="number">0.3</span>, <span class="number">0.5</span>, <span class="number">0.8</span>, <span class="number">1.0</span>];
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span><span class="kw-2">mut </span>prev = -<span class="number">1.0f32</span>;
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>rms <span class="kw">in </span><span class="kw-2">&amp;</span>samples {
+<a href=#146 id=146 data-nosnippet>146</a>            <span class="kw">let </span>lvl = level_from_rms(rms);
+<a href=#147 id=147 data-nosnippet>147</a>            <span class="macro">assert!</span>(
+<a href=#148 id=148 data-nosnippet>148</a>                lvl &gt;= prev,
+<a href=#149 id=149 data-nosnippet>149</a>                <span class="string">"level must be non-decreasing in rms: rms={rms} gave {lvl} &lt; prev {prev}"
+<a href=#150 id=150 data-nosnippet>150</a>            </span>);
+<a href=#151 id=151 data-nosnippet>151</a>            <span class="macro">assert!</span>((<span class="number">0.0</span>..=<span class="number">1.0</span>).contains(<span class="kw-2">&amp;</span>lvl), <span class="string">"level out of range: {lvl}"</span>);
+<a href=#152 id=152 data-nosnippet>152</a>            prev = lvl;
+<a href=#153 id=153 data-nosnippet>153</a>        }
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="doccomment">/// A mid-level speech RMS (~−26 dBFS, rms ≈ 0.05) lands in the upper-middle of
+<a href=#157 id=157 data-nosnippet>157</a>    /// the meter — the perceptual win over a raw-linear meter (where 0.05 would
+<a href=#158 id=158 data-nosnippet>158</a>    /// read as a near-dead 5%).
+<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="attr">#[test]
+<a href=#160 id=160 data-nosnippet>160</a>    </span><span class="kw">fn </span>level_mid_speech_is_visible() {
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>lvl = level_from_rms(<span class="number">0.05</span>);
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="macro">assert!</span>(
+<a href=#163 id=163 data-nosnippet>163</a>            lvl &gt; <span class="number">0.45 </span>&amp;&amp; lvl &lt; <span class="number">0.7</span>,
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="string">"mid speech should read upper-middle, got {lvl}"
+<a href=#165 id=165 data-nosnippet>165</a>        </span>);
+<a href=#166 id=166 data-nosnippet>166</a>    }
+<a href=#167 id=167 data-nosnippet>167</a>}
+</code></pre></div></section></main></body></html>

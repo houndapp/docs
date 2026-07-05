@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["authenticate_credential_schema","authentication_challenge_schema","register_credential_schema","registration_challenge_schema"],"struct":["PublicKeyCredentialCreationOptionsJSON","PublicKeyCredentialRequestOptionsJSON"]};

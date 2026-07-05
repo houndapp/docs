@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ScreenCaptureExit"],"fn":["map_screen_capture_error","screen_capture_encode_loop","spawn_screen_publish","spawn_screen_video_publish","unpublish_screen_tracks"],"struct":["ScreenOpened"],"type":["ScreenExitNotify"]};

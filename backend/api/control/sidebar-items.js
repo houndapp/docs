@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["control_ws_handler","handle_socket","next_client_message","route","router","to_text"],"struct":["ControlCall","ControlQuery"]};

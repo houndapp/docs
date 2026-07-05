@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ApiError"],"fn":["openapi","router","serve","socket_io"],"mod":["auth","community","data","instance","internal","middleware","profile","space","storage","upload","user","well_known"],"struct":["Api","Inner","SecurityAddon"],"type":["ApiResult"]};
+window.SIDEBAR_ITEMS = {"enum":["ApiError"],"fn":["openapi","router","serve","socket_io"],"mod":["auth","community","control","data","instance","internal","middleware","profile","space","storage","upload","user","well_known"],"struct":["Api","Inner","SecurityAddon"],"type":["ApiResult"]};

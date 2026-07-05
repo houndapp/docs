@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["enumerate_cameras","enumerate_screen_sources","screen_thumbnail"],"mod":["generic","linux","stub"],"type":["AppAudioBackend","CameraBackend","ScreenBackend","VideoDecoderBackend","VideoEncoderBackend"]};

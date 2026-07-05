@@ -1,0 +1,818 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/client/src/call/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_client" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_client/call/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Voice/video **call orchestration** — the UI-free engine that drives a live
+<a href=#2 id=2 data-nosnippet>2</a>//! call from `HoundClient`.
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//! It parallels the legacy Tauri orchestration in `src/voice/session/*` but
+<a href=#5 id=5 data-nosnippet>5</a>//! reuses the engine/transport/control crates directly and stays free of any
+<a href=#6 id=6 data-nosnippet>6</a>//! UI/FFI machinery (no Tauri `Channel`/`AppHandle`/`emit`). The decode→render
+<a href=#7 id=7 data-nosnippet>7</a>//! seam is a [`VideoSink`] trait the FRB layer supplies (its closure calls
+<a href=#8 id=8 data-nosnippet>8</a>//! `video_render::push_frame(...)`); decoded frames reach the right tile keyed by
+<a href=#9 id=9 data-nosnippet>9</a>//! peer without this crate ever knowing about textures or Dart.
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! ## What a join wires up
+<a href=#12 id=12 data-nosnippet>12</a>//!
+<a href=#13 id=13 data-nosnippet>13</a>//! ```text
+<a href=#14 id=14 data-nosnippet>14</a>//! REST voice/join  ──► relay_url + relay_token + sfu_node_id + peers
+<a href=#15 id=15 data-nosnippet>15</a>//!        │
+<a href=#16 id=16 data-nosnippet>16</a>//!        ├─► control WS (hound-control)  ──► SessionView reducer ──► watch&lt;CallView&gt;
+<a href=#17 id=17 data-nosnippet>17</a>//!        │
+<a href=#18 id=18 data-nosnippet>18</a>//!        └─► dial iroh ──► MoqRelaySession ─┬─► publish mic (Opus)
+<a href=#19 id=19 data-nosnippet>19</a>//!                                           ├─► publish camera (H.264) [if enabled]
+<a href=#20 id=20 data-nosnippet>20</a>//!                                           └─► subscribe loop: for each remote track
+<a href=#21 id=21 data-nosnippet>21</a>//!                                                 video → decode → VideoSink (push_frame)
+<a href=#22 id=22 data-nosnippet>22</a>//!                                                 audio → decode → mix bus (PlayoutBus)
+<a href=#23 id=23 data-nosnippet>23</a>//! ```
+<a href=#24 id=24 data-nosnippet>24</a>//!
+<a href=#25 id=25 data-nosnippet>25</a>//! ## Module tree
+<a href=#26 id=26 data-nosnippet>26</a>//!
+<a href=#27 id=27 data-nosnippet>27</a>//! This module is the shared hub — the public seams ([`VideoSink`],
+<a href=#28 id=28 data-nosnippet>28</a>//! [`RenderSurfaceHandle`]), the picker enumerations, the observable snapshot
+<a href=#29 id=29 data-nosnippet>29</a>//! types, the dedicated runtimes, and the cross-module tuning constants. The
+<a href=#30 id=30 data-nosnippet>30</a>//! orchestration lives in the submodules:
+<a href=#31 id=31 data-nosnippet>31</a>//!
+<a href=#32 id=32 data-nosnippet>32</a>//! * [`session`] — [`CallSession`] (join/leave/commands), `establish_live`, the
+<a href=#33 id=33 data-nosnippet>33</a>//!   auto-reconnect supervisor + screen-share command handling.
+<a href=#34 id=34 data-nosnippet>34</a>//! * [`reconnect`] — the pure backoff/classification policy + the retry loop.
+<a href=#35 id=35 data-nosnippet>35</a>//! * [`control`] — the `/control` WebSocket IO shell + the iroh relay dial.
+<a href=#36 id=36 data-nosnippet>36</a>//! * [`policy`] — the pure, unit-tested decision policies (codec switch, layer
+<a href=#37 id=37 data-nosnippet>37</a>//!   hysteresis, restart pacing, resize debounce, gain, gap math…).
+<a href=#38 id=38 data-nosnippet>38</a>//! * [`adapt`] — sender-side BWE/congestion adaptation glue ([`adapt::AdaptShared`],
+<a href=#39 id=39 data-nosnippet>39</a>//!   the 1 s tick, the keyframe/feedback listeners, the shared encode core).
+<a href=#40 id=40 data-nosnippet>40</a>//! * [`simulcast`] — demand-driven simulcast (the layer planner + low publish).
+<a href=#41 id=41 data-nosnippet>41</a>//! * [`audio_tx`] / [`camera_tx`] / [`screen_tx`] — the publish paths.
+<a href=#42 id=42 data-nosnippet>42</a>//! * [`subscribe`] — the roster-diffing subscribe loop + per-track pipelines.
+<a href=#43 id=43 data-nosnippet>43</a>//! * [`audio_rx`] / [`video_rx`] — the decode pipelines.
+<a href=#44 id=44 data-nosnippet>44</a>//!
+<a href=#45 id=45 data-nosnippet>45</a>//! ## Observable state
+<a href=#46 id=46 data-nosnippet>46</a>//!
+<a href=#47 id=47 data-nosnippet>47</a>//! Three `watch` channels, driven the same way as the realtime→reducer→watch task
+<a href=#48 id=48 data-nosnippet>48</a>//! in [`crate::app`]: [`CallView`] (self id, peers, tracks) is derived from the
+<a href=#49 id=49 data-nosnippet>49</a>//! control plane's [`SessionView`]; [`ConnectionState`] reflects the control WS +
+<a href=#50 id=50 data-nosnippet>50</a>//! reconnect attempts; [`LevelsView`] carries mic + per-peer speaking levels.
+<a href=#51 id=51 data-nosnippet>51</a>//!
+<a href=#52 id=52 data-nosnippet>52</a>//! ## Auto-reconnect supervisor
+<a href=#53 id=53 data-nosnippet>53</a>//!
+<a href=#54 id=54 data-nosnippet>54</a>//! A live call heals a dropped control WebSocket or MoQ/iroh connection **without
+<a href=#55 id=55 data-nosnippet>55</a>//! the user re-joining** — "nothing drops a call except total network loss."
+<a href=#56 id=56 data-nosnippet>56</a>//!
+<a href=#57 id=57 data-nosnippet>57</a>//! * [`reconnect::Backoff`] + [`reconnect::classify`] — the pure, headless policy
+<a href=#58 id=58 data-nosnippet>58</a>//!   (exp-backoff+jitter; retryable-vs-fatal over [`HoundError`]). Only an
+<a href=#59 id=59 data-nosnippet>59</a>//!   auth/permission outcome (`Http 401/403` or `Auth`) is fatal; everything
+<a href=#60 id=60 data-nosnippet>60</a>//!   transient retries FOREVER.
+<a href=#61 id=61 data-nosnippet>61</a>//! * [`session::LiveSession`] — the per-establish layers (relay/conn/control/tasks).
+<a href=#62 id=62 data-nosnippet>62</a>//!   Its `monitor` selects over the control-WS-closed signal and the iroh
+<a href=#63 id=63 data-nosnippet>63</a>//!   `Connection::closed()`, naming which layer dropped.
+<a href=#64 id=64 data-nosnippet>64</a>//! * [`session::ConnectionParams`] — the Arc-cloneable cross-reconnect state.
+<a href=#65 id=65 data-nosnippet>65</a>//!   `establish_live` builds one `LiveSession` (re-minting the relay token via
+<a href=#66 id=66 data-nosnippet>66</a>//!   `voice/join` each time, so no standalone token-refresh task is needed).
+<a href=#67 id=67 data-nosnippet>67</a>//! * [`session::spawn_supervisor`] — owns `live` + a `Backoff` + the screen-share
+<a href=#68 id=68 data-nosnippet>68</a>//!   state; monitors, tears down on failure, and rebuilds with backoff. Recovery is
+<a href=#69 id=69 data-nosnippet>69</a>//!   a FULL re-establish (fresh `PeerId`); the reactive subscribe loop re-diffs the
+<a href=#70 id=70 data-nosnippet>70</a>//!   roster for free and re-publish is a fresh mic/cam announce.
+<a href=#71 id=71 data-nosnippet>71</a>
+<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">mod </span>adapt;
+<a href=#73 id=73 data-nosnippet>73</a><span class="kw">mod </span>audio_rx;
+<a href=#74 id=74 data-nosnippet>74</a><span class="kw">mod </span>audio_tx;
+<a href=#75 id=75 data-nosnippet>75</a><span class="kw">mod </span>camera_tx;
+<a href=#76 id=76 data-nosnippet>76</a><span class="kw">mod </span>control;
+<a href=#77 id=77 data-nosnippet>77</a><span class="kw">mod </span>policy;
+<a href=#78 id=78 data-nosnippet>78</a><span class="kw">mod </span>reconnect;
+<a href=#79 id=79 data-nosnippet>79</a><span class="kw">mod </span>screen_tx;
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">mod </span>session;
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">mod </span>simulcast;
+<a href=#82 id=82 data-nosnippet>82</a><span class="kw">mod </span>subscribe;
+<a href=#83 id=83 data-nosnippet>83</a><span class="kw">mod </span>video_rx;
+<a href=#84 id=84 data-nosnippet>84</a>
+<a href=#85 id=85 data-nosnippet>85</a><span class="kw">pub use </span>session::CallSession;
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a><span class="comment">// The submodules are one namespace split across files: mod.rs glob-imports each
+<a href=#88 id=88 data-nosnippet>88</a>// (privately), and every submodule opens with `use super::*;` — so `pub(super)`
+<a href=#89 id=89 data-nosnippet>89</a>// items resolve across the whole tree exactly as they did in the single file.
+<a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">use </span>adapt::<span class="kw-2">*</span>;
+<a href=#91 id=91 data-nosnippet>91</a><span class="kw">use </span>audio_rx::<span class="kw-2">*</span>;
+<a href=#92 id=92 data-nosnippet>92</a><span class="kw">use </span>audio_tx::<span class="kw-2">*</span>;
+<a href=#93 id=93 data-nosnippet>93</a><span class="kw">use </span>camera_tx::<span class="kw-2">*</span>;
+<a href=#94 id=94 data-nosnippet>94</a><span class="kw">use </span>control::<span class="kw-2">*</span>;
+<a href=#95 id=95 data-nosnippet>95</a><span class="kw">use </span>policy::<span class="kw-2">*</span>;
+<a href=#96 id=96 data-nosnippet>96</a><span class="kw">use </span>reconnect::<span class="kw-2">*</span>;
+<a href=#97 id=97 data-nosnippet>97</a><span class="kw">use </span>screen_tx::<span class="kw-2">*</span>;
+<a href=#98 id=98 data-nosnippet>98</a><span class="kw">use </span>session::<span class="kw-2">*</span>;
+<a href=#99 id=99 data-nosnippet>99</a><span class="kw">use </span>simulcast::<span class="kw-2">*</span>;
+<a href=#100 id=100 data-nosnippet>100</a><span class="kw">use </span>subscribe::<span class="kw-2">*</span>;
+<a href=#101 id=101 data-nosnippet>101</a><span class="kw">use </span>video_rx::<span class="kw-2">*</span>;
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a><span class="kw">use </span>std::collections::HashMap;
+<a href=#104 id=104 data-nosnippet>104</a><span class="kw">use </span>std::sync::Arc;
+<a href=#105 id=105 data-nosnippet>105</a><span class="kw">use </span>std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
+<a href=#106 id=106 data-nosnippet>106</a><span class="kw">use </span>std::time::{Duration, Instant};
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a><span class="kw">use </span>arc_swap::ArcSwap;
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a><span class="kw">use </span>tokio::sync::{Notify, broadcast, mpsc, oneshot, watch};
+<a href=#111 id=111 data-nosnippet>111</a><span class="kw">use </span>tokio::task::JoinHandle;
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">use </span>uuid::Uuid;
+<a href=#113 id=113 data-nosnippet>113</a>
+<a href=#114 id=114 data-nosnippet>114</a><span class="kw">use </span>hound_control::{
+<a href=#115 id=115 data-nosnippet>115</a>    ClientMessage, Codec <span class="kw">as </span>CtlCodec, MediaKind, PROTOCOL_VERSION, PeerId, ServerMessage,
+<a href=#116 id=116 data-nosnippet>116</a>    SessionView, Source, TrackDecl, TrackId,
+<a href=#117 id=117 data-nosnippet>117</a>};
+<a href=#118 id=118 data-nosnippet>118</a><span class="kw">use </span>hound_engine::api::{Engine, OpusDecoder, OpusEncoder, OpusProfile, PlayoutBus, VideoDecoder};
+<a href=#119 id=119 data-nosnippet>119</a><span class="kw">use </span>hound_engine::types::{
+<a href=#120 id=120 data-nosnippet>120</a>    Bitrate, CameraId, DeviceChoice, Dimensions, Fps, KeyframeCadence, MicId, SpeakerId,
+<a href=#121 id=121 data-nosnippet>121</a>    TimestampUs, VideoCodec,
+<a href=#122 id=122 data-nosnippet>122</a>};
+<a href=#123 id=123 data-nosnippet>123</a><span class="kw">use </span>hound_media::{
+<a href=#124 id=124 data-nosnippet>124</a>    AdaptSignals, CaptureClock, Codec <span class="kw">as </span>WireCodec, Frame <span class="kw">as </span>WireFrame, Quality, ScreenQuality,
+<a href=#125 id=125 data-nosnippet>125</a>    TrackKind, VideoAdaptation,
+<a href=#126 id=126 data-nosnippet>126</a>};
+<a href=#127 id=127 data-nosnippet>127</a><span class="kw">use </span>hound_transport::{MoqRelaySession, MoqTrackPublisher, MoqTrackSubscriber};
+<a href=#128 id=128 data-nosnippet>128</a>
+<a href=#129 id=129 data-nosnippet>129</a><span class="kw">use </span><span class="kw">crate</span>::error::{HoundError, <span class="prelude-ty">Result</span>};
+<a href=#130 id=130 data-nosnippet>130</a><span class="kw">use </span><span class="kw">crate</span>::rest::RestClient;
+<a href=#131 id=131 data-nosnippet>131</a><span class="kw">use </span><span class="kw">crate</span>::stats::{CallStats, InboundAudioKind, InboundVideoKind, TransportState};
+<a href=#132 id=132 data-nosnippet>132</a>
+<a href=#133 id=133 data-nosnippet>133</a><span class="comment">// ─── Dedicated call runtime ─────────────────────────────────────────────────────
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a></span><span class="doccomment">/// The runtime every call task is spawned onto.
+<a href=#136 id=136 data-nosnippet>136</a>///
+<a href=#137 id=137 data-nosnippet>137</a>/// flutter_rust_bridge builds its async runtime with `tokio::runtime::Runtime::new()`
+<a href=#138 id=138 data-nosnippet>138</a>/// — one worker per core. The call's steady-state tasks (mic publish, per-track
+<a href=#139 id=139 data-nosnippet>139</a>/// decode, the moq session driver, supervisor/heartbeat) are light and
+<a href=#140 id=140 data-nosnippet>140</a>/// latency-bound, not CPU-bound, so spreading them over a per-core pool only adds
+<a href=#141 id=141 data-nosnippet>141</a>/// park/unpark + work-steal coordination that dwarfs the actual Opus/moq work. A
+<a href=#142 id=142 data-nosnippet>142</a>/// small pool carries the same load with a fraction of that overhead.
+<a href=#143 id=143 data-nosnippet>143</a>///
+<a href=#144 id=144 data-nosnippet>144</a>/// All `spawn` sites in this module target this runtime, and `CallSession::join` is
+<a href=#145 id=145 data-nosnippet>145</a>/// driven on it (so moq-net's internally-spawned session driver lands here too rather
+<a href=#146 id=146 data-nosnippet>146</a>/// than on the FRB pool). `'static` so it is never dropped — dropping a runtime from
+<a href=#147 id=147 data-nosnippet>147</a>/// within an async context panics, and FRB commands call us from async context.
+<a href=#148 id=148 data-nosnippet>148</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>call_runtime() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>tokio::runtime::Runtime {
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">static </span>RT: std::sync::OnceLock&lt;tokio::runtime::Runtime&gt; = std::sync::OnceLock::new();
+<a href=#150 id=150 data-nosnippet>150</a>    RT.get_or_init(|| {
+<a href=#151 id=151 data-nosnippet>151</a>        tokio::runtime::Builder::new_multi_thread()
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="comment">// 3 workers: 2 carry the steady control + video load with headroom; the
+<a href=#153 id=153 data-nosnippet>153</a>            // third is margin so a high-bitrate screenshare's moq frame delivery —
+<a href=#154 id=154 data-nosnippet>154</a>            // which can saturate a worker — cannot head-of-line-block the others on
+<a href=#155 id=155 data-nosnippet>155</a>            // the same pool. NB: audio fill does not run here — it has its own RT
+<a href=#156 id=156 data-nosnippet>156</a>            // runtime (`audio_runtime`) so video CPU can't starve voice ("audio is
+<a href=#157 id=157 data-nosnippet>157</a>            // sacred").
+<a href=#158 id=158 data-nosnippet>158</a>            </span>.worker_threads(<span class="number">3</span>)
+<a href=#159 id=159 data-nosnippet>159</a>            .enable_all()
+<a href=#160 id=160 data-nosnippet>160</a>            .thread_name(<span class="string">"hound-call"</span>)
+<a href=#161 id=161 data-nosnippet>161</a>            .build()
+<a href=#162 id=162 data-nosnippet>162</a>            .expect(<span class="string">"build dedicated call runtime"</span>)
+<a href=#163 id=163 data-nosnippet>163</a>    })
+<a href=#164 id=164 data-nosnippet>164</a>}
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a><span class="doccomment">/// The dedicated runtime for the audio RECEIVE/fill path (per-peer Opus decode → mix
+<a href=#167 id=167 data-nosnippet>167</a>/// jitter buffer). Isolated from [`call_runtime`] and **real-time promoted** (each
+<a href=#168 id=168 data-nosnippet>168</a>/// worker runs [`promote_current_thread_for_audio_fill`] on start) so a CPU-heavy
+<a href=#169 id=169 data-nosnippet>169</a>/// screen-share decode/scale/render load can never deschedule the fill — the RT mix
+<a href=#170 id=170 data-nosnippet>170</a>/// bus would otherwise find the jitter buffer dry at its 10 ms pull tick and the call
+<a href=#171 id=171 data-nosnippet>171</a>/// audibly stutters (`mix_starve`). The playout (mix) side is already RT; this extends
+<a href=#172 id=172 data-nosnippet>172</a>/// the same guarantee to the producer side. "Audio is sacred": video can freeze, voice
+<a href=#173 id=173 data-nosnippet>173</a>/// cannot.
+<a href=#174 id=174 data-nosnippet>174</a>///
+<a href=#175 id=175 data-nosnippet>175</a>/// Two workers: the decode of a 20 ms Opus frame is sub-millisecond and mostly parked
+<a href=#176 id=176 data-nosnippet>176</a>/// on the network, so a couple of RT threads comfortably carry many peers without any
+<a href=#177 id=177 data-nosnippet>177</a>/// busy-loop that would starve the system. (Caveat: the shared moq/QUIC demux driver
+<a href=#178 id=178 data-nosnippet>178</a>/// still runs on `call_runtime`; the jitter buffer absorbs brief demux delay, and RT
+<a href=#179 id=179 data-nosnippet>179</a>/// decode here removes the dominant — CPU-bound — starvation source.)
+<a href=#180 id=180 data-nosnippet>180</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>audio_runtime() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>tokio::runtime::Runtime {
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">static </span>RT: std::sync::OnceLock&lt;tokio::runtime::Runtime&gt; = std::sync::OnceLock::new();
+<a href=#182 id=182 data-nosnippet>182</a>    RT.get_or_init(|| {
+<a href=#183 id=183 data-nosnippet>183</a>        tokio::runtime::Builder::new_multi_thread()
+<a href=#184 id=184 data-nosnippet>184</a>            .worker_threads(<span class="number">2</span>)
+<a href=#185 id=185 data-nosnippet>185</a>            .enable_all()
+<a href=#186 id=186 data-nosnippet>186</a>            .thread_name(<span class="string">"hound-audio-rx"</span>)
+<a href=#187 id=187 data-nosnippet>187</a>            .on_thread_start(hound_engine::api::promote_current_thread_for_audio_fill)
+<a href=#188 id=188 data-nosnippet>188</a>            .build()
+<a href=#189 id=189 data-nosnippet>189</a>            .expect(<span class="string">"build dedicated audio runtime"</span>)
+<a href=#190 id=190 data-nosnippet>190</a>    })
+<a href=#191 id=191 data-nosnippet>191</a>}
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a><span class="comment">// ─── Public seam: the decode → render sink (UI-free) ────────────────────────────
+<a href=#194 id=194 data-nosnippet>194</a>
+<a href=#195 id=195 data-nosnippet>195</a></span><span class="doccomment">/// The decode→render seam. The orchestration decodes remote video into tightly
+<a href=#196 id=196 data-nosnippet>196</a>/// packed I420 and hands it here, keyed by a stream key (`"self"`, `"cam:{peer}"`,
+<a href=#197 id=197 data-nosnippet>197</a>/// `"screen:{peer}"`). The FRB layer supplies an impl whose body calls
+<a href=#198 id=198 data-nosnippet>198</a>/// `video_render::push_frame(key, w, h, i420)` — so this crate stays free of any
+<a href=#199 id=199 data-nosnippet>199</a>/// texture/FFI dependency. The sink must be cheap and non-blocking (drop-oldest);
+<a href=#200 id=200 data-nosnippet>200</a>/// it is called on a decode task, never on a real-time audio thread.
+<a href=#201 id=201 data-nosnippet>201</a></span><span class="kw">pub trait </span>VideoSink: Send + Sync + <span class="lifetime">'static </span>{
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="doccomment">/// Hand one decoded I420 frame to the renderer for `stream_key`. `i420` is
+<a href=#203 id=203 data-nosnippet>203</a>    /// tightly packed: `w*h + 2*(w/2 * h/2)` bytes.
+<a href=#204 id=204 data-nosnippet>204</a>    </span><span class="kw">fn </span>push_frame(<span class="kw-2">&amp;</span><span class="self">self</span>, stream_key: <span class="kw-2">&amp;</span>str, w: u32, h: u32, i420: Vec&lt;u8&gt;);
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="doccomment">/// Zero-copy fast path: hand one decoded frame that is still GPU-resident
+<a href=#207 id=207 data-nosnippet>207</a>    /// ([`RenderSurfaceHandle`]) so the renderer can sample it without a CPU
+<a href=#208 id=208 data-nosnippet>208</a>    /// readback / colour conversion / re-upload. Returns `true` if the sink took
+<a href=#209 id=209 data-nosnippet>209</a>    /// it. The default returns `false` ("I can't take a surface"), so the caller
+<a href=#210 id=210 data-nosnippet>210</a>    /// falls back to [`Self::push_frame`] with materialized I420 — meaning software
+<a href=#211 id=211 data-nosnippet>211</a>    /// decoders, non-GPU sinks (tests/headless), and platforms without a surface
+<a href=#212 id=212 data-nosnippet>212</a>    /// renderer all keep working unchanged. The handle is valid only for the
+<a href=#213 id=213 data-nosnippet>213</a>    /// duration of the call; an impl that keeps it must retain synchronously.
+<a href=#214 id=214 data-nosnippet>214</a>    </span><span class="kw">fn </span>push_surface(<span class="kw-2">&amp;</span><span class="self">self</span>, stream_key: <span class="kw-2">&amp;</span>str, surface: RenderSurfaceHandle) -&gt; bool {
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">let _ </span>= (stream_key, surface);
+<a href=#216 id=216 data-nosnippet>216</a>        <span class="bool-val">false
+<a href=#217 id=217 data-nosnippet>217</a>    </span>}
+<a href=#218 id=218 data-nosnippet>218</a>}
+<a href=#219 id=219 data-nosnippet>219</a>
+<a href=#220 id=220 data-nosnippet>220</a><span class="doccomment">/// A decoded frame still resident in a platform GPU buffer, handed to the renderer
+<a href=#221 id=221 data-nosnippet>221</a>/// for a zero-copy sample (no NV12→I420 readback, no re-upload). One variant per
+<a href=#222 id=222 data-nosnippet>222</a>/// GPU backend; a platform without a surface renderer never builds one (the
+<a href=#223 id=223 data-nosnippet>223</a>/// [`VideoSink::push_surface`] default declines and the I420 path runs).
+<a href=#224 id=224 data-nosnippet>224</a>///
+<a href=#225 id=225 data-nosnippet>225</a>/// Designed once for all platforms: macOS/iOS today; Windows (D3D11 shared NV12)
+<a href=#226 id=226 data-nosnippet>226</a>/// and Linux (dmabuf NV12) slot in as new variants behind the same seam.
+<a href=#227 id=227 data-nosnippet>227</a></span><span class="kw">pub enum </span>RenderSurfaceHandle {
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="doccomment">/// macOS/iOS: an IOSurface-backed NV12 `CVPixelBuffer` (raw `CVPixelBufferRef`
+<a href=#229 id=229 data-nosnippet>229</a>    /// as a pointer-sized int). The producer holds a +1 retain for the duration of
+<a href=#230 id=230 data-nosnippet>230</a>    /// the `push_surface` call; the renderer wraps the two IOSurface planes (luma
+<a href=#231 id=231 data-nosnippet>231</a>    /// R8, chroma RG8) as Metal textures on wgpu's device.
+<a href=#232 id=232 data-nosnippet>232</a>    </span>AppleCvPixelBuffer { ptr: usize, width: u32, height: u32 },
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="doccomment">/// Windows: an NV12 `ID3D11Texture2D` on the engine's shared device (raw COM
+<a href=#234 id=234 data-nosnippet>234</a>    /// pointer as a pointer-sized int). BORROWED — the frame's texture-pool lease
+<a href=#235 id=235 data-nosnippet>235</a>    /// is what guards the texture against being rewritten, and that lease lives
+<a href=#236 id=236 data-nosnippet>236</a>    /// on the frame, so the renderer must consume it synchronously inside the
+<a href=#237 id=237 data-nosnippet>237</a>    /// `push_surface` call (it blits NV12→BGRA into the Flutter-shared target
+<a href=#238 id=238 data-nosnippet>238</a>    /// there and then).
+<a href=#239 id=239 data-nosnippet>239</a>    </span>WindowsD3d11Nv12 { ptr: usize, width: u32, height: u32 },
+<a href=#240 id=240 data-nosnippet>240</a>}
+<a href=#241 id=241 data-nosnippet>241</a>
+<a href=#242 id=242 data-nosnippet>242</a><span class="kw">impl </span>RenderSurfaceHandle {
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="doccomment">/// The platform surface handle for a GPU-resident frame, or `None` for byte
+<a href=#244 id=244 data-nosnippet>244</a>    /// frames / platforms without a surface renderer (callers then take the
+<a href=#245 id=245 data-nosnippet>245</a>    /// materialized-I420 [`VideoSink::push_frame`] fallback).
+<a href=#246 id=246 data-nosnippet>246</a>    </span><span class="kw">pub fn </span>for_frame(frame: <span class="kw-2">&amp;</span>hound_engine::types::RawFrame) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">let </span>(width, height) = (frame.dims.width(), frame.dims.height());
+<a href=#248 id=248 data-nosnippet>248</a>        <span class="kw">let </span>surface = frame.surface.as_ref()<span class="question-mark">?</span>;
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(ptr) = surface.cv_pixel_buffer_ptr() {
+<a href=#250 id=250 data-nosnippet>250</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="self">Self</span>::AppleCvPixelBuffer { ptr, width, height });
+<a href=#251 id=251 data-nosnippet>251</a>        }
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(ptr) = surface.d3d11_texture_ptr() {
+<a href=#253 id=253 data-nosnippet>253</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="self">Self</span>::WindowsD3d11Nv12 { ptr, width, height });
+<a href=#254 id=254 data-nosnippet>254</a>        }
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="prelude-val">None
+<a href=#256 id=256 data-nosnippet>256</a>    </span>}
+<a href=#257 id=257 data-nosnippet>257</a>}
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a><span class="doccomment">/// A no-op sink (tests / headless): decoded frames are discarded. The call still
+<a href=#260 id=260 data-nosnippet>260</a>/// runs end to end (audio plays, state updates); only video display is dropped.
+<a href=#261 id=261 data-nosnippet>261</a></span><span class="kw">pub struct </span>NullVideoSink;
+<a href=#262 id=262 data-nosnippet>262</a><span class="kw">impl </span>VideoSink <span class="kw">for </span>NullVideoSink {
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">fn </span>push_frame(<span class="kw-2">&amp;</span><span class="self">self</span>, _stream_key: <span class="kw-2">&amp;</span>str, _w: u32, _h: u32, _i420: Vec&lt;u8&gt;) {}
+<a href=#264 id=264 data-nosnippet>264</a>}
+<a href=#265 id=265 data-nosnippet>265</a>
+<a href=#266 id=266 data-nosnippet>266</a><span class="doccomment">/// The self-preview stream key, and the `cam:{peer}` / `screen:{peer}` builders —
+<a href=#267 id=267 data-nosnippet>267</a>/// kept here so the key scheme has one source of truth across publish + subscribe.
+<a href=#268 id=268 data-nosnippet>268</a></span><span class="kw">const </span>SELF_KEY: <span class="kw-2">&amp;</span>str = <span class="string">"self"</span>;
+<a href=#269 id=269 data-nosnippet>269</a><span class="kw">fn </span>cam_key(peer: PeerId) -&gt; String {
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="macro">format!</span>(<span class="string">"cam:{}"</span>, peer.<span class="number">0</span>)
+<a href=#271 id=271 data-nosnippet>271</a>}
+<a href=#272 id=272 data-nosnippet>272</a><span class="kw">fn </span>screen_key(peer: PeerId) -&gt; String {
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="macro">format!</span>(<span class="string">"screen:{}"</span>, peer.<span class="number">0</span>)
+<a href=#274 id=274 data-nosnippet>274</a>}
+<a href=#275 id=275 data-nosnippet>275</a>
+<a href=#276 id=276 data-nosnippet>276</a><span class="doccomment">/// Which inbound-video stats bucket a remote video track feeds: a screen source is
+<a href=#277 id=277 data-nosnippet>277</a>/// counted as [`InboundVideoKind::Screen`], everything else (camera) as `Camera`. So
+<a href=#278 id=278 data-nosnippet>278</a>/// a peer publishing BOTH cam + screen has each tile's fps/bitrate reported from its
+<a href=#279 id=279 data-nosnippet>279</a>/// own track, not the summed total.
+<a href=#280 id=280 data-nosnippet>280</a></span><span class="kw">fn </span>inbound_video_kind(source: Source) -&gt; InboundVideoKind {
+<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">match </span>source {
+<a href=#282 id=282 data-nosnippet>282</a>        Source::Screen =&gt; InboundVideoKind::Screen,
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">_ </span>=&gt; InboundVideoKind::Camera,
+<a href=#284 id=284 data-nosnippet>284</a>    }
+<a href=#285 id=285 data-nosnippet>285</a>}
+<a href=#286 id=286 data-nosnippet>286</a>
+<a href=#287 id=287 data-nosnippet>287</a><span class="comment">// ─── Screen sources (share picker) ──────────────────────────────────────────────
+<a href=#288 id=288 data-nosnippet>288</a>
+<a href=#289 id=289 data-nosnippet>289</a></span><span class="doccomment">/// A shareable screen source for the picker — a display, a window, or a camera
+<a href=#290 id=290 data-nosnippet>290</a>/// streamed as a screen. UI-friendly + FFI-flat: the typed engine selection token
+<a href=#291 id=291 data-nosnippet>291</a>/// is encoded into [`id`](Self::id) (see [`encode_screen_source`]) so the UI round-
+<a href=#292 id=292 data-nosnippet>292</a>/// trips an opaque string back into [`CallSession::screen_share_start`].
+<a href=#293 id=293 data-nosnippet>293</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq)]
+<a href=#294 id=294 data-nosnippet>294</a></span><span class="kw">pub struct </span>ScreenSourceView {
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="doccomment">/// Opaque round-trip token (`"{kind}:{native_id}"`); pass back to share-start.
+<a href=#296 id=296 data-nosnippet>296</a>    </span><span class="kw">pub </span>id: String,
+<a href=#297 id=297 data-nosnippet>297</a>    <span class="doccomment">/// Human-readable label (window title / display description).
+<a href=#298 id=298 data-nosnippet>298</a>    </span><span class="kw">pub </span>title: String,
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="doccomment">/// Owning application for a window; `None` for a display or camera.
+<a href=#300 id=300 data-nosnippet>300</a>    </span><span class="kw">pub </span>app_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="doccomment">/// A whole-display source (vs a single window / camera) — for picker grouping.
+<a href=#302 id=302 data-nosnippet>302</a>    </span><span class="kw">pub </span>is_display: bool,
+<a href=#303 id=303 data-nosnippet>303</a>}
+<a href=#304 id=304 data-nosnippet>304</a>
+<a href=#305 id=305 data-nosnippet>305</a><span class="doccomment">/// Enumerate the shareable screen sources (displays + windows). UI-free + needs no
+<a href=#306 id=306 data-nosnippet>306</a>/// active call, so it lives as a free function the facade/FRB call directly. Blocking
+<a href=#307 id=307 data-nosnippet>307</a>/// (round-trips ScreenCaptureKit's async enumeration); a Screen-Recording TCC denial
+<a href=#308 id=308 data-nosnippet>308</a>/// or an unsupported platform surfaces as a typed [`HoundError::Media`].
+<a href=#309 id=309 data-nosnippet>309</a></span><span class="kw">pub fn </span>list_screen_sources() -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;ScreenSourceView&gt;&gt; {
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>sources = Engine::new()
+<a href=#311 id=311 data-nosnippet>311</a>        .screen_sources()
+<a href=#312 id=312 data-nosnippet>312</a>        .map_err(|e| HoundError::Media(<span class="macro">format!</span>(<span class="string">"enumerate screen sources: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#313 id=313 data-nosnippet>313</a>    <span class="prelude-val">Ok</span>(sources
+<a href=#314 id=314 data-nosnippet>314</a>        .into_iter()
+<a href=#315 id=315 data-nosnippet>315</a>        .map(|s| ScreenSourceView {
+<a href=#316 id=316 data-nosnippet>316</a>            id: encode_screen_source(<span class="kw-2">&amp;</span>s.source),
+<a href=#317 id=317 data-nosnippet>317</a>            title: s.title,
+<a href=#318 id=318 data-nosnippet>318</a>            app_name: s.app_name,
+<a href=#319 id=319 data-nosnippet>319</a>            is_display: <span class="macro">matches!</span>(s.source, hound_engine::types::ScreenSource::Display(<span class="kw">_</span>)),
+<a href=#320 id=320 data-nosnippet>320</a>        })
+<a href=#321 id=321 data-nosnippet>321</a>        .collect())
+<a href=#322 id=322 data-nosnippet>322</a>}
+<a href=#323 id=323 data-nosnippet>323</a>
+<a href=#324 id=324 data-nosnippet>324</a><span class="doccomment">/// A share-picker preview image: opaque RGBA8888, `width * height * 4` bytes.
+<a href=#325 id=325 data-nosnippet>325</a></span><span class="attr">#[derive(Debug, Clone)]
+<a href=#326 id=326 data-nosnippet>326</a></span><span class="kw">pub struct </span>ScreenThumbnail {
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="kw">pub </span>width: u32,
+<a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">pub </span>height: u32,
+<a href=#329 id=329 data-nosnippet>329</a>    <span class="kw">pub </span>rgba: Vec&lt;u8&gt;,
+<a href=#330 id=330 data-nosnippet>330</a>}
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a><span class="doccomment">/// One-shot preview thumbnail of a screen source for the picker, aspect-fit within
+<a href=#333 id=333 data-nosnippet>333</a>/// (`max_w`, `max_h`). Best-effort and cross-platform (ScreenCaptureKit on macOS, a
+<a href=#334 id=334 data-nosnippet>334</a>/// scap one-shot on Windows/Linux): a capture failure — unsupported platform, a
+<a href=#335 id=335 data-nosnippet>335</a>/// permission/portal denial, an undeliverable source — surfaces as a typed
+<a href=#336 id=336 data-nosnippet>336</a>/// [`HoundError::Media`] the picker treats as "no thumbnail" (title-only card).
+<a href=#337 id=337 data-nosnippet>337</a>/// Blocking (drives a one-shot engine capture); the facade runs it off-runtime.
+<a href=#338 id=338 data-nosnippet>338</a></span><span class="kw">pub fn </span>screen_thumbnail(source_id: String, max_w: u32, max_h: u32) -&gt; <span class="prelude-ty">Result</span>&lt;ScreenThumbnail&gt; {
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">let </span>source = parse_screen_source(<span class="kw-2">&amp;</span>source_id)<span class="question-mark">?</span>;
+<a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">let </span>t = Engine::new()
+<a href=#341 id=341 data-nosnippet>341</a>        .screen_thumbnail(<span class="kw-2">&amp;</span>source, max_w, max_h)
+<a href=#342 id=342 data-nosnippet>342</a>        .map_err(|e| HoundError::Media(<span class="macro">format!</span>(<span class="string">"screen thumbnail: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#343 id=343 data-nosnippet>343</a>    <span class="prelude-val">Ok</span>(ScreenThumbnail {
+<a href=#344 id=344 data-nosnippet>344</a>        width: t.width,
+<a href=#345 id=345 data-nosnippet>345</a>        height: t.height,
+<a href=#346 id=346 data-nosnippet>346</a>        rgba: t.rgba,
+<a href=#347 id=347 data-nosnippet>347</a>    })
+<a href=#348 id=348 data-nosnippet>348</a>}
+<a href=#349 id=349 data-nosnippet>349</a>
+<a href=#350 id=350 data-nosnippet>350</a><span class="doccomment">/// Encode the engine's typed selection token into the opaque `"{kind}:{id}"` string
+<a href=#351 id=351 data-nosnippet>351</a>/// the UI round-trips. Inverse of [`parse_screen_source`].
+<a href=#352 id=352 data-nosnippet>352</a></span><span class="kw">fn </span>encode_screen_source(source: <span class="kw-2">&amp;</span>hound_engine::types::ScreenSource) -&gt; String {
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">use </span>hound_engine::types::ScreenSource;
+<a href=#354 id=354 data-nosnippet>354</a>    <span class="kw">match </span>source {
+<a href=#355 id=355 data-nosnippet>355</a>        ScreenSource::Display(id) =&gt; <span class="macro">format!</span>(<span class="string">"display:{}"</span>, id.as_str()),
+<a href=#356 id=356 data-nosnippet>356</a>        ScreenSource::Window(id) =&gt; <span class="macro">format!</span>(<span class="string">"window:{}"</span>, id.as_str()),
+<a href=#357 id=357 data-nosnippet>357</a>        ScreenSource::Camera(id) =&gt; <span class="macro">format!</span>(<span class="string">"camera:{}"</span>, id.as_str()),
+<a href=#358 id=358 data-nosnippet>358</a>    }
+<a href=#359 id=359 data-nosnippet>359</a>}
+<a href=#360 id=360 data-nosnippet>360</a>
+<a href=#361 id=361 data-nosnippet>361</a><span class="doccomment">/// Parse the opaque `"{kind}:{id}"` picker token back into the engine's typed
+<a href=#362 id=362 data-nosnippet>362</a>/// [`ScreenSource`](hound_engine::types::ScreenSource). Inverse of
+<a href=#363 id=363 data-nosnippet>363</a>/// [`encode_screen_source`].
+<a href=#364 id=364 data-nosnippet>364</a></span><span class="kw">fn </span>parse_screen_source(token: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;hound_engine::types::ScreenSource&gt; {
+<a href=#365 id=365 data-nosnippet>365</a>    <span class="kw">use </span>hound_engine::types::{CameraId, DisplayId, ScreenSource, WindowId};
+<a href=#366 id=366 data-nosnippet>366</a>    <span class="kw">let </span>(kind, id) = token
+<a href=#367 id=367 data-nosnippet>367</a>        .split_once(<span class="string">':'</span>)
+<a href=#368 id=368 data-nosnippet>368</a>        .ok_or_else(|| HoundError::Media(<span class="macro">format!</span>(<span class="string">"malformed screen source token {token:?}"</span>)))<span class="question-mark">?</span>;
+<a href=#369 id=369 data-nosnippet>369</a>    <span class="kw">match </span>kind {
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="string">"display" </span>=&gt; <span class="prelude-val">Ok</span>(ScreenSource::Display(DisplayId::new(id))),
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="string">"window" </span>=&gt; <span class="prelude-val">Ok</span>(ScreenSource::Window(WindowId::new(id))),
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="string">"camera" </span>=&gt; <span class="prelude-val">Ok</span>(ScreenSource::Camera(CameraId::new(id))),
+<a href=#373 id=373 data-nosnippet>373</a>        other =&gt; <span class="prelude-val">Err</span>(HoundError::Media(<span class="macro">format!</span>(
+<a href=#374 id=374 data-nosnippet>374</a>            <span class="string">"unknown screen source kind {other:?} (want display|window|camera)"
+<a href=#375 id=375 data-nosnippet>375</a>        </span>))),
+<a href=#376 id=376 data-nosnippet>376</a>    }
+<a href=#377 id=377 data-nosnippet>377</a>}
+<a href=#378 id=378 data-nosnippet>378</a>
+<a href=#379 id=379 data-nosnippet>379</a><span class="comment">// ─── Media devices (mic / camera / speaker picker) ──────────────────────────────
+<a href=#380 id=380 data-nosnippet>380</a>
+<a href=#381 id=381 data-nosnippet>381</a></span><span class="doccomment">/// One enumerated media device for a picker row. FFI-flat: `id` is the opaque
+<a href=#382 id=382 data-nosnippet>382</a>/// selection token to pass back to `call_select_device` for this kind (for audio it
+<a href=#383 id=383 data-nosnippet>383</a>/// equals the cpal device name; for a camera the AVFoundation `uniqueID`), and
+<a href=#384 id=384 data-nosnippet>384</a>/// `is_default` flags the host's current default for that kind.
+<a href=#385 id=385 data-nosnippet>385</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq)]
+<a href=#386 id=386 data-nosnippet>386</a></span><span class="kw">pub struct </span>DeviceView {
+<a href=#387 id=387 data-nosnippet>387</a>    <span class="kw">pub </span>id: String,
+<a href=#388 id=388 data-nosnippet>388</a>    <span class="kw">pub </span>name: String,
+<a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">pub </span>is_default: bool,
+<a href=#390 id=390 data-nosnippet>390</a>}
+<a href=#391 id=391 data-nosnippet>391</a>
+<a href=#392 id=392 data-nosnippet>392</a><span class="doccomment">/// The available media devices grouped by kind — the data the Devices panel renders.
+<a href=#393 id=393 data-nosnippet>393</a>/// A kind whose platform backend is absent simply comes back empty (a capability
+<a href=#394 id=394 data-nosnippet>394</a>/// miss, not an error).
+<a href=#395 id=395 data-nosnippet>395</a></span><span class="attr">#[derive(Clone, Debug, Default, PartialEq, Eq)]
+<a href=#396 id=396 data-nosnippet>396</a></span><span class="kw">pub struct </span>DeviceListView {
+<a href=#397 id=397 data-nosnippet>397</a>    <span class="kw">pub </span>microphones: Vec&lt;DeviceView&gt;,
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">pub </span>cameras: Vec&lt;DeviceView&gt;,
+<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">pub </span>speakers: Vec&lt;DeviceView&gt;,
+<a href=#400 id=400 data-nosnippet>400</a>}
+<a href=#401 id=401 data-nosnippet>401</a>
+<a href=#402 id=402 data-nosnippet>402</a><span class="doccomment">/// Enumerate the available microphones, cameras, and speakers for the picker. UI-free
+<a href=#403 id=403 data-nosnippet>403</a>/// and needs no active call. The engine enumeration is synchronous and may briefly
+<a href=#404 id=404 data-nosnippet>404</a>/// touch the host, so the facade runs it on a blocking thread. Best-effort.
+<a href=#405 id=405 data-nosnippet>405</a></span><span class="kw">pub fn </span>list_devices() -&gt; DeviceListView {
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span>eng = Engine::new();
+<a href=#407 id=407 data-nosnippet>407</a>    DeviceListView {
+<a href=#408 id=408 data-nosnippet>408</a>        microphones: eng.microphones().into_iter().map(device_view).collect(),
+<a href=#409 id=409 data-nosnippet>409</a>        cameras: eng.cameras().into_iter().map(device_view).collect(),
+<a href=#410 id=410 data-nosnippet>410</a>        speakers: eng.speakers().into_iter().map(device_view).collect(),
+<a href=#411 id=411 data-nosnippet>411</a>    }
+<a href=#412 id=412 data-nosnippet>412</a>}
+<a href=#413 id=413 data-nosnippet>413</a>
+<a href=#414 id=414 data-nosnippet>414</a><span class="doccomment">/// Map a typed engine [`DeviceDescriptor`](hound_engine::api::DeviceDescriptor) onto
+<a href=#415 id=415 data-nosnippet>415</a>/// the FFI-flat [`DeviceView`] (id as a plain string). The typed ids keep device
+<a href=#416 id=416 data-nosnippet>416</a>/// kinds apart inside the engine; the wire stays stringly so one
+<a href=#417 id=417 data-nosnippet>417</a>/// `call_select_device(kind, id)` round-trips all three kinds.
+<a href=#418 id=418 data-nosnippet>418</a></span><span class="kw">fn </span>device_view&lt;Id: hound_engine::types::DeviceId&gt;(
+<a href=#419 id=419 data-nosnippet>419</a>    d: hound_engine::api::DeviceDescriptor&lt;Id&gt;,
+<a href=#420 id=420 data-nosnippet>420</a>) -&gt; DeviceView {
+<a href=#421 id=421 data-nosnippet>421</a>    DeviceView {
+<a href=#422 id=422 data-nosnippet>422</a>        id: d.id.as_str().to_owned(),
+<a href=#423 id=423 data-nosnippet>423</a>        name: d.name,
+<a href=#424 id=424 data-nosnippet>424</a>        is_default: d.is_default,
+<a href=#425 id=425 data-nosnippet>425</a>    }
+<a href=#426 id=426 data-nosnippet>426</a>}
+<a href=#427 id=427 data-nosnippet>427</a>
+<a href=#428 id=428 data-nosnippet>428</a><span class="comment">// ─── Observable snapshots ───────────────────────────────────────────────────────
+<a href=#429 id=429 data-nosnippet>429</a>
+<a href=#430 id=430 data-nosnippet>430</a></span><span class="doccomment">/// The call's roster as the UI renders it: self id, peers, and the tracks (with
+<a href=#431 id=431 data-nosnippet>431</a>/// kind/source/mute). Built from the control plane's [`SessionView`] reducer — the
+<a href=#432 id=432 data-nosnippet>432</a>/// same source of truth the media plane subscribes off of. Empty before `Welcome`.
+<a href=#433 id=433 data-nosnippet>433</a></span><span class="attr">#[derive(Clone, Debug, Default, PartialEq, Eq)]
+<a href=#434 id=434 data-nosnippet>434</a></span><span class="kw">pub struct </span>CallView {
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="doccomment">/// This client's own peer id, once the server assigns it (`Welcome`).
+<a href=#436 id=436 data-nosnippet>436</a>    </span><span class="kw">pub </span>self_id: <span class="prelude-ty">Option</span>&lt;u32&gt;,
+<a href=#437 id=437 data-nosnippet>437</a>    <span class="doccomment">/// Everyone in the call, including self (`PeerId.0`).
+<a href=#438 id=438 data-nosnippet>438</a>    </span><span class="kw">pub </span>peers: Vec&lt;u32&gt;,
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="doccomment">/// Every known track (local + remote).
+<a href=#440 id=440 data-nosnippet>440</a>    </span><span class="kw">pub </span>tracks: Vec&lt;CallTrack&gt;,
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="doccomment">/// peer_id → user_id, for the peers whose identity we know. Purely additive:
+<a href=#442 id=442 data-nosnippet>442</a>    /// the UI joins these to the display roster (keyed by `user_id`) for the real
+<a href=#443 id=443 data-nosnippet>443</a>    /// name/avatar; a peer with no entry falls back to "Peer N". Built from the
+<a href=#444 id=444 data-nosnippet>444</a>    /// control plane's `peers` joined with the realtime-derived [`PeerIdentities`].
+<a href=#445 id=445 data-nosnippet>445</a>    </span><span class="kw">pub </span>participants: Vec&lt;CallParticipant&gt;,
+<a href=#446 id=446 data-nosnippet>446</a>}
+<a href=#447 id=447 data-nosnippet>447</a>
+<a href=#448 id=448 data-nosnippet>448</a><span class="doccomment">/// A control-plane peer with a known identity. The UI joins `user_id` against the
+<a href=#449 id=449 data-nosnippet>449</a>/// display roster (the same one text channels use) for the name + avatar. Carries
+<a href=#450 id=450 data-nosnippet>450</a>/// no name/avatar itself — identity lives in the roster, not the call plane.
+<a href=#451 id=451 data-nosnippet>451</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq)]
+<a href=#452 id=452 data-nosnippet>452</a></span><span class="kw">pub struct </span>CallParticipant {
+<a href=#453 id=453 data-nosnippet>453</a>    <span class="kw">pub </span>peer_id: u32,
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">pub </span>user_id: Uuid,
+<a href=#455 id=455 data-nosnippet>455</a>}
+<a href=#456 id=456 data-nosnippet>456</a>
+<a href=#457 id=457 data-nosnippet>457</a><span class="doccomment">/// Shared `peer_id (u32) → user_id (Uuid)` map. Seeded at join from the REST
+<a href=#458 id=458 data-nosnippet>458</a>/// `VoiceJoin.peers` (+ self), then kept current by the realtime voice events
+<a href=#459 id=459 data-nosnippet>459</a>/// (`VoiceJoined`/`VoiceState`/`VoiceLeft`). An `ArcSwap` so the call's reader task
+<a href=#460 id=460 data-nosnippet>460</a>/// reads a cheap snapshot while the realtime reducer task swaps in updates — no lock
+<a href=#461 id=461 data-nosnippet>461</a>/// across the media plane. Cleared on call join/leave so identities never leak.
+<a href=#462 id=462 data-nosnippet>462</a></span><span class="kw">pub type </span>PeerIdentities = Arc&lt;ArcSwap&lt;HashMap&lt;u32, Uuid&gt;&gt;&gt;;
+<a href=#463 id=463 data-nosnippet>463</a>
+<a href=#464 id=464 data-nosnippet>464</a><span class="doccomment">/// The sharer's live screen-quality preference (motion↔legibility + a resolution/fps
+<a href=#465 id=465 data-nosnippet>465</a>/// cap), shared between [`CallSession::set_screen_quality`] (the writer) and the
+<a href=#466 id=466 data-nosnippet>466</a>/// running screen adaptation tick (the reader, which `set_screen_quality`s its ladder
+<a href=#467 id=467 data-nosnippet>467</a>/// when it changes). An `ArcSwap` so the command writes lock-free while the tick reads
+<a href=#468 id=468 data-nosnippet>468</a>/// a cheap snapshot. Lives on [`ConnectionParams`] so it survives a reconnect (the
+<a href=#469 id=469 data-nosnippet>469</a>/// republished share re-seeds its ladder from it).
+<a href=#470 id=470 data-nosnippet>470</a></span><span class="kw">type </span>SharedScreenQuality = Arc&lt;ArcSwap&lt;ScreenQuality&gt;&gt;;
+<a href=#471 id=471 data-nosnippet>471</a>
+<a href=#472 id=472 data-nosnippet>472</a><span class="doccomment">/// Join `peers` (the control-plane roster) against the `peer_id → user_id` map into
+<a href=#473 id=473 data-nosnippet>473</a>/// a deterministic (sorted by peer_id) list of [`CallParticipant`]. Peers with no
+<a href=#474 id=474 data-nosnippet>474</a>/// known identity are simply omitted (the UI falls back to "Peer N"). Shared by the
+<a href=#475 id=475 data-nosnippet>475</a>/// call reader (control-plane changes) and the realtime reducer (identity changes).
+<a href=#476 id=476 data-nosnippet>476</a></span><span class="kw">pub fn </span>build_participants(peers: <span class="kw-2">&amp;</span>[u32], map: <span class="kw-2">&amp;</span>HashMap&lt;u32, Uuid&gt;) -&gt; Vec&lt;CallParticipant&gt; {
+<a href=#477 id=477 data-nosnippet>477</a>    <span class="kw">let </span><span class="kw-2">mut </span>out: Vec&lt;CallParticipant&gt; = peers
+<a href=#478 id=478 data-nosnippet>478</a>        .iter()
+<a href=#479 id=479 data-nosnippet>479</a>        .filter_map(|<span class="kw-2">&amp;</span>peer_id| {
+<a href=#480 id=480 data-nosnippet>480</a>            map.get(<span class="kw-2">&amp;</span>peer_id)
+<a href=#481 id=481 data-nosnippet>481</a>                .map(|<span class="kw-2">&amp;</span>user_id| CallParticipant { peer_id, user_id })
+<a href=#482 id=482 data-nosnippet>482</a>        })
+<a href=#483 id=483 data-nosnippet>483</a>        .collect();
+<a href=#484 id=484 data-nosnippet>484</a>    out.sort_by_key(|p| p.peer_id);
+<a href=#485 id=485 data-nosnippet>485</a>    out
+<a href=#486 id=486 data-nosnippet>486</a>}
+<a href=#487 id=487 data-nosnippet>487</a>
+<a href=#488 id=488 data-nosnippet>488</a><span class="doccomment">/// One published track, carried with the control-plane enums (not flattened to
+<a href=#489 id=489 data-nosnippet>489</a>/// strings) so the binding compares them type-driven — `t.kind == MediaKind::Video`
+<a href=#490 id=490 data-nosnippet>490</a>/// — with exhaustiveness on both sides. The enums are `Copy + Eq` (serde snake_case).
+<a href=#491 id=491 data-nosnippet>491</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq)]
+<a href=#492 id=492 data-nosnippet>492</a></span><span class="kw">pub struct </span>CallTrack {
+<a href=#493 id=493 data-nosnippet>493</a>    <span class="kw">pub </span>id: u32,
+<a href=#494 id=494 data-nosnippet>494</a>    <span class="kw">pub </span>peer: u32,
+<a href=#495 id=495 data-nosnippet>495</a>    <span class="kw">pub </span>kind: MediaKind,
+<a href=#496 id=496 data-nosnippet>496</a>    <span class="kw">pub </span>source: Source,
+<a href=#497 id=497 data-nosnippet>497</a>    <span class="kw">pub </span>codec: CtlCodec,
+<a href=#498 id=498 data-nosnippet>498</a>    <span class="kw">pub </span>muted: bool,
+<a href=#499 id=499 data-nosnippet>499</a>}
+<a href=#500 id=500 data-nosnippet>500</a>
+<a href=#501 id=501 data-nosnippet>501</a><span class="kw">impl </span>CallView {
+<a href=#502 id=502 data-nosnippet>502</a>    <span class="doccomment">/// Build from the control-plane view alone — participants empty (identities
+<a href=#503 id=503 data-nosnippet>503</a>    /// unknown). Test-only; the live reader always uses [`from_view_with`].
+<a href=#504 id=504 data-nosnippet>504</a>    </span><span class="attr">#[cfg(test)]
+<a href=#505 id=505 data-nosnippet>505</a>    </span><span class="kw">fn </span>from_view(view: <span class="kw-2">&amp;</span>SessionView) -&gt; <span class="self">Self </span>{
+<a href=#506 id=506 data-nosnippet>506</a>        <span class="self">Self</span>::from_view_with(view, <span class="kw-2">&amp;</span>HashMap::new())
+<a href=#507 id=507 data-nosnippet>507</a>    }
+<a href=#508 id=508 data-nosnippet>508</a>
+<a href=#509 id=509 data-nosnippet>509</a>    <span class="doccomment">/// Build from the control-plane view, joining each peer against the
+<a href=#510 id=510 data-nosnippet>510</a>    /// `peer_id → user_id` map to populate [`CallView::participants`].
+<a href=#511 id=511 data-nosnippet>511</a>    </span><span class="kw">fn </span>from_view_with(view: <span class="kw-2">&amp;</span>SessionView, identities: <span class="kw-2">&amp;</span>HashMap&lt;u32, Uuid&gt;) -&gt; <span class="self">Self </span>{
+<a href=#512 id=512 data-nosnippet>512</a>        <span class="kw">let </span>peers: Vec&lt;u32&gt; = view.peers().map(|p| p.id.<span class="number">0</span>).collect();
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="kw">let </span>participants = build_participants(<span class="kw-2">&amp;</span>peers, identities);
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="self">Self </span>{
+<a href=#515 id=515 data-nosnippet>515</a>            self_id: view.self_id().map(|p| p.<span class="number">0</span>),
+<a href=#516 id=516 data-nosnippet>516</a>            peers,
+<a href=#517 id=517 data-nosnippet>517</a>            tracks: view
+<a href=#518 id=518 data-nosnippet>518</a>                .tracks()
+<a href=#519 id=519 data-nosnippet>519</a>                .map(|t| CallTrack {
+<a href=#520 id=520 data-nosnippet>520</a>                    id: t.id.<span class="number">0</span>,
+<a href=#521 id=521 data-nosnippet>521</a>                    peer: t.peer.<span class="number">0</span>,
+<a href=#522 id=522 data-nosnippet>522</a>                    kind: t.kind,
+<a href=#523 id=523 data-nosnippet>523</a>                    source: t.source,
+<a href=#524 id=524 data-nosnippet>524</a>                    codec: t.codec,
+<a href=#525 id=525 data-nosnippet>525</a>                    muted: t.muted,
+<a href=#526 id=526 data-nosnippet>526</a>                })
+<a href=#527 id=527 data-nosnippet>527</a>                .collect(),
+<a href=#528 id=528 data-nosnippet>528</a>            participants,
+<a href=#529 id=529 data-nosnippet>529</a>        }
+<a href=#530 id=530 data-nosnippet>530</a>    }
+<a href=#531 id=531 data-nosnippet>531</a>}
+<a href=#532 id=532 data-nosnippet>532</a>
+<a href=#533 id=533 data-nosnippet>533</a><span class="doccomment">/// The connection state of the call's control plane (and, by extension, whether
+<a href=#534 id=534 data-nosnippet>534</a>/// media can flow). Drives a UI banner. `attempt` is the reconnect attempt count.
+<a href=#535 id=535 data-nosnippet>535</a></span><span class="attr">#[derive(Clone, Debug, Default, PartialEq, Eq)]
+<a href=#536 id=536 data-nosnippet>536</a></span><span class="kw">pub enum </span>ConnectionState {
+<a href=#537 id=537 data-nosnippet>537</a>    <span class="doccomment">/// Not in a call (initial / after `leave`).
+<a href=#538 id=538 data-nosnippet>538</a>    </span><span class="attr">#[default]
+<a href=#539 id=539 data-nosnippet>539</a>    </span>Idle,
+<a href=#540 id=540 data-nosnippet>540</a>    <span class="doccomment">/// Dialing the control WS / relay for the first time.
+<a href=#541 id=541 data-nosnippet>541</a>    </span>Connecting,
+<a href=#542 id=542 data-nosnippet>542</a>    <span class="doccomment">/// Control WS up and a `Welcome` received — media flowing.
+<a href=#543 id=543 data-nosnippet>543</a>    </span>Connected,
+<a href=#544 id=544 data-nosnippet>544</a>    <span class="doccomment">/// Lost the connection; a redial is in progress (`attempt` = which try).
+<a href=#545 id=545 data-nosnippet>545</a>    </span>Reconnecting { attempt: u32 },
+<a href=#546 id=546 data-nosnippet>546</a>    <span class="doccomment">/// Gave up (fatal, or reconnect not implemented yet — see module docs).
+<a href=#547 id=547 data-nosnippet>547</a>    </span>Failed { reason: String },
+<a href=#548 id=548 data-nosnippet>548</a>}
+<a href=#549 id=549 data-nosnippet>549</a>
+<a href=#550 id=550 data-nosnippet>550</a><span class="doccomment">/// Speaking levels: the local mic level plus a per-peer map, each `0.0..=1.0`
+<a href=#551 id=551 data-nosnippet>551</a>/// (perceptual, from RMS). The UI renders these as the ring/glow around a tile.
+<a href=#552 id=552 data-nosnippet>552</a></span><span class="attr">#[derive(Clone, Debug, Default, PartialEq)]
+<a href=#553 id=553 data-nosnippet>553</a></span><span class="kw">pub struct </span>LevelsView {
+<a href=#554 id=554 data-nosnippet>554</a>    <span class="doccomment">/// This client's own mic level (`0.0` when muted).
+<a href=#555 id=555 data-nosnippet>555</a>    </span><span class="kw">pub </span>mic: f32,
+<a href=#556 id=556 data-nosnippet>556</a>    <span class="doccomment">/// Remote peers' levels by `PeerId.0`.
+<a href=#557 id=557 data-nosnippet>557</a>    </span><span class="kw">pub </span>peers: HashMap&lt;u32, f32&gt;,
+<a href=#558 id=558 data-nosnippet>558</a>}
+<a href=#559 id=559 data-nosnippet>559</a>
+<a href=#560 id=560 data-nosnippet>560</a><span class="comment">// ─── Tuning constants ───────────────────────────────────────────────────────────
+<a href=#561 id=561 data-nosnippet>561</a>
+<a href=#562 id=562 data-nosnippet>562</a></span><span class="doccomment">/// Per-peer jitter-buffer depth floor the adaptive jitter grows from. 80 ms buys
+<a href=#563 id=563 data-nosnippet>563</a>/// headroom so a brief fill-thread scheduling hiccup under heavy video load can't
+<a href=#564 id=564 data-nosnippet>564</a>/// drain the buffer before the next frame lands — defense in depth behind the RT
+<a href=#565 id=565 data-nosnippet>565</a>/// audio runtime (which is what actually prevents starvation). The adaptive
+<a href=#566 id=566 data-nosnippet>566</a>/// estimator still grows above this on a jittery link; the extra baseline latency
+<a href=#567 id=567 data-nosnippet>567</a>/// is inaudible for conversation and buys a full Opus frame of slack.
+<a href=#568 id=568 data-nosnippet>568</a></span><span class="kw">const </span>PLAYOUT_TARGET_US: i64 = <span class="number">80_000</span>;
+<a href=#569 id=569 data-nosnippet>569</a><span class="doccomment">/// Self-view / camera publish geometry. The engine scales native → this.
+<a href=#570 id=570 data-nosnippet>570</a></span><span class="kw">const </span>CAM_DIMS: Dimensions = Dimensions::new(<span class="number">1280</span>, <span class="number">720</span>);
+<a href=#571 id=571 data-nosnippet>571</a><span class="kw">const </span>CAM_FPS: Fps = Fps::new(<span class="number">30</span>);
+<a href=#572 id=572 data-nosnippet>572</a><span class="doccomment">/// Camera publish bitrate ceiling.
+<a href=#573 id=573 data-nosnippet>573</a></span><span class="kw">const </span>CAM_BITRATE: Bitrate = Bitrate::kbps(<span class="number">1500</span>);
+<a href=#574 id=574 data-nosnippet>574</a><span class="doccomment">/// Screen-share publish geometry: capture is native, scaled to this 1080p-class
+<a href=#575 id=575 data-nosnippet>575</a>/// cap preserving aspect (text stays legible without 4K uplink cost).
+<a href=#576 id=576 data-nosnippet>576</a></span><span class="kw">const </span>SCREEN_MAX_W: u32 = <span class="number">1920</span>;
+<a href=#577 id=577 data-nosnippet>577</a><span class="kw">const </span>SCREEN_MAX_H: u32 = <span class="number">1080</span>;
+<a href=#578 id=578 data-nosnippet>578</a><span class="kw">const </span>SCREEN_FPS: Fps = Fps::new(<span class="number">30</span>);
+<a href=#579 id=579 data-nosnippet>579</a><span class="doccomment">/// Long-edge budget for the LOW simulcast layer — what a small/unfocused screenshare
+<a href=#580 id=580 data-nosnippet>580</a>/// tile pulls instead of the full source. 640 px long edge = 640×360 for a 16:9
+<a href=#581 id=581 data-nosnippet>581</a>/// share, ~8× fewer pixels than 1080p.
+<a href=#582 id=582 data-nosnippet>582</a></span><span class="kw">const </span>LOW_SCREEN_LONG_EDGE: u32 = <span class="number">640</span>;
+<a href=#583 id=583 data-nosnippet>583</a>
+<a href=#584 id=584 data-nosnippet>584</a><span class="doccomment">/// Camera keyframe cadence: a periodic IDR. Camera content changes wholesale
+<a href=#585 id=585 data-nosnippet>585</a>/// (deltas are already large), so the periodic refresh is cheap insurance for
+<a href=#586 id=586 data-nosnippet>586</a>/// loss recovery.
+<a href=#587 id=587 data-nosnippet>587</a></span><span class="kw">const </span>CAM_KEYFRAME_CADENCE: KeyframeCadence = KeyframeCadence::MOTION;
+<a href=#588 id=588 data-nosnippet>588</a><span class="doccomment">/// Screen keyframe cadence: IDRs **on demand only** (a subscriber's
+<a href=#589 id=589 data-nosnippet>589</a>/// `RequestKeyframe` — sent at subscribe and re-sent by the receiver's
+<a href=#590 id=590 data-nosnippet>590</a>/// awaiting-keyframe nag — or a PLI), plus a slow safety net. Screen content is
+<a href=#591 id=591 data-nosnippet>591</a>/// mostly static, and a periodic IDR of an unchanged 1080p frame is pure
+<a href=#592 id=592 data-nosnippet>592</a>/// redundancy — a short fixed cadence would dominate the data cost of a static
+<a href=#593 id=593 data-nosnippet>593</a>/// share (hundreds of kbps for zero new information).
+<a href=#594 id=594 data-nosnippet>594</a>/// `max_gop_frames = 900`: one GOP = one moq group, and moq-net evicts a group
+<a href=#595 id=595 data-nosnippet>595</a>/// past 1024 objects (a fatal `CacheFull` for the drain) — 900 bounds the GOP
+<a href=#596 id=596 data-nosnippet>596</a>/// safely under that cap even at sustained 60 fps (≈15 s), while the 60 s
+<a href=#597 id=597 data-nosnippet>597</a>/// safety interval governs low-fps/static content (tiny groups).
+<a href=#598 id=598 data-nosnippet>598</a></span><span class="kw">const </span>SCREEN_KEYFRAME_CADENCE: KeyframeCadence = KeyframeCadence::OnDemand {
+<a href=#599 id=599 data-nosnippet>599</a>    safety_seconds: <span class="number">60</span>,
+<a href=#600 id=600 data-nosnippet>600</a>    max_gop_frames: <span class="number">900</span>,
+<a href=#601 id=601 data-nosnippet>601</a>};
+<a href=#602 id=602 data-nosnippet>602</a><span class="doccomment">/// Screen publish bitrate seed — the initial encoder target before the BWE
+<a href=#603 id=603 data-nosnippet>603</a>/// adaptation settles onto a ladder rung. Matches the 1080p30 SCREEN rung
+<a href=#604 id=604 data-nosnippet>604</a>/// (~2.4 Mbps, see `screen_bitrate_bps`) — a screen-content target, NOT a
+<a href=#605 id=605 data-nosnippet>605</a>/// camera-video one. A camera-grade seed (several Mbps) would saturate the shared
+<a href=#606 id=606 data-nosnippet>606</a>/// QUIC connection before BWE reacts and starve audio/other video, while screen
+<a href=#607 id=607 data-nosnippet>607</a>/// content (mostly static, text) looks crisp in H.265 at this rate. The BWE climbs
+<a href=#608 id=608 data-nosnippet>608</a>/// from here if the link genuinely has headroom.
+<a href=#609 id=609 data-nosnippet>609</a></span><span class="kw">const </span>SCREEN_BITRATE: Bitrate = Bitrate::kbps(<span class="number">2500</span>);
+<a href=#610 id=610 data-nosnippet>610</a><span class="doccomment">/// App-audio Opus bitrate for a shared window's audio. This is music/system
+<a href=#611 id=611 data-nosnippet>611</a>/// audio, not a mic — encoded in `OpusProfile::Music` (general-audio) mode, so it
+<a href=#612 id=612 data-nosnippet>612</a>/// needs a music-grade rate: speech-grade rates (~32 kbps) audibly crush music.
+<a href=#613 id=613 data-nosnippet>613</a>/// 96 kbps mono is near-transparent for general audio.
+<a href=#614 id=614 data-nosnippet>614</a></span><span class="kw">const </span>SCREEN_AUDIO_BITRATE: Bitrate = Bitrate::kbps(<span class="number">96</span>);
+<a href=#615 id=615 data-nosnippet>615</a><span class="doccomment">/// Damage-driven screen capture: bounded wait for a frame (a static screen
+<a href=#616 id=616 data-nosnippet>616</a>/// produces none) so the loop can re-emit a cached frame for new subscribers.
+<a href=#617 id=617 data-nosnippet>617</a></span><span class="kw">const </span>SCREEN_IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(<span class="number">100</span>);
+<a href=#618 id=618 data-nosnippet>618</a><span class="doccomment">/// Re-emit the last screen frame at least this often (timestamp advanced) so a
+<a href=#619 id=619 data-nosnippet>619</a>/// static share still delivers pixels to a freshly-subscribed peer.
+<a href=#620 id=620 data-nosnippet>620</a></span><span class="kw">const </span>SCREEN_STATIC_REFRESH: std::time::Duration = std::time::Duration::from_secs(<span class="number">1</span>);
+<a href=#621 id=621 data-nosnippet>621</a><span class="doccomment">/// How long a changed window size must hold before the share restarts at the new
+<a href=#622 id=622 data-nosnippet>622</a>/// geometry — one restart when a live drag-resize settles, not dozens.
+<a href=#623 id=623 data-nosnippet>623</a></span><span class="kw">const </span>SCREEN_RESIZE_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(<span class="number">700</span>);
+<a href=#624 id=624 data-nosnippet>624</a><span class="doccomment">/// Backoff the screen capture thread sleeps before signalling `Retry` after a
+<a href=#625 id=625 data-nosnippet>625</a>/// transient capture error/panic — bounds the restart rate if the source keeps
+<a href=#626 id=626 data-nosnippet>626</a>/// faulting immediately (the share restart itself paces it further).
+<a href=#627 id=627 data-nosnippet>627</a></span><span class="kw">const </span>SCREEN_RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(<span class="number">500</span>);
+<a href=#628 id=628 data-nosnippet>628</a><span class="doccomment">/// moq-net track names (one per source) under the per-peer broadcast path.
+<a href=#629 id=629 data-nosnippet>629</a></span><span class="kw">const </span>MIC_TRACK: <span class="kw-2">&amp;</span>str = <span class="string">"mic"</span>;
+<a href=#630 id=630 data-nosnippet>630</a><span class="kw">const </span>CAM_TRACK: <span class="kw-2">&amp;</span>str = <span class="string">"cam"</span>;
+<a href=#631 id=631 data-nosnippet>631</a><span class="kw">const </span>SCREEN_TRACK: <span class="kw-2">&amp;</span>str = <span class="string">"screen"</span>;
+<a href=#632 id=632 data-nosnippet>632</a><span class="kw">const </span>SCREEN_AUDIO_TRACK: <span class="kw-2">&amp;</span>str = <span class="string">"screen_audio"</span>;
+<a href=#633 id=633 data-nosnippet>633</a><span class="doccomment">/// moq-net delivery priorities — **audio must strictly outrank video on the wire** so
+<a href=#634 id=634 data-nosnippet>634</a>/// a high-bitrate screenshare can never delay/burst the Opus streams on the SHARED
+<a href=#635 id=635 data-nosnippet>635</a>/// QUIC connection (the "audio is sacred" wire guarantee).
+<a href=#636 id=636 data-nosnippet>636</a>///
+<a href=#637 id=637 data-nosnippet>637</a>/// ⚠️ COUNTERINTUITIVE VALUES — they compensate for an inversion in moq-net 0.1.9.
+<a href=#638 id=638 data-nosnippet>638</a>/// moq-net ranks tracks by *descending* `track` value into a vec and hands quinn the
+<a href=#639 id=639 data-nosnippet>639</a>/// vec **index** (`lite/priority.rs:138`, `new_priority = idx`, 0 = top rank). But
+<a href=#640 id=640 data-nosnippet>640</a>/// quinn schedules the **largest** i32 first (`quinn-proto streams: BinaryHeap` max-
+<a href=#641 id=641 data-nosnippet>641</a>/// heap). So a *smaller* `track` value → higher vec index → larger quinn priority →
+<a href=#642 id=642 data-nosnippet>642</a>/// **served first**. Audio therefore takes the SMALLER value. If moq-net ever corrects
+<a href=#643 id=643 data-nosnippet>643</a>/// the mapping, this inverts and audio would drop to lowest priority — the
+<a href=#644 id=644 data-nosnippet>644</a>/// `audio_strictly_outranks_video_on_the_wire` guard test (`subscribe.rs`) fails
+<a href=#645 id=645 data-nosnippet>645</a>/// loudly if that regression lands, and `moq-net` is pinned `=0.1.9` against it. Only
+<a href=#646 id=646 data-nosnippet>646</a>/// the relative order matters (the value is used as an ordinal rank), not the
+<a href=#647 id=647 data-nosnippet>647</a>/// magnitude. Used on BOTH subscribe (relay→us downlink) and publish (us→relay
+<a href=#648 id=648 data-nosnippet>648</a>/// uplink), so it governs every audio/video contention point.
+<a href=#649 id=649 data-nosnippet>649</a></span><span class="kw">const </span>AUDIO_PRIORITY: u8 = <span class="number">2</span>;
+<a href=#650 id=650 data-nosnippet>650</a><span class="kw">const </span>VIDEO_PRIORITY: u8 = <span class="number">4</span>;
+<a href=#651 id=651 data-nosnippet>651</a><span class="doccomment">/// Heartbeat cadence (keeps the backend's voice-membership alive).
+<a href=#652 id=652 data-nosnippet>652</a></span><span class="kw">const </span>HEARTBEAT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(<span class="number">15</span>);
+<a href=#653 id=653 data-nosnippet>653</a><span class="doccomment">/// Sender-side BWE/congestion adaptation tick cadence: one decision per second
+<a href=#654 id=654 data-nosnippet>654</a>/// folds RTT + the worst receiver-reported loss into a target bitrate/rung the
+<a href=#655 id=655 data-nosnippet>655</a>/// encode loop applies.
+<a href=#656 id=656 data-nosnippet>656</a></span><span class="kw">const </span>ADAPT_TICK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(<span class="number">1</span>);
+<a href=#657 id=657 data-nosnippet>657</a>
+<a href=#658 id=658 data-nosnippet>658</a><span class="doccomment">/// The per-peer broadcast path under the relay token's `space/{id}` scope.
+<a href=#659 id=659 data-nosnippet>659</a></span><span class="kw">fn </span>broadcast_path(space_id: Uuid, peer: PeerId, track: <span class="kw-2">&amp;</span>str) -&gt; String {
+<a href=#660 id=660 data-nosnippet>660</a>    <span class="macro">format!</span>(<span class="string">"space/{space_id}/peer/{}/{track}"</span>, peer.<span class="number">0</span>)
+<a href=#661 id=661 data-nosnippet>661</a>}
+<a href=#662 id=662 data-nosnippet>662</a>
+<a href=#663 id=663 data-nosnippet>663</a><span class="kw">fn </span>publish_one(
+<a href=#664 id=664 data-nosnippet>664</a>    publisher: <span class="kw-2">&amp;mut </span>MoqTrackPublisher,
+<a href=#665 id=665 data-nosnippet>665</a>    frame: <span class="kw-2">&amp;</span>WireFrame,
+<a href=#666 id=666 data-nosnippet>666</a>) -&gt; std::result::Result&lt;(), String&gt; {
+<a href=#667 id=667 data-nosnippet>667</a>    publisher.publish_frame(frame).map_err(|e| e.to_string())
+<a href=#668 id=668 data-nosnippet>668</a>}
+<a href=#669 id=669 data-nosnippet>669</a>
+<a href=#670 id=670 data-nosnippet>670</a><span class="attr">#[cfg(test)]
+<a href=#671 id=671 data-nosnippet>671</a></span><span class="kw">mod </span>tests {
+<a href=#672 id=672 data-nosnippet>672</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#673 id=673 data-nosnippet>673</a>    <span class="kw">use </span>hound_control::{Codec, DecodeCaps, PeerInfo, TrackId, TrackInfo};
+<a href=#674 id=674 data-nosnippet>674</a>
+<a href=#675 id=675 data-nosnippet>675</a>    <span class="kw">fn </span>track(id: u32, peer: u32, kind: MediaKind, source: Source, codec: Codec) -&gt; TrackInfo {
+<a href=#676 id=676 data-nosnippet>676</a>        TrackInfo {
+<a href=#677 id=677 data-nosnippet>677</a>            id: TrackId(id),
+<a href=#678 id=678 data-nosnippet>678</a>            peer: PeerId(peer),
+<a href=#679 id=679 data-nosnippet>679</a>            kind,
+<a href=#680 id=680 data-nosnippet>680</a>            source,
+<a href=#681 id=681 data-nosnippet>681</a>            codec,
+<a href=#682 id=682 data-nosnippet>682</a>            muted: <span class="bool-val">false</span>,
+<a href=#683 id=683 data-nosnippet>683</a>            low: <span class="bool-val">false</span>,
+<a href=#684 id=684 data-nosnippet>684</a>        }
+<a href=#685 id=685 data-nosnippet>685</a>    }
+<a href=#686 id=686 data-nosnippet>686</a>
+<a href=#687 id=687 data-nosnippet>687</a>    <span class="doccomment">/// The CallView reducer wiring: a `SessionView` Welcome → flat CallView with
+<a href=#688 id=688 data-nosnippet>688</a>    /// self id, peers, and stringified track fields the UI compares as plain strings.
+<a href=#689 id=689 data-nosnippet>689</a>    /// `from_view_with` joins control-plane peers against the identity map: known
+<a href=#690 id=690 data-nosnippet>690</a>    /// peers get a `CallParticipant`, unknown peers are omitted (UI falls back).
+<a href=#691 id=691 data-nosnippet>691</a>    </span><span class="attr">#[test]
+<a href=#692 id=692 data-nosnippet>692</a>    </span><span class="kw">fn </span>participants_join_peers_to_identities() {
+<a href=#693 id=693 data-nosnippet>693</a>        <span class="kw">let </span><span class="kw-2">mut </span>view = SessionView::new();
+<a href=#694 id=694 data-nosnippet>694</a>        view.apply(<span class="kw-2">&amp;</span>ServerMessage::Welcome {
+<a href=#695 id=695 data-nosnippet>695</a>            protocol_version: PROTOCOL_VERSION,
+<a href=#696 id=696 data-nosnippet>696</a>            self_id: PeerId(<span class="number">1</span>),
+<a href=#697 id=697 data-nosnippet>697</a>            peers: <span class="macro">vec!</span>[
+<a href=#698 id=698 data-nosnippet>698</a>                PeerInfo {
+<a href=#699 id=699 data-nosnippet>699</a>                    id: PeerId(<span class="number">1</span>),
+<a href=#700 id=700 data-nosnippet>700</a>                    decode_caps: DecodeCaps::ALL,
+<a href=#701 id=701 data-nosnippet>701</a>                },
+<a href=#702 id=702 data-nosnippet>702</a>                PeerInfo {
+<a href=#703 id=703 data-nosnippet>703</a>                    id: PeerId(<span class="number">2</span>),
+<a href=#704 id=704 data-nosnippet>704</a>                    decode_caps: DecodeCaps::ALL,
+<a href=#705 id=705 data-nosnippet>705</a>                },
+<a href=#706 id=706 data-nosnippet>706</a>            ],
+<a href=#707 id=707 data-nosnippet>707</a>            tracks: <span class="macro">vec!</span>[],
+<a href=#708 id=708 data-nosnippet>708</a>        });
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="kw">let </span>(u1, u2) = (Uuid::now_v7(), Uuid::now_v7());
+<a href=#710 id=710 data-nosnippet>710</a>        <span class="kw">let </span>map = HashMap::from([(<span class="number">1u32</span>, u1), (<span class="number">2u32</span>, u2)]);
+<a href=#711 id=711 data-nosnippet>711</a>        <span class="kw">let </span>cv = CallView::from_view_with(<span class="kw-2">&amp;</span>view, <span class="kw-2">&amp;</span>map);
+<a href=#712 id=712 data-nosnippet>712</a>        <span class="macro">assert_eq!</span>(cv.participants.len(), <span class="number">2</span>);
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="macro">assert_eq!</span>(
+<a href=#714 id=714 data-nosnippet>714</a>            cv.participants[<span class="number">0</span>],
+<a href=#715 id=715 data-nosnippet>715</a>            CallParticipant {
+<a href=#716 id=716 data-nosnippet>716</a>                peer_id: <span class="number">1</span>,
+<a href=#717 id=717 data-nosnippet>717</a>                user_id: u1
+<a href=#718 id=718 data-nosnippet>718</a>            }
+<a href=#719 id=719 data-nosnippet>719</a>        );
+<a href=#720 id=720 data-nosnippet>720</a>        <span class="macro">assert_eq!</span>(
+<a href=#721 id=721 data-nosnippet>721</a>            cv.participants[<span class="number">1</span>],
+<a href=#722 id=722 data-nosnippet>722</a>            CallParticipant {
+<a href=#723 id=723 data-nosnippet>723</a>                peer_id: <span class="number">2</span>,
+<a href=#724 id=724 data-nosnippet>724</a>                user_id: u2
+<a href=#725 id=725 data-nosnippet>725</a>            }
+<a href=#726 id=726 data-nosnippet>726</a>        );
+<a href=#727 id=727 data-nosnippet>727</a>
+<a href=#728 id=728 data-nosnippet>728</a>        <span class="comment">// An unknown peer is omitted (no identity yet) — empty map ⇒ no participants.
+<a href=#729 id=729 data-nosnippet>729</a>        </span><span class="kw">let </span>cv_empty = CallView::from_view(<span class="kw-2">&amp;</span>view);
+<a href=#730 id=730 data-nosnippet>730</a>        <span class="macro">assert!</span>(cv_empty.participants.is_empty());
+<a href=#731 id=731 data-nosnippet>731</a>
+<a href=#732 id=732 data-nosnippet>732</a>        <span class="comment">// build_participants is deterministic (sorted) and skips unknown peers.
+<a href=#733 id=733 data-nosnippet>733</a>        </span><span class="kw">let </span>partial = build_participants(<span class="kw-2">&amp;</span>[<span class="number">2</span>, <span class="number">1</span>], <span class="kw-2">&amp;</span>HashMap::from([(<span class="number">2u32</span>, u2)]));
+<a href=#734 id=734 data-nosnippet>734</a>        <span class="macro">assert_eq!</span>(
+<a href=#735 id=735 data-nosnippet>735</a>            partial,
+<a href=#736 id=736 data-nosnippet>736</a>            <span class="macro">vec!</span>[CallParticipant {
+<a href=#737 id=737 data-nosnippet>737</a>                peer_id: <span class="number">2</span>,
+<a href=#738 id=738 data-nosnippet>738</a>                user_id: u2
+<a href=#739 id=739 data-nosnippet>739</a>            }]
+<a href=#740 id=740 data-nosnippet>740</a>        );
+<a href=#741 id=741 data-nosnippet>741</a>    }
+<a href=#742 id=742 data-nosnippet>742</a>
+<a href=#743 id=743 data-nosnippet>743</a>    <span class="attr">#[test]
+<a href=#744 id=744 data-nosnippet>744</a>    </span><span class="kw">fn </span>call_view_from_session_view() {
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">let </span><span class="kw-2">mut </span>view = SessionView::new();
+<a href=#746 id=746 data-nosnippet>746</a>        view.apply(<span class="kw-2">&amp;</span>ServerMessage::Welcome {
+<a href=#747 id=747 data-nosnippet>747</a>            protocol_version: PROTOCOL_VERSION,
+<a href=#748 id=748 data-nosnippet>748</a>            self_id: PeerId(<span class="number">1</span>),
+<a href=#749 id=749 data-nosnippet>749</a>            peers: <span class="macro">vec!</span>[
+<a href=#750 id=750 data-nosnippet>750</a>                PeerInfo {
+<a href=#751 id=751 data-nosnippet>751</a>                    id: PeerId(<span class="number">1</span>),
+<a href=#752 id=752 data-nosnippet>752</a>                    decode_caps: DecodeCaps::ALL,
+<a href=#753 id=753 data-nosnippet>753</a>                },
+<a href=#754 id=754 data-nosnippet>754</a>                PeerInfo {
+<a href=#755 id=755 data-nosnippet>755</a>                    id: PeerId(<span class="number">2</span>),
+<a href=#756 id=756 data-nosnippet>756</a>                    decode_caps: DecodeCaps::ALL,
+<a href=#757 id=757 data-nosnippet>757</a>                },
+<a href=#758 id=758 data-nosnippet>758</a>            ],
+<a href=#759 id=759 data-nosnippet>759</a>            tracks: <span class="macro">vec!</span>[
+<a href=#760 id=760 data-nosnippet>760</a>                track(<span class="number">10</span>, <span class="number">2</span>, MediaKind::Video, Source::Camera, Codec::H264),
+<a href=#761 id=761 data-nosnippet>761</a>                track(<span class="number">11</span>, <span class="number">2</span>, MediaKind::Audio, Source::Microphone, Codec::Opus),
+<a href=#762 id=762 data-nosnippet>762</a>            ],
+<a href=#763 id=763 data-nosnippet>763</a>        });
+<a href=#764 id=764 data-nosnippet>764</a>
+<a href=#765 id=765 data-nosnippet>765</a>        <span class="kw">let </span>cv = CallView::from_view(<span class="kw-2">&amp;</span>view);
+<a href=#766 id=766 data-nosnippet>766</a>        <span class="macro">assert_eq!</span>(cv.self_id, <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#767 id=767 data-nosnippet>767</a>        <span class="macro">assert_eq!</span>(cv.peers, <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>]);
+<a href=#768 id=768 data-nosnippet>768</a>        <span class="macro">assert_eq!</span>(cv.tracks.len(), <span class="number">2</span>);
+<a href=#769 id=769 data-nosnippet>769</a>
+<a href=#770 id=770 data-nosnippet>770</a>        <span class="kw">let </span>cam = cv.tracks.iter().find(|t| t.id == <span class="number">10</span>).unwrap();
+<a href=#771 id=771 data-nosnippet>771</a>        <span class="macro">assert_eq!</span>(cam.peer, <span class="number">2</span>);
+<a href=#772 id=772 data-nosnippet>772</a>        <span class="macro">assert_eq!</span>(cam.kind, MediaKind::Video);
+<a href=#773 id=773 data-nosnippet>773</a>        <span class="macro">assert_eq!</span>(cam.source, Source::Camera);
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="macro">assert_eq!</span>(cam.codec, Codec::H264);
+<a href=#775 id=775 data-nosnippet>775</a>        <span class="macro">assert!</span>(!cam.muted);
+<a href=#776 id=776 data-nosnippet>776</a>
+<a href=#777 id=777 data-nosnippet>777</a>        <span class="kw">let </span>mic = cv.tracks.iter().find(|t| t.id == <span class="number">11</span>).unwrap();
+<a href=#778 id=778 data-nosnippet>778</a>        <span class="macro">assert_eq!</span>(mic.kind, MediaKind::Audio);
+<a href=#779 id=779 data-nosnippet>779</a>        <span class="macro">assert_eq!</span>(mic.source, Source::Microphone);
+<a href=#780 id=780 data-nosnippet>780</a>        <span class="macro">assert_eq!</span>(mic.codec, Codec::Opus);
+<a href=#781 id=781 data-nosnippet>781</a>    }
+<a href=#782 id=782 data-nosnippet>782</a>
+<a href=#783 id=783 data-nosnippet>783</a>    <span class="doccomment">/// Mute applied through the reducer flips the CallView track's `muted`.
+<a href=#784 id=784 data-nosnippet>784</a>    </span><span class="attr">#[test]
+<a href=#785 id=785 data-nosnippet>785</a>    </span><span class="kw">fn </span>mute_change_reflects_in_call_view() {
+<a href=#786 id=786 data-nosnippet>786</a>        <span class="kw">let </span><span class="kw-2">mut </span>view = SessionView::new();
+<a href=#787 id=787 data-nosnippet>787</a>        view.apply(<span class="kw-2">&amp;</span>ServerMessage::Welcome {
+<a href=#788 id=788 data-nosnippet>788</a>            protocol_version: PROTOCOL_VERSION,
+<a href=#789 id=789 data-nosnippet>789</a>            self_id: PeerId(<span class="number">1</span>),
+<a href=#790 id=790 data-nosnippet>790</a>            peers: <span class="macro">vec!</span>[PeerInfo {
+<a href=#791 id=791 data-nosnippet>791</a>                id: PeerId(<span class="number">1</span>),
+<a href=#792 id=792 data-nosnippet>792</a>                decode_caps: DecodeCaps::ALL,
+<a href=#793 id=793 data-nosnippet>793</a>            }],
+<a href=#794 id=794 data-nosnippet>794</a>            tracks: <span class="macro">vec!</span>[track(
+<a href=#795 id=795 data-nosnippet>795</a>                <span class="number">20</span>,
+<a href=#796 id=796 data-nosnippet>796</a>                <span class="number">1</span>,
+<a href=#797 id=797 data-nosnippet>797</a>                MediaKind::Audio,
+<a href=#798 id=798 data-nosnippet>798</a>                Source::Microphone,
+<a href=#799 id=799 data-nosnippet>799</a>                Codec::Opus,
+<a href=#800 id=800 data-nosnippet>800</a>            )],
+<a href=#801 id=801 data-nosnippet>801</a>        });
+<a href=#802 id=802 data-nosnippet>802</a>        view.apply(<span class="kw-2">&amp;</span>ServerMessage::MuteChanged {
+<a href=#803 id=803 data-nosnippet>803</a>            track: TrackId(<span class="number">20</span>),
+<a href=#804 id=804 data-nosnippet>804</a>            muted: <span class="bool-val">true</span>,
+<a href=#805 id=805 data-nosnippet>805</a>        });
+<a href=#806 id=806 data-nosnippet>806</a>        <span class="kw">let </span>cv = CallView::from_view(<span class="kw-2">&amp;</span>view);
+<a href=#807 id=807 data-nosnippet>807</a>        <span class="macro">assert!</span>(cv.tracks[<span class="number">0</span>].muted);
+<a href=#808 id=808 data-nosnippet>808</a>    }
+<a href=#809 id=809 data-nosnippet>809</a>
+<a href=#810 id=810 data-nosnippet>810</a>    <span class="doccomment">/// Stream-key scheme is stable + distinct per source.
+<a href=#811 id=811 data-nosnippet>811</a>    </span><span class="attr">#[test]
+<a href=#812 id=812 data-nosnippet>812</a>    </span><span class="kw">fn </span>stream_keys_are_distinct() {
+<a href=#813 id=813 data-nosnippet>813</a>        <span class="macro">assert_eq!</span>(cam_key(PeerId(<span class="number">7</span>)), <span class="string">"cam:7"</span>);
+<a href=#814 id=814 data-nosnippet>814</a>        <span class="macro">assert_eq!</span>(screen_key(PeerId(<span class="number">7</span>)), <span class="string">"screen:7"</span>);
+<a href=#815 id=815 data-nosnippet>815</a>        <span class="macro">assert_eq!</span>(SELF_KEY, <span class="string">"self"</span>);
+<a href=#816 id=816 data-nosnippet>816</a>    }
+<a href=#817 id=817 data-nosnippet>817</a>}
+</code></pre></div></section></main></body></html>

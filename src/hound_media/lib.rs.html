@@ -6,11 +6,11 @@
 <a href=#6 id=6 data-nosnippet>6</a>//!
 <a href=#7 id=7 data-nosnippet>7</a>//! ## Why
 <a href=#8 id=8 data-nosnippet>8</a>//!
-<a href=#9 id=9 data-nosnippet>9</a>//! The client and the SFU (and previously a TypeScript worker) each had their
-<a href=#10 id=10 data-nosnippet>10</a>//! own copy of the framing logic, and they drifted — which is what broke video.
-<a href=#11 id=11 data-nosnippet>11</a>//! This crate is the single source of truth for the wire contract, so the
-<a href=#12 id=12 data-nosnippet>12</a>//! pieces cannot disagree, and every byte is covered by golden + round-trip
-<a href=#13 id=13 data-nosnippet>13</a>//! tests that fail loudly if the format changes.
+<a href=#9 id=9 data-nosnippet>9</a>//! The client and the SFU both speak this wire format; independent copies of
+<a href=#10 id=10 data-nosnippet>10</a>//! the framing logic inevitably drift and disagree. This crate is the single
+<a href=#11 id=11 data-nosnippet>11</a>//! source of truth for the wire contract, so the pieces cannot disagree, and
+<a href=#12 id=12 data-nosnippet>12</a>//! every byte is covered by golden + round-trip tests that fail loudly if the
+<a href=#13 id=13 data-nosnippet>13</a>//! format changes.
 <a href=#14 id=14 data-nosnippet>14</a>//!
 <a href=#15 id=15 data-nosnippet>15</a>//! ## Layers
 <a href=#16 id=16 data-nosnippet>16</a>//!
@@ -25,26 +25,55 @@
 <a href=#25 id=25 data-nosnippet>25</a>//!   on a playout schedule (absorbs jitter/reorder; not gated on audio).
 <a href=#26 id=26 data-nosnippet>26</a>//! * [`recovery`] — [`recovery::NackGenerator`] / [`recovery::RetransmitBuffer`],
 <a href=#27 id=27 data-nosnippet>27</a>//!   NACK-based loss recovery (repair lost packets without waiting for a keyframe).
-<a href=#28 id=28 data-nosnippet>28</a>//! * [`congestion`] — [`congestion::RateController`] (loss-based bandwidth
-<a href=#29 id=29 data-nosnippet>29</a>//!   estimate) + [`congestion::QualityLadder`] (adaptive video rung selection).
-<a href=#30 id=30 data-nosnippet>30</a>//! * [`sim`] — a deterministic network-impairment simulator (loss/jitter/
-<a href=#31 id=31 data-nosnippet>31</a>//!   reorder/duplication/bandwidth) for testing the engine without sockets.
-<a href=#32 id=32 data-nosnippet>32</a>//!
-<a href=#33 id=33 data-nosnippet>33</a>//! Transport (iroh), congestion control, jitter buffering, and codecs live
-<a href=#34 id=34 data-nosnippet>34</a>//! elsewhere and are pumped with the types defined here.
-<a href=#35 id=35 data-nosnippet>35</a>
-<a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">pub mod </span>clock;
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">pub mod </span>congestion;
-<a href=#38 id=38 data-nosnippet>38</a><span class="kw">pub mod </span>fragment;
-<a href=#39 id=39 data-nosnippet>39</a><span class="kw">pub mod </span>jitter;
-<a href=#40 id=40 data-nosnippet>40</a><span class="kw">pub mod </span>packet;
-<a href=#41 id=41 data-nosnippet>41</a><span class="kw">pub mod </span>recovery;
-<a href=#42 id=42 data-nosnippet>42</a><span class="kw">pub mod </span>sim;
+<a href=#28 id=28 data-nosnippet>28</a>//! * [`keyframe`] — [`keyframe::KeyframeRequester`] / [`keyframe::KeyframeThrottle`],
+<a href=#29 id=29 data-nosnippet>29</a>//!   PLI keyframe requests + coalesced, rate-limited keyframe generation (the
+<a href=#30 id=30 data-nosnippet>30</a>//!   recovery path when loss is unrepairable by NACK).
+<a href=#31 id=31 data-nosnippet>31</a>//! * [`congestion`] — [`congestion::RateController`] (loss-based bandwidth
+<a href=#32 id=32 data-nosnippet>32</a>//!   estimate) + [`congestion::QualityLadder`] (adaptive video rung selection).
+<a href=#33 id=33 data-nosnippet>33</a>//! * [`send_budget`] — [`send_budget::SendBudget`] (AIMD estimate of the shared
+<a href=#34 id=34 data-nosnippet>34</a>//!   connection's total send rate from aggregate publish-drop backpressure) +
+<a href=#35 id=35 data-nosnippet>35</a>//!   [`send_budget::allocate_send_budget`] (max-min-fair split across the local
+<a href=#36 id=36 data-nosnippet>36</a>//!   video tracks with a floor), so the per-track controllers can't oversubscribe
+<a href=#37 id=37 data-nosnippet>37</a>//!   one shared QUIC uplink.
+<a href=#38 id=38 data-nosnippet>38</a>//! * [`sim`] — a deterministic network-impairment simulator (loss/jitter/
+<a href=#39 id=39 data-nosnippet>39</a>//!   reorder/duplication/bandwidth) for testing the engine without sockets.
+<a href=#40 id=40 data-nosnippet>40</a>//!
+<a href=#41 id=41 data-nosnippet>41</a>//! Transport (iroh), congestion control, jitter buffering, and codecs live
+<a href=#42 id=42 data-nosnippet>42</a>//! elsewhere and are pumped with the types defined here.
 <a href=#43 id=43 data-nosnippet>43</a>
-<a href=#44 id=44 data-nosnippet>44</a><span class="kw">pub use </span>clock::CaptureClock;
-<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub use </span>congestion::{Quality, QualityLadder, RateConfig, RateController, Rung};
-<a href=#46 id=46 data-nosnippet>46</a><span class="kw">pub use </span>fragment::{Frame, Packetizer, Reassembler};
-<a href=#47 id=47 data-nosnippet>47</a><span class="kw">pub use </span>jitter::PlayoutBuffer;
-<a href=#48 id=48 data-nosnippet>48</a><span class="kw">pub use </span>packet::{Codec, HEADER_LEN, PROTOCOL_VERSION, PacketError, PacketHeader, TrackKind};
-<a href=#49 id=49 data-nosnippet>49</a><span class="kw">pub use </span>recovery::{NackConfig, NackGenerator, RetransmitBuffer};
+<a href=#44 id=44 data-nosnippet>44</a></span><span class="kw">pub mod </span>adapt;
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub mod </span>bwe_delay;
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">pub mod </span>clock;
+<a href=#47 id=47 data-nosnippet>47</a><span class="kw">pub mod </span>congestion;
+<a href=#48 id=48 data-nosnippet>48</a><span class="kw">pub mod </span>fragment;
+<a href=#49 id=49 data-nosnippet>49</a><span class="kw">pub mod </span>framerate;
+<a href=#50 id=50 data-nosnippet>50</a><span class="kw">pub mod </span>jitter;
+<a href=#51 id=51 data-nosnippet>51</a><span class="kw">pub mod </span>keyframe;
+<a href=#52 id=52 data-nosnippet>52</a><span class="kw">pub mod </span>latency;
+<a href=#53 id=53 data-nosnippet>53</a><span class="kw">pub mod </span>layer;
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">pub mod </span>packet;
+<a href=#55 id=55 data-nosnippet>55</a><span class="kw">pub mod </span>recovery;
+<a href=#56 id=56 data-nosnippet>56</a><span class="kw">pub mod </span>send_budget;
+<a href=#57 id=57 data-nosnippet>57</a><span class="kw">pub mod </span>sim;
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a><span class="kw">pub use </span>adapt::{AdaptConfig, AdaptDecision, AdaptSignals, VideoAdaptation};
+<a href=#60 id=60 data-nosnippet>60</a><span class="kw">pub use </span>bwe_delay::{DelayBasedBwe, TrendlineEstimator, Usage};
+<a href=#61 id=61 data-nosnippet>61</a><span class="kw">pub use </span>clock::CaptureClock;
+<a href=#62 id=62 data-nosnippet>62</a><span class="kw">pub use </span>congestion::{
+<a href=#63 id=63 data-nosnippet>63</a>    DegradePriority, DownlinkEstimator, LayerPlan, LayerSelector, MaxResolution, Quality,
+<a href=#64 id=64 data-nosnippet>64</a>    QualityLadder, QualityRequest, QualityRequestDecider, RateConfig, RateController, Rung,
+<a href=#65 id=65 data-nosnippet>65</a>    ScreenQuality, SimulcastPlanner, plan_layers, screen_rungs,
+<a href=#66 id=66 data-nosnippet>66</a>};
+<a href=#67 id=67 data-nosnippet>67</a><span class="kw">pub use </span>fragment::{Frame, Packetizer, Reassembler};
+<a href=#68 id=68 data-nosnippet>68</a><span class="kw">pub use </span>framerate::FrameRateGate;
+<a href=#69 id=69 data-nosnippet>69</a><span class="kw">pub use </span>jitter::{AdaptiveJitter, JitterEstimator, PlayoutBuffer, Timestamped};
+<a href=#70 id=70 data-nosnippet>70</a><span class="kw">pub use </span>keyframe::{KeyframeConfig, KeyframeRequester, KeyframeThrottle, KeyframeThrottleConfig};
+<a href=#71 id=71 data-nosnippet>71</a><span class="kw">pub use </span>layer::{
+<a href=#72 id=72 data-nosnippet>72</a>    SpatialLayer, TemporalLayer, VideoSource, most_constrained, tile_quality_request, track_kind,
+<a href=#73 id=73 data-nosnippet>73</a>    track_name,
+<a href=#74 id=74 data-nosnippet>74</a>};
+<a href=#75 id=75 data-nosnippet>75</a><span class="kw">pub use </span>latency::LatencyHistogram;
+<a href=#76 id=76 data-nosnippet>76</a><span class="kw">pub use </span>packet::{Codec, HEADER_LEN, PROTOCOL_VERSION, PacketError, PacketHeader, TrackKind};
+<a href=#77 id=77 data-nosnippet>77</a><span class="kw">pub use </span>recovery::{NackConfig, NackGenerator, RetransmitBuffer};
+<a href=#78 id=78 data-nosnippet>78</a><span class="kw">pub use </span>send_budget::{MIN_VIDEO_BPS, SendBudget, allocate_send_budget};
 </code></pre></div></section></main></body></html>

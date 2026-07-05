@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["CaptureError"],"mod":["scap_capturer"],"struct":["CaptureConfig","CaptureHandle","CaptureTarget","RawAudioFrame","RawVideoFrame","StubCapturer"],"trait":["ScreenCapturer"]};

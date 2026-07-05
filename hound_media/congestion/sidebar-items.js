@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Quality"],"struct":["QualityLadder","RateConfig","RateController","Rung"]};
+window.SIDEBAR_ITEMS = {"constant":["LADDER_FPS","LADDER_HEIGHTS"],"enum":["DegradePriority","MaxResolution","Quality","QualityRequest"],"fn":["even","plan_layers","screen_bitrate_bps","screen_rungs","width_16x9"],"struct":["DownlinkEstimator","LayerPlan","LayerSelector","QualityLadder","QualityRequestDecider","RateConfig","RateController","Rung","ScreenQuality","SimulcastPlanner"]};

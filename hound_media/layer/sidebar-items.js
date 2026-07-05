@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LOW_LAYER_TARGET_BPS","TILE_SOURCE_MIN_PIXELS"],"enum":["SpatialLayer","TemporalLayer","VideoSource"],"fn":["most_constrained","tile_quality_request","track_kind","track_name"]};

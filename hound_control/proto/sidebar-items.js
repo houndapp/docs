@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PROTOCOL_VERSION"],"enum":["ClientMessage","Codec","ErrorCode","MediaKind","ServerMessage","Source"],"fn":["is_false"],"struct":["DecodeCaps","PeerId","PeerInfo","TrackDecl","TrackId","TrackInfo"]};

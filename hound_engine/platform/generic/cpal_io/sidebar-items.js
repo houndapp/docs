@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RING_CAPACITY_SAMPLES"],"fn":["input_candidates","map_cpal_err","output_candidates","playback_ring","shared_server_device","to_mono_i16"],"struct":["CpalCapturer","CpalPlayback","PlaybackConsumer","PlaybackProducer","PlaybackShared","Ring"]};

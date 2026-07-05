@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["collect_named","device_name","enumerate_microphones","enumerate_speakers","fold_names"]};

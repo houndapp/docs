@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["AuthenticationResult","Passkey","PasskeyAuthentication","PasskeyRegistration","RelyingParty"]};

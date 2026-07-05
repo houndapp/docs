@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_H","DEFAULT_W","FRAME_DT"],"fn":["attach","detach","mailbox_for","mailboxes","push_frame","push_surface","render_loop","streams"],"static":["MAILBOXES","STREAMS"],"struct":["BufferPtr","Slot","Stream"],"type":["Mailbox"]};

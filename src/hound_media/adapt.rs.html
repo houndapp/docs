@@ -1,0 +1,750 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/media/src/adapt.rs`."><title>adapt.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_media" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_media/</div>adapt.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Sender-side video adaptation (the BWE → encoder glue)
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! The **deterministic, sans-IO** core that turns the signals a publisher can
+<a href=#4 id=4 data-nosnippet>4</a>//! observe *without any new transport surface* into encoder decisions. It wraps
+<a href=#5 id=5 data-nosnippet>5</a>//! three `hound_media` pieces and is the single place the cam-publish path
+<a href=#6 id=6 data-nosnippet>6</a>//! consults each tick:
+<a href=#7 id=7 data-nosnippet>7</a>//!
+<a href=#8 id=8 data-nosnippet>8</a>//! * [`RateController`] — loss-based AIMD BWE. Produces a target send bitrate.
+<a href=#9 id=9 data-nosnippet>9</a>//! * [`QualityLadder`] — maps that bitrate to a discrete video [`Rung`] (or
+<a href=#10 id=10 data-nosnippet>10</a>//!   [`Quality::AudioOnly`] when even the lowest rung won't fit). *Audio is
+<a href=#11 id=11 data-nosnippet>11</a>//!   sacred; video is the release valve.*
+<a href=#12 id=12 data-nosnippet>12</a>//! * [`KeyframeThrottle`] — coalesces a PLI storm into one IDR and spaces forced
+<a href=#13 id=13 data-nosnippet>13</a>//!   keyframes so a burst of receiver requests can't spike the bitrate.
+<a href=#14 id=14 data-nosnippet>14</a>//!
+<a href=#15 id=15 data-nosnippet>15</a>//! ## Why these signals
+<a href=#16 id=16 data-nosnippet>16</a>//!
+<a href=#17 id=17 data-nosnippet>17</a>//! Real BWE wants receiver-reported loss. [`VideoAdaptation`] folds three
+<a href=#18 id=18 data-nosnippet>18</a>//! signals into one loss-equivalent each tick:
+<a href=#19 id=19 data-nosnippet>19</a>//!
+<a href=#20 id=20 data-nosnippet>20</a>//! * **Encoder/publisher backpressure.** The capture→publish channel is bounded;
+<a href=#21 id=21 data-nosnippet>21</a>//!   when the encoder outruns the publisher (a slow/congested uplink) frames are
+<a href=#22 id=22 data-nosnippet>22</a>//!   dropped at `try_send`. The dropped-fraction over an interval is a direct,
+<a href=#23 id=23 data-nosnippet>23</a>//!   local overload signal — it behaves like loss for the AIMD controller.
+<a href=#24 id=24 data-nosnippet>24</a>//! * **RTT.** `iroh::endpoint::Connection::rtt` is a cheap delay signal. A sharp
+<a href=#25 id=25 data-nosnippet>25</a>//!   rise over the connection's own baseline is bufferbloat — congestion before
+<a href=#26 id=26 data-nosnippet>26</a>//!   outright drops — so we fold an RTT-inflation term into the loss-equivalent.
+<a href=#27 id=27 data-nosnippet>27</a>//! * **Receiver-reported loss.** The receiver→producer feedback loop (the
+<a href=#28 id=28 data-nosnippet>28</a>//!   `MediaFeedback`/`MediaFeedbackReceived` control messages) reports the loss
+<a href=#29 id=29 data-nosnippet>29</a>//!   fraction each subscriber observes on the downstream leg the relay hides —
+<a href=#30 id=30 data-nosnippet>30</a>//!   the one signal the sender cannot see locally. When several receivers report,
+<a href=#31 id=31 data-nosnippet>31</a>//!   the orchestrator pre-reduces to the **worst** leg (serve the worst
+<a href=#32 id=32 data-nosnippet>32</a>//!   receiver) and passes that single fraction in.
+<a href=#33 id=33 data-nosnippet>33</a>//!
+<a href=#34 id=34 data-nosnippet>34</a>//! All three collapse to a single **loss-equivalent fraction** fed to the AIMD
+<a href=#35 id=35 data-nosnippet>35</a>//! controller, keeping the controller's contract (one loss number per interval)
+<a href=#36 id=36 data-nosnippet>36</a>//! intact. The mapping is the only policy here.
+<a href=#37 id=37 data-nosnippet>37</a>//!
+<a href=#38 id=38 data-nosnippet>38</a>//! ## Determinism
+<a href=#39 id=39 data-nosnippet>39</a>//!
+<a href=#40 id=40 data-nosnippet>40</a>//! Everything here is pure: time enters as `now_us`, every signal is an explicit
+<a href=#41 id=41 data-nosnippet>41</a>//! input, and the only outputs are returned data ([`AdaptDecision`]). No clocks,
+<a href=#42 id=42 data-nosnippet>42</a>//! no IO, no threads. The orchestrator samples the live signals and feeds them
+<a href=#43 id=43 data-nosnippet>43</a>//! in; this core decides. That keeps the policy unit-testable with synthetic
+<a href=#44 id=44 data-nosnippet>44</a>//! signals and no devices (see the tests below).
+<a href=#45 id=45 data-nosnippet>45</a>
+<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">use crate</span>::{
+<a href=#47 id=47 data-nosnippet>47</a>    KeyframeThrottle, KeyframeThrottleConfig, Quality, QualityLadder, RateConfig, RateController,
+<a href=#48 id=48 data-nosnippet>48</a>    Rung, ScreenQuality, screen_rungs,
+<a href=#49 id=49 data-nosnippet>49</a>};
+<a href=#50 id=50 data-nosnippet>50</a>
+<a href=#51 id=51 data-nosnippet>51</a><span class="doccomment">/// How an RTT rise maps to loss-equivalent. Tuned conservatively: the delay
+<a href=#52 id=52 data-nosnippet>52</a>/// signal nudges the controller toward backing off *before* drops appear, but
+<a href=#53 id=53 data-nosnippet>53</a>/// drops (real overload) dominate when both fire.
+<a href=#54 id=54 data-nosnippet>54</a></span><span class="attr">#[derive(Debug, Clone)]
+<a href=#55 id=55 data-nosnippet>55</a></span><span class="kw">pub struct </span>AdaptConfig {
+<a href=#56 id=56 data-nosnippet>56</a>    <span class="doccomment">/// RTT (µs) at or below which the delay term contributes nothing — the
+<a href=#57 id=57 data-nosnippet>57</a>    /// connection's healthy floor. Anything under this is "no congestion".
+<a href=#58 id=58 data-nosnippet>58</a>    </span><span class="kw">pub </span>rtt_floor_us: i64,
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="doccomment">/// RTT (µs) inflation above the observed baseline at which the delay term
+<a href=#60 id=60 data-nosnippet>60</a>    /// saturates to `rtt_max_loss`. Between floor and this it scales linearly.
+<a href=#61 id=61 data-nosnippet>61</a>    </span><span class="kw">pub </span>rtt_inflation_span_us: i64,
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="doccomment">/// Maximum loss-equivalent the delay term alone can contribute. Capped below
+<a href=#63 id=63 data-nosnippet>63</a>    /// the controller's `decrease_loss` so RTT alone *nudges* (holds/slows climb)
+<a href=#64 id=64 data-nosnippet>64</a>    /// but only real drops force the hard multiplicative back-off.
+<a href=#65 id=65 data-nosnippet>65</a>    </span><span class="kw">pub </span>rtt_max_loss: f64,
+<a href=#66 id=66 data-nosnippet>66</a>}
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a><span class="kw">impl </span>Default <span class="kw">for </span>AdaptConfig {
+<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#70 id=70 data-nosnippet>70</a>        <span class="self">Self </span>{
+<a href=#71 id=71 data-nosnippet>71</a>            rtt_floor_us: <span class="number">50_000</span>,           <span class="comment">// 50 ms — healthy relay RTT
+<a href=#72 id=72 data-nosnippet>72</a>            </span>rtt_inflation_span_us: <span class="number">150_000</span>, <span class="comment">// +150 ms over baseline ⇒ saturated
+<a href=#73 id=73 data-nosnippet>73</a>            </span>rtt_max_loss: <span class="number">0.08</span>,             <span class="comment">// below default decrease_loss (0.10)
+<a href=#74 id=74 data-nosnippet>74</a>        </span>}
+<a href=#75 id=75 data-nosnippet>75</a>    }
+<a href=#76 id=76 data-nosnippet>76</a>}
+<a href=#77 id=77 data-nosnippet>77</a>
+<a href=#78 id=78 data-nosnippet>78</a><span class="doccomment">/// The signals one publish tick observes. Built by the orchestrator from the
+<a href=#79 id=79 data-nosnippet>79</a>/// bounded-channel drop counters, the iroh connection RTT, and (when receivers
+<a href=#80 id=80 data-nosnippet>80</a>/// report) the worst receiver-reported loss fraction this interval.
+<a href=#81 id=81 data-nosnippet>81</a></span><span class="attr">#[derive(Debug, Clone, Copy, Default)]
+<a href=#82 id=82 data-nosnippet>82</a></span><span class="kw">pub struct </span>AdaptSignals {
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="doccomment">/// Encoded access units produced since the last tick.
+<a href=#84 id=84 data-nosnippet>84</a>    </span><span class="kw">pub </span>produced: u32,
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="doccomment">/// Of those, how many were dropped at the bounded publish channel
+<a href=#86 id=86 data-nosnippet>86</a>    /// (`try_send` failed) — the encoder outran the publisher.
+<a href=#87 id=87 data-nosnippet>87</a>    </span><span class="kw">pub </span>dropped: u32,
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="doccomment">/// Current connection RTT in microseconds, if the transport exposes it.
+<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">pub </span>rtt_us: <span class="prelude-ty">Option</span>&lt;i64&gt;,
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="doccomment">/// Worst receiver-reported loss fraction (0.0..=1.0) across all reporters this
+<a href=#91 id=91 data-nosnippet>91</a>    /// interval, or `None` when no receiver reported. This is the one signal the
+<a href=#92 id=92 data-nosnippet>92</a>    /// sender cannot observe locally — loss on a downstream leg the relay hides.
+<a href=#93 id=93 data-nosnippet>93</a>    /// The orchestrator already reduced multiple reporters to the max (serve the
+<a href=#94 id=94 data-nosnippet>94</a>    /// worst leg), so this is a single pre-reduced fraction.
+<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">pub </span>remote_loss: <span class="prelude-ty">Option</span>&lt;f64&gt;,
+<a href=#96 id=96 data-nosnippet>96</a>}
+<a href=#97 id=97 data-nosnippet>97</a>
+<a href=#98 id=98 data-nosnippet>98</a><span class="kw">impl </span>AdaptSignals {
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// The drop fraction this tick (0.0 when nothing was produced). This is the
+<a href=#100 id=100 data-nosnippet>100</a>    /// primary, most direct overload signal.
+<a href=#101 id=101 data-nosnippet>101</a>    </span><span class="kw">fn </span>drop_fraction(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; f64 {
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">if </span><span class="self">self</span>.produced == <span class="number">0 </span>{
+<a href=#103 id=103 data-nosnippet>103</a>            <span class="number">0.0
+<a href=#104 id=104 data-nosnippet>104</a>        </span>} <span class="kw">else </span>{
+<a href=#105 id=105 data-nosnippet>105</a>            (<span class="self">self</span>.dropped <span class="kw">as </span>f64 / <span class="self">self</span>.produced <span class="kw">as </span>f64).clamp(<span class="number">0.0</span>, <span class="number">1.0</span>)
+<a href=#106 id=106 data-nosnippet>106</a>        }
+<a href=#107 id=107 data-nosnippet>107</a>    }
+<a href=#108 id=108 data-nosnippet>108</a>}
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a><span class="doccomment">/// What the encoder/publisher should do after a tick. Pure data — the
+<a href=#111 id=111 data-nosnippet>111</a>/// orchestrator applies it (calls `set_bitrate`, pauses/resumes publish,
+<a href=#112 id=112 data-nosnippet>112</a>/// forces a keyframe).
+<a href=#113 id=113 data-nosnippet>113</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq)]
+<a href=#114 id=114 data-nosnippet>114</a></span><span class="kw">pub struct </span>AdaptDecision {
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="doccomment">/// The BWE target send bitrate (bits/sec). The chosen rung's bitrate when on
+<a href=#116 id=116 data-nosnippet>116</a>    /// video; the controller target when audio-only (so the climb-back is smooth).
+<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="kw">pub </span>target_bps: u64,
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="doccomment">/// The selected quality. [`Quality::AudioOnly`] means pause cam encode/publish.
+<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">pub </span>quality: Quality,
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="doccomment">/// Whether the *quality* changed from the previous decision (rung up/down or
+<a href=#121 id=121 data-nosnippet>121</a>    /// the AudioOnly⇄Video flip). The orchestrator only calls `set_bitrate` /
+<a href=#122 id=122 data-nosnippet>122</a>    /// (un)pauses on a change, so a steady call costs nothing.
+<a href=#123 id=123 data-nosnippet>123</a>    </span><span class="kw">pub </span>quality_changed: bool,
+<a href=#124 id=124 data-nosnippet>124</a>}
+<a href=#125 id=125 data-nosnippet>125</a>
+<a href=#126 id=126 data-nosnippet>126</a><span class="kw">impl </span>AdaptDecision {
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="doccomment">/// Whether video is paused under this decision (AudioOnly).
+<a href=#128 id=128 data-nosnippet>128</a>    </span><span class="kw">pub fn </span>is_audio_only(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="macro">matches!</span>(<span class="self">self</span>.quality, Quality::AudioOnly)
+<a href=#130 id=130 data-nosnippet>130</a>    }
+<a href=#131 id=131 data-nosnippet>131</a>}
+<a href=#132 id=132 data-nosnippet>132</a>
+<a href=#133 id=133 data-nosnippet>133</a><span class="doccomment">/// Sender-side video adaptation: the BWE controller, the quality ladder, and the
+<a href=#134 id=134 data-nosnippet>134</a>/// keyframe throttle behind one sans-IO façade.
+<a href=#135 id=135 data-nosnippet>135</a></span><span class="attr">#[derive(Debug)]
+<a href=#136 id=136 data-nosnippet>136</a></span><span class="kw">pub struct </span>VideoAdaptation {
+<a href=#137 id=137 data-nosnippet>137</a>    cfg: AdaptConfig,
+<a href=#138 id=138 data-nosnippet>138</a>    rate: RateController,
+<a href=#139 id=139 data-nosnippet>139</a>    ladder: QualityLadder,
+<a href=#140 id=140 data-nosnippet>140</a>    keyframe: KeyframeThrottle,
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="doccomment">/// Lowest RTT yet observed — the connection's own healthy baseline. The delay
+<a href=#142 id=142 data-nosnippet>142</a>    /// term measures *inflation* above this, so a high-but-stable RTT link (a far
+<a href=#143 id=143 data-nosnippet>143</a>    /// relay) is not perpetually penalised; only growth signals congestion.
+<a href=#144 id=144 data-nosnippet>144</a>    </span>rtt_baseline_us: <span class="prelude-ty">Option</span>&lt;i64&gt;,
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="doccomment">/// The last decided quality, so [`Self::on_tick`] can report `quality_changed`
+<a href=#146 id=146 data-nosnippet>146</a>    /// and the orchestrator only acts on transitions.
+<a href=#147 id=147 data-nosnippet>147</a>    </span>last_quality: Quality,
+<a href=#148 id=148 data-nosnippet>148</a>}
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a><span class="kw">impl </span>VideoAdaptation {
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="doccomment">/// Build the adaptation stack for a camera publisher. `start_bps` seeds the
+<a href=#152 id=152 data-nosnippet>152</a>    /// rate controller (typically the static cam target the encoder launched at)
+<a href=#153 id=153 data-nosnippet>153</a>    /// and the ladder ceiling caps it at the publisher's native resolution rung
+<a href=#154 id=154 data-nosnippet>154</a>    /// so we never try to upscale past what the camera produces.
+<a href=#155 id=155 data-nosnippet>155</a>    </span><span class="kw">pub fn </span>new(start_bps: u64, ladder: QualityLadder, cfg: AdaptConfig) -&gt; <span class="self">Self </span>{
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>rate = RateController::new(RateConfig {
+<a href=#157 id=157 data-nosnippet>157</a>            start_bps,
+<a href=#158 id=158 data-nosnippet>158</a>            <span class="comment">// Derive the BWE ceiling from the ladder's top rung (+ climb margin)
+<a href=#159 id=159 data-nosnippet>159</a>            // rather than a flat default, so the controller can climb all the way
+<a href=#160 id=160 data-nosnippet>160</a>            // to the richest rung on a fast link — e.g. a screen share's 1440p120
+<a href=#161 id=161 data-nosnippet>161</a>            // needs ~20 Mbps, which a 4 Mbps default would strand.
+<a href=#162 id=162 data-nosnippet>162</a>            </span>max_bps: ladder.bwe_ceiling_bps(),
+<a href=#163 id=163 data-nosnippet>163</a>            ..Default::default()
+<a href=#164 id=164 data-nosnippet>164</a>        });
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="self">Self </span>{
+<a href=#166 id=166 data-nosnippet>166</a>            cfg,
+<a href=#167 id=167 data-nosnippet>167</a>            rate,
+<a href=#168 id=168 data-nosnippet>168</a>            ladder,
+<a href=#169 id=169 data-nosnippet>169</a>            keyframe: KeyframeThrottle::new(KeyframeThrottleConfig::default()),
+<a href=#170 id=170 data-nosnippet>170</a>            rtt_baseline_us: <span class="prelude-val">None</span>,
+<a href=#171 id=171 data-nosnippet>171</a>            last_quality: Quality::Video(Rung {
+<a href=#172 id=172 data-nosnippet>172</a>                <span class="comment">// Placeholder until the first tick; `last_quality` only seeds the
+<a href=#173 id=173 data-nosnippet>173</a>                // change-detector and is overwritten on the first `on_tick`.
+<a href=#174 id=174 data-nosnippet>174</a>                </span>bitrate_bps: start_bps,
+<a href=#175 id=175 data-nosnippet>175</a>                width: <span class="number">0</span>,
+<a href=#176 id=176 data-nosnippet>176</a>                height: <span class="number">0</span>,
+<a href=#177 id=177 data-nosnippet>177</a>                fps: <span class="number">0</span>,
+<a href=#178 id=178 data-nosnippet>178</a>            }),
+<a href=#179 id=179 data-nosnippet>179</a>        }
+<a href=#180 id=180 data-nosnippet>180</a>    }
+<a href=#181 id=181 data-nosnippet>181</a>
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="doccomment">/// The standard camera ladder for the common case. `cam_bitrate_bps` is the
+<a href=#183 id=183 data-nosnippet>183</a>    /// encoder's static launch rate, used to seed the rate controller. The ladder's
+<a href=#184 id=184 data-nosnippet>184</a>    /// top rung is 720p — exactly the cam capture config — so no ceiling cap is
+<a href=#185 id=185 data-nosnippet>185</a>    /// needed: the climb naturally tops out at what the camera produces.
+<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">pub fn </span>standard(cam_bitrate_bps: u64) -&gt; <span class="self">Self </span>{
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="self">Self</span>::new(
+<a href=#188 id=188 data-nosnippet>188</a>            cam_bitrate_bps,
+<a href=#189 id=189 data-nosnippet>189</a>            QualityLadder::standard(),
+<a href=#190 id=190 data-nosnippet>190</a>            AdaptConfig::default(),
+<a href=#191 id=191 data-nosnippet>191</a>        )
+<a href=#192 id=192 data-nosnippet>192</a>    }
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="doccomment">/// A screen-share ladder for the sharer's [`ScreenQuality`] — their
+<a href=#195 id=195 data-nosnippet>195</a>    /// motion↔legibility priority plus max-resolution/fps caps. `screen_bitrate_bps`
+<a href=#196 id=196 data-nosnippet>196</a>    /// is the encoder's static launch rate, used to seed the rate controller. The
+<a href=#197 id=197 data-nosnippet>197</a>    /// default `ScreenQuality` is the legibility ladder (drop **fps before
+<a href=#198 id=198 data-nosnippet>198</a>    /// resolution** — the opposite trade-off to [`Self::standard`]). Everything else
+<a href=#199 id=199 data-nosnippet>199</a>    /// (the AIMD controller, the RTT/backpressure/remote-loss fold, the keyframe
+<a href=#200 id=200 data-nosnippet>200</a>    /// throttle) is identical to the camera path; only the bitrate→rung map differs.
+<a href=#201 id=201 data-nosnippet>201</a>    </span><span class="kw">pub fn </span>screen_with(screen_bitrate_bps: u64, quality: ScreenQuality) -&gt; <span class="self">Self </span>{
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="self">Self</span>::new(
+<a href=#203 id=203 data-nosnippet>203</a>            screen_bitrate_bps,
+<a href=#204 id=204 data-nosnippet>204</a>            QualityLadder::screen_for(quality),
+<a href=#205 id=205 data-nosnippet>205</a>            AdaptConfig::default(),
+<a href=#206 id=206 data-nosnippet>206</a>        )
+<a href=#207 id=207 data-nosnippet>207</a>    }
+<a href=#208 id=208 data-nosnippet>208</a>
+<a href=#209 id=209 data-nosnippet>209</a>    <span class="doccomment">/// Swap the quality ladder live when the sharer changes their [`ScreenQuality`]
+<a href=#210 id=210 data-nosnippet>210</a>    /// on an active share (motion↔legibility, or a resolution/fps cap). Only the
+<a href=#211 id=211 data-nosnippet>211</a>    /// bitrate→rung mapping changes: the AIMD controller's current estimate is
+<a href=#212 id=212 data-nosnippet>212</a>    /// preserved, so the next [`Self::on_tick`] re-picks a rung from the new ladder
+<a href=#213 id=213 data-nosnippet>213</a>    /// at the live bitrate (and writes the new `target_fps`/geometry downstream).
+<a href=#214 id=214 data-nosnippet>214</a>    /// No encoder touch here — the capture thread reacts on the next tick.
+<a href=#215 id=215 data-nosnippet>215</a>    </span><span class="kw">pub fn </span>set_screen_quality(<span class="kw-2">&amp;mut </span><span class="self">self</span>, quality: ScreenQuality) {
+<a href=#216 id=216 data-nosnippet>216</a>        <span class="self">self</span>.ladder.reconfigure(screen_rungs(quality));
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="comment">// The new ladder may top out higher (Source/120) or lower (a 480p cap), so
+<a href=#218 id=218 data-nosnippet>218</a>        // move the controller ceiling to match — otherwise a richer top rung stays
+<a href=#219 id=219 data-nosnippet>219</a>        // unreachable, or a stale high estimate over-drives a now-capped ladder.
+<a href=#220 id=220 data-nosnippet>220</a>        </span><span class="self">self</span>.rate.set_max_bps(<span class="self">self</span>.ladder.bwe_ceiling_bps());
+<a href=#221 id=221 data-nosnippet>221</a>    }
+<a href=#222 id=222 data-nosnippet>222</a>
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="doccomment">/// Fold this tick's signals into a single loss-equivalent for the AIMD
+<a href=#224 id=224 data-nosnippet>224</a>    /// controller. Drops dominate; RTT inflation adds a capped nudge. Pure.
+<a href=#225 id=225 data-nosnippet>225</a>    </span><span class="kw">fn </span>loss_equivalent(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sig: <span class="kw-2">&amp;</span>AdaptSignals) -&gt; f64 {
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span>drop_loss = sig.drop_fraction();
+<a href=#227 id=227 data-nosnippet>227</a>
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">let </span>rtt_loss = <span class="kw">match </span>sig.rtt_us {
+<a href=#229 id=229 data-nosnippet>229</a>            <span class="prelude-val">Some</span>(rtt) =&gt; {
+<a href=#230 id=230 data-nosnippet>230</a>                <span class="comment">// Track the healthy baseline (the min RTT seen), but never below
+<a href=#231 id=231 data-nosnippet>231</a>                // the configured floor so a momentary sub-floor reading can't
+<a href=#232 id=232 data-nosnippet>232</a>                // make every later sample look inflated.
+<a href=#233 id=233 data-nosnippet>233</a>                </span><span class="kw">let </span>baseline = <span class="self">self
+<a href=#234 id=234 data-nosnippet>234</a>                    </span>.rtt_baseline_us
+<a href=#235 id=235 data-nosnippet>235</a>                    .map(|b| b.min(rtt))
+<a href=#236 id=236 data-nosnippet>236</a>                    .unwrap_or(rtt)
+<a href=#237 id=237 data-nosnippet>237</a>                    .max(<span class="self">self</span>.cfg.rtt_floor_us);
+<a href=#238 id=238 data-nosnippet>238</a>                <span class="self">self</span>.rtt_baseline_us = <span class="prelude-val">Some</span>(baseline);
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a>                <span class="kw">let </span>inflation = (rtt - baseline).max(<span class="number">0</span>);
+<a href=#241 id=241 data-nosnippet>241</a>                <span class="kw">if </span>inflation == <span class="number">0 </span>|| <span class="self">self</span>.cfg.rtt_inflation_span_us &lt;= <span class="number">0 </span>{
+<a href=#242 id=242 data-nosnippet>242</a>                    <span class="number">0.0
+<a href=#243 id=243 data-nosnippet>243</a>                </span>} <span class="kw">else </span>{
+<a href=#244 id=244 data-nosnippet>244</a>                    <span class="kw">let </span>frac = inflation <span class="kw">as </span>f64 / <span class="self">self</span>.cfg.rtt_inflation_span_us <span class="kw">as </span>f64;
+<a href=#245 id=245 data-nosnippet>245</a>                    (frac.clamp(<span class="number">0.0</span>, <span class="number">1.0</span>)) * <span class="self">self</span>.cfg.rtt_max_loss
+<a href=#246 id=246 data-nosnippet>246</a>                }
+<a href=#247 id=247 data-nosnippet>247</a>            }
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="prelude-val">None </span>=&gt; <span class="number">0.0</span>,
+<a href=#249 id=249 data-nosnippet>249</a>        };
+<a href=#250 id=250 data-nosnippet>250</a>
+<a href=#251 id=251 data-nosnippet>251</a>        <span class="comment">// Receiver-reported loss on the downstream leg — already reduced to the
+<a href=#252 id=252 data-nosnippet>252</a>        // worst reporter by the orchestrator. Clamp defensively.
+<a href=#253 id=253 data-nosnippet>253</a>        </span><span class="kw">let </span>remote_loss = sig.remote_loss.unwrap_or(<span class="number">0.0</span>).clamp(<span class="number">0.0</span>, <span class="number">1.0</span>);
+<a href=#254 id=254 data-nosnippet>254</a>
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="comment">// The signals are not independent observations of the *same* loss, so
+<a href=#256 id=256 data-nosnippet>256</a>        // take the strongest rather than summing (summing would double-count a
+<a href=#257 id=257 data-nosnippet>257</a>        // congested link that both inflates RTT and drops, or a downstream leg
+<a href=#258 id=258 data-nosnippet>258</a>        // whose loss already shows up as local backpressure). The max is also the
+<a href=#259 id=259 data-nosnippet>259</a>        // right policy across signals that observe *different* legs: whichever
+<a href=#260 id=260 data-nosnippet>260</a>        // bottleneck is worst is the one we must back off to clear — and for
+<a href=#261 id=261 data-nosnippet>261</a>        // multiple receivers, the worst leg is already folded into remote_loss.
+<a href=#262 id=262 data-nosnippet>262</a>        </span>drop_loss.max(rtt_loss).max(remote_loss)
+<a href=#263 id=263 data-nosnippet>263</a>    }
+<a href=#264 id=264 data-nosnippet>264</a>
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="doccomment">/// Advance the adaptation one tick: fold the signals into a loss-equivalent,
+<a href=#266 id=266 data-nosnippet>266</a>    /// run the AIMD controller, pick a ladder rung, and report the decision. The
+<a href=#267 id=267 data-nosnippet>267</a>    /// orchestrator applies the result (set encoder bitrate, pause/resume, etc.).
+<a href=#268 id=268 data-nosnippet>268</a>    </span><span class="kw">pub fn </span>on_tick(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sig: <span class="kw-2">&amp;</span>AdaptSignals, now_us: i64) -&gt; AdaptDecision {
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">let </span>loss = <span class="self">self</span>.loss_equivalent(sig);
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="kw">let </span>target = <span class="self">self</span>.rate.on_feedback(loss, now_us);
+<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">let </span>quality = <span class="self">self</span>.ladder.update(target);
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">let </span>quality_changed = <span class="macro">quality !</span>= <span class="self">self</span>.last_quality;
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="self">self</span>.last_quality = quality;
+<a href=#275 id=275 data-nosnippet>275</a>
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>target_bps = <span class="kw">match </span>quality {
+<a href=#277 id=277 data-nosnippet>277</a>            Quality::Video(rung) =&gt; rung.bitrate_bps,
+<a href=#278 id=278 data-nosnippet>278</a>            <span class="comment">// Audio-only: report the controller target (not 0) so the consumer can
+<a href=#279 id=279 data-nosnippet>279</a>            // see the recovery headroom building, and resume promptly when it
+<a href=#280 id=280 data-nosnippet>280</a>            // climbs back over the lowest rung.
+<a href=#281 id=281 data-nosnippet>281</a>            </span>Quality::AudioOnly =&gt; target,
+<a href=#282 id=282 data-nosnippet>282</a>        };
+<a href=#283 id=283 data-nosnippet>283</a>
+<a href=#284 id=284 data-nosnippet>284</a>        AdaptDecision {
+<a href=#285 id=285 data-nosnippet>285</a>            target_bps,
+<a href=#286 id=286 data-nosnippet>286</a>            quality,
+<a href=#287 id=287 data-nosnippet>287</a>            quality_changed,
+<a href=#288 id=288 data-nosnippet>288</a>        }
+<a href=#289 id=289 data-nosnippet>289</a>    }
+<a href=#290 id=290 data-nosnippet>290</a>
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="doccomment">/// A receiver PLI arrived for our track (relayed via control). Coalesced —
+<a href=#292 id=292 data-nosnippet>292</a>    /// many PLIs before the next [`Self::poll_keyframe`] still mean one IDR.
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">pub fn </span>on_pli(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="self">self</span>.keyframe.on_pli();
+<a href=#295 id=295 data-nosnippet>295</a>    }
+<a href=#296 id=296 data-nosnippet>296</a>
+<a href=#297 id=297 data-nosnippet>297</a>    <span class="doccomment">/// Whether a forced keyframe is due now (a pending PLI and the min interval
+<a href=#298 id=298 data-nosnippet>298</a>    /// elapsed). `true` at most once per interval, coalescing a storm into one
+<a href=#299 id=299 data-nosnippet>299</a>    /// IDR. The orchestrator calls `encoder.request_keyframe()` on `true`.
+<a href=#300 id=300 data-nosnippet>300</a>    </span><span class="kw">pub fn </span>poll_keyframe(<span class="kw-2">&amp;mut </span><span class="self">self</span>, now_us: i64) -&gt; bool {
+<a href=#301 id=301 data-nosnippet>301</a>        <span class="self">self</span>.keyframe.should_generate(now_us)
+<a href=#302 id=302 data-nosnippet>302</a>    }
+<a href=#303 id=303 data-nosnippet>303</a>
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="doccomment">/// Record that a keyframe was emitted (forced or the encoder's own periodic
+<a href=#305 id=305 data-nosnippet>305</a>    /// one) so the throttle measures its interval from the real emission and a
+<a href=#306 id=306 data-nosnippet>306</a>    /// pending request is satisfied without a redundant forced IDR.
+<a href=#307 id=307 data-nosnippet>307</a>    </span><span class="kw">pub fn </span>on_keyframe_emitted(<span class="kw-2">&amp;mut </span><span class="self">self</span>, now_us: i64) {
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="self">self</span>.keyframe.on_keyframe_emitted(now_us);
+<a href=#309 id=309 data-nosnippet>309</a>    }
+<a href=#310 id=310 data-nosnippet>310</a>
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="doccomment">/// The last decided quality (a faithful projection of the last tick — it
+<a href=#312 id=312 data-nosnippet>312</a>    /// reports `AudioOnly` iff that was the last decision, never a phantom video
+<a href=#313 id=313 data-nosnippet>313</a>    /// rung). The orchestrator drives off [`AdaptDecision`] returned by
+<a href=#314 id=314 data-nosnippet>314</a>    /// [`Self::on_tick`]; this getter rounds out the contract and is exercised by
+<a href=#315 id=315 data-nosnippet>315</a>    /// the projection-faithfulness tests below. Test-only — the live path never
+<a href=#316 id=316 data-nosnippet>316</a>    /// reads it.
+<a href=#317 id=317 data-nosnippet>317</a>    </span><span class="attr">#[cfg(test)]
+<a href=#318 id=318 data-nosnippet>318</a>    </span><span class="kw">pub fn </span>quality(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Quality {
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="self">self</span>.ladder.current()
+<a href=#320 id=320 data-nosnippet>320</a>    }
+<a href=#321 id=321 data-nosnippet>321</a>}
+<a href=#322 id=322 data-nosnippet>322</a>
+<a href=#323 id=323 data-nosnippet>323</a><span class="attr">#[cfg(test)]
+<a href=#324 id=324 data-nosnippet>324</a></span><span class="kw">mod </span>tests {
+<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#326 id=326 data-nosnippet>326</a>
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="doccomment">/// Steady, healthy call: no drops, flat RTT at the floor. The controller
+<a href=#328 id=328 data-nosnippet>328</a>    /// climbs slowly (AIMD up), never backs off, and video stays up.
+<a href=#329 id=329 data-nosnippet>329</a>    </span><span class="attr">#[test]
+<a href=#330 id=330 data-nosnippet>330</a>    </span><span class="kw">fn </span>healthy_link_climbs_and_keeps_video() {
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw">let </span>sig = AdaptSignals {
+<a href=#333 id=333 data-nosnippet>333</a>            produced: <span class="number">30</span>,
+<a href=#334 id=334 data-nosnippet>334</a>            dropped: <span class="number">0</span>,
+<a href=#335 id=335 data-nosnippet>335</a>            rtt_us: <span class="prelude-val">Some</span>(<span class="number">40_000</span>), <span class="comment">// below the 50 ms floor ⇒ no delay penalty
+<a href=#336 id=336 data-nosnippet>336</a>            </span>remote_loss: <span class="prelude-val">None</span>,
+<a href=#337 id=337 data-nosnippet>337</a>        };
+<a href=#338 id=338 data-nosnippet>338</a>        <span class="kw">let </span><span class="kw-2">mut </span>now = <span class="number">0i64</span>;
+<a href=#339 id=339 data-nosnippet>339</a>        <span class="kw">let </span>first = a.on_tick(<span class="kw-2">&amp;</span>sig, now);
+<a href=#340 id=340 data-nosnippet>340</a>        <span class="macro">assert!</span>(
+<a href=#341 id=341 data-nosnippet>341</a>            <span class="macro">matches!</span>(first.quality, Quality::Video(<span class="kw">_</span>)),
+<a href=#342 id=342 data-nosnippet>342</a>            <span class="string">"a healthy link must keep video"
+<a href=#343 id=343 data-nosnippet>343</a>        </span>);
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="comment">// Pump several intervals; the target must be non-decreasing (no back-off).
+<a href=#345 id=345 data-nosnippet>345</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>last = first.target_bps;
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">10 </span>{
+<a href=#347 id=347 data-nosnippet>347</a>            now += <span class="number">1_000_000</span>;
+<a href=#348 id=348 data-nosnippet>348</a>            <span class="kw">let </span>d = a.on_tick(<span class="kw-2">&amp;</span>sig, now);
+<a href=#349 id=349 data-nosnippet>349</a>            <span class="macro">assert!</span>(<span class="macro">matches!</span>(d.quality, Quality::Video(<span class="kw">_</span>)));
+<a href=#350 id=350 data-nosnippet>350</a>            <span class="macro">assert!</span>(
+<a href=#351 id=351 data-nosnippet>351</a>                d.target_bps &gt;= last || <span class="macro">matches!</span>(d.quality, Quality::Video(<span class="kw">_</span>)),
+<a href=#352 id=352 data-nosnippet>352</a>                <span class="string">"healthy link should not force a back-off"
+<a href=#353 id=353 data-nosnippet>353</a>            </span>);
+<a href=#354 id=354 data-nosnippet>354</a>            last = d.target_bps;
+<a href=#355 id=355 data-nosnippet>355</a>        }
+<a href=#356 id=356 data-nosnippet>356</a>    }
+<a href=#357 id=357 data-nosnippet>357</a>
+<a href=#358 id=358 data-nosnippet>358</a>    <span class="doccomment">/// Heavy encoder backpressure (the publisher can't keep up) reads as high
+<a href=#359 id=359 data-nosnippet>359</a>    /// loss → the controller backs off hard and the ladder eventually drops to
+<a href=#360 id=360 data-nosnippet>360</a>    /// AudioOnly. This is the core degradation path the feature exists for.
+<a href=#361 id=361 data-nosnippet>361</a>    </span><span class="attr">#[test]
+<a href=#362 id=362 data-nosnippet>362</a>    </span><span class="kw">fn </span>sustained_backpressure_drops_to_audio_only() {
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#364 id=364 data-nosnippet>364</a>        <span class="comment">// 80% of produced AUs are being dropped at the channel — severe overload.
+<a href=#365 id=365 data-nosnippet>365</a>        </span><span class="kw">let </span>sig = AdaptSignals {
+<a href=#366 id=366 data-nosnippet>366</a>            produced: <span class="number">30</span>,
+<a href=#367 id=367 data-nosnippet>367</a>            dropped: <span class="number">24</span>,
+<a href=#368 id=368 data-nosnippet>368</a>            rtt_us: <span class="prelude-val">Some</span>(<span class="number">50_000</span>),
+<a href=#369 id=369 data-nosnippet>369</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#370 id=370 data-nosnippet>370</a>        };
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="kw">let </span><span class="kw-2">mut </span>now = <span class="number">0i64</span>;
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">let </span><span class="kw-2">mut </span>saw_audio_only = <span class="bool-val">false</span>;
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="kw">let </span><span class="kw-2">mut </span>saw_down_transition = <span class="bool-val">false</span>;
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">30 </span>{
+<a href=#375 id=375 data-nosnippet>375</a>            <span class="kw">let </span>d = a.on_tick(<span class="kw-2">&amp;</span>sig, now);
+<a href=#376 id=376 data-nosnippet>376</a>            <span class="kw">if </span>d.is_audio_only() {
+<a href=#377 id=377 data-nosnippet>377</a>                saw_audio_only = <span class="bool-val">true</span>;
+<a href=#378 id=378 data-nosnippet>378</a>            }
+<a href=#379 id=379 data-nosnippet>379</a>            <span class="kw">if </span>d.quality_changed {
+<a href=#380 id=380 data-nosnippet>380</a>                saw_down_transition = <span class="bool-val">true</span>;
+<a href=#381 id=381 data-nosnippet>381</a>            }
+<a href=#382 id=382 data-nosnippet>382</a>            now += <span class="number">1_000_000</span>;
+<a href=#383 id=383 data-nosnippet>383</a>        }
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="macro">assert!</span>(
+<a href=#385 id=385 data-nosnippet>385</a>            saw_down_transition,
+<a href=#386 id=386 data-nosnippet>386</a>            <span class="string">"sustained overload must produce at least one quality transition"
+<a href=#387 id=387 data-nosnippet>387</a>        </span>);
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="macro">assert!</span>(
+<a href=#389 id=389 data-nosnippet>389</a>            saw_audio_only,
+<a href=#390 id=390 data-nosnippet>390</a>            <span class="string">"sustained 80% drop must degrade all the way to AudioOnly"
+<a href=#391 id=391 data-nosnippet>391</a>        </span>);
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="macro">assert!</span>(a.quality() == Quality::AudioOnly);
+<a href=#393 id=393 data-nosnippet>393</a>    }
+<a href=#394 id=394 data-nosnippet>394</a>
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="doccomment">/// The screen ladder degrades under sustained overload exactly like the
+<a href=#396 id=396 data-nosnippet>396</a>    /// camera one — audio is still sacred, screen video is the release valve —
+<a href=#397 id=397 data-nosnippet>397</a>    /// but rides the legibility-first rungs. A sustained heavy drop must walk it
+<a href=#398 id=398 data-nosnippet>398</a>    /// down to AudioOnly (pause the share's video leg, keep its audio).
+<a href=#399 id=399 data-nosnippet>399</a>    </span><span class="attr">#[test]
+<a href=#400 id=400 data-nosnippet>400</a>    </span><span class="kw">fn </span>screen_sustained_backpressure_drops_to_audio_only() {
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::screen_with(<span class="number">2_500_000</span>, ScreenQuality::default());
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">let </span>sig = AdaptSignals {
+<a href=#403 id=403 data-nosnippet>403</a>            produced: <span class="number">30</span>,
+<a href=#404 id=404 data-nosnippet>404</a>            dropped: <span class="number">24</span>, <span class="comment">// 80% dropped — severe overload
+<a href=#405 id=405 data-nosnippet>405</a>            </span>rtt_us: <span class="prelude-val">Some</span>(<span class="number">50_000</span>),
+<a href=#406 id=406 data-nosnippet>406</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#407 id=407 data-nosnippet>407</a>        };
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="kw">let </span><span class="kw-2">mut </span>now = <span class="number">0i64</span>;
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw">let </span><span class="kw-2">mut </span>saw_audio_only = <span class="bool-val">false</span>;
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">40 </span>{
+<a href=#411 id=411 data-nosnippet>411</a>            <span class="kw">let </span>d = a.on_tick(<span class="kw-2">&amp;</span>sig, now);
+<a href=#412 id=412 data-nosnippet>412</a>            <span class="kw">if </span>d.is_audio_only() {
+<a href=#413 id=413 data-nosnippet>413</a>                saw_audio_only = <span class="bool-val">true</span>;
+<a href=#414 id=414 data-nosnippet>414</a>            }
+<a href=#415 id=415 data-nosnippet>415</a>            now += <span class="number">1_000_000</span>;
+<a href=#416 id=416 data-nosnippet>416</a>        }
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="macro">assert!</span>(
+<a href=#418 id=418 data-nosnippet>418</a>            saw_audio_only,
+<a href=#419 id=419 data-nosnippet>419</a>            <span class="string">"sustained 80% drop must degrade the screen ladder to AudioOnly"
+<a href=#420 id=420 data-nosnippet>420</a>        </span>);
+<a href=#421 id=421 data-nosnippet>421</a>        <span class="macro">assert_eq!</span>(a.quality(), Quality::AudioOnly);
+<a href=#422 id=422 data-nosnippet>422</a>    }
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="doccomment">/// Recovery: after collapsing to AudioOnly under overload, a clean link climbs
+<a href=#425 id=425 data-nosnippet>425</a>    /// back through the ladder and resumes video. Proves the loop is bidirectional
+<a href=#426 id=426 data-nosnippet>426</a>    /// and the AudioOnly state is not a trap.
+<a href=#427 id=427 data-nosnippet>427</a>    </span><span class="attr">#[test]
+<a href=#428 id=428 data-nosnippet>428</a>    </span><span class="kw">fn </span>recovers_from_audio_only_when_link_clears() {
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">let </span>bad = AdaptSignals {
+<a href=#431 id=431 data-nosnippet>431</a>            produced: <span class="number">30</span>,
+<a href=#432 id=432 data-nosnippet>432</a>            dropped: <span class="number">27</span>,
+<a href=#433 id=433 data-nosnippet>433</a>            rtt_us: <span class="prelude-val">Some</span>(<span class="number">60_000</span>),
+<a href=#434 id=434 data-nosnippet>434</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#435 id=435 data-nosnippet>435</a>        };
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="kw">let </span><span class="kw-2">mut </span>now = <span class="number">0i64</span>;
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">30 </span>{
+<a href=#438 id=438 data-nosnippet>438</a>            a.on_tick(<span class="kw-2">&amp;</span>bad, now);
+<a href=#439 id=439 data-nosnippet>439</a>            now += <span class="number">1_000_000</span>;
+<a href=#440 id=440 data-nosnippet>440</a>        }
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="macro">assert_eq!</span>(a.quality(), Quality::AudioOnly, <span class="string">"precondition: collapsed"</span>);
+<a href=#442 id=442 data-nosnippet>442</a>
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="kw">let </span>good = AdaptSignals {
+<a href=#444 id=444 data-nosnippet>444</a>            produced: <span class="number">30</span>,
+<a href=#445 id=445 data-nosnippet>445</a>            dropped: <span class="number">0</span>,
+<a href=#446 id=446 data-nosnippet>446</a>            rtt_us: <span class="prelude-val">Some</span>(<span class="number">40_000</span>),
+<a href=#447 id=447 data-nosnippet>447</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#448 id=448 data-nosnippet>448</a>        };
+<a href=#449 id=449 data-nosnippet>449</a>        <span class="kw">let </span><span class="kw-2">mut </span>resumed = <span class="bool-val">false</span>;
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">60 </span>{
+<a href=#451 id=451 data-nosnippet>451</a>            <span class="kw">let </span>d = a.on_tick(<span class="kw-2">&amp;</span>good, now);
+<a href=#452 id=452 data-nosnippet>452</a>            <span class="kw">if </span><span class="macro">matches!</span>(d.quality, Quality::Video(<span class="kw">_</span>)) {
+<a href=#453 id=453 data-nosnippet>453</a>                resumed = <span class="bool-val">true</span>;
+<a href=#454 id=454 data-nosnippet>454</a>                <span class="kw">break</span>;
+<a href=#455 id=455 data-nosnippet>455</a>            }
+<a href=#456 id=456 data-nosnippet>456</a>            now += <span class="number">1_000_000</span>;
+<a href=#457 id=457 data-nosnippet>457</a>        }
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="macro">assert!</span>(resumed, <span class="string">"a cleared link must resume video from AudioOnly"</span>);
+<a href=#459 id=459 data-nosnippet>459</a>    }
+<a href=#460 id=460 data-nosnippet>460</a>
+<a href=#461 id=461 data-nosnippet>461</a>    <span class="doccomment">/// RTT inflation alone (no drops) nudges the controller: it holds/slows the
+<a href=#462 id=462 data-nosnippet>462</a>    /// climb rather than racing up, but — being capped below `decrease_loss` — it
+<a href=#463 id=463 data-nosnippet>463</a>    /// does not by itself force the hard multiplicative back-off. Contrast with
+<a href=#464 id=464 data-nosnippet>464</a>    /// the flat-RTT healthy climb.
+<a href=#465 id=465 data-nosnippet>465</a>    </span><span class="attr">#[test]
+<a href=#466 id=466 data-nosnippet>466</a>    </span><span class="kw">fn </span>rtt_inflation_alone_slows_climb_without_collapse() {
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">let </span>cfg = AdaptConfig::default();
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::new(<span class="number">600_000</span>, QualityLadder::standard(), cfg.clone());
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="comment">// First tick at the floor establishes the baseline.
+<a href=#470 id=470 data-nosnippet>470</a>        </span>a.on_tick(
+<a href=#471 id=471 data-nosnippet>471</a>            <span class="kw-2">&amp;</span>AdaptSignals {
+<a href=#472 id=472 data-nosnippet>472</a>                produced: <span class="number">30</span>,
+<a href=#473 id=473 data-nosnippet>473</a>                dropped: <span class="number">0</span>,
+<a href=#474 id=474 data-nosnippet>474</a>                rtt_us: <span class="prelude-val">Some</span>(cfg.rtt_floor_us),
+<a href=#475 id=475 data-nosnippet>475</a>                remote_loss: <span class="prelude-val">None</span>,
+<a href=#476 id=476 data-nosnippet>476</a>            },
+<a href=#477 id=477 data-nosnippet>477</a>            <span class="number">0</span>,
+<a href=#478 id=478 data-nosnippet>478</a>        );
+<a href=#479 id=479 data-nosnippet>479</a>        <span class="comment">// Now RTT is inflated well past the saturation span: the delay term is at
+<a href=#480 id=480 data-nosnippet>480</a>        // its cap (rtt_max_loss = 0.08), which is in the controller's *hold* band
+<a href=#481 id=481 data-nosnippet>481</a>        // (between increase_loss 0.02 and decrease_loss 0.10) — so it neither
+<a href=#482 id=482 data-nosnippet>482</a>        // climbs nor collapses.
+<a href=#483 id=483 data-nosnippet>483</a>        </span><span class="kw">let </span>inflated = AdaptSignals {
+<a href=#484 id=484 data-nosnippet>484</a>            produced: <span class="number">30</span>,
+<a href=#485 id=485 data-nosnippet>485</a>            dropped: <span class="number">0</span>,
+<a href=#486 id=486 data-nosnippet>486</a>            rtt_us: <span class="prelude-val">Some</span>(cfg.rtt_floor_us + cfg.rtt_inflation_span_us * <span class="number">2</span>),
+<a href=#487 id=487 data-nosnippet>487</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#488 id=488 data-nosnippet>488</a>        };
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">let </span>before = a.on_tick(<span class="kw-2">&amp;</span>inflated, <span class="number">1_000_000</span>).target_bps;
+<a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">let </span>after = a.on_tick(<span class="kw-2">&amp;</span>inflated, <span class="number">2_000_000</span>).target_bps;
+<a href=#491 id=491 data-nosnippet>491</a>        <span class="macro">assert_eq!</span>(
+<a href=#492 id=492 data-nosnippet>492</a>            before, after,
+<a href=#493 id=493 data-nosnippet>493</a>            <span class="string">"capped RTT term should hold the rate (no climb, no collapse)"
+<a href=#494 id=494 data-nosnippet>494</a>        </span>);
+<a href=#495 id=495 data-nosnippet>495</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(a.quality(), Quality::Video(<span class="kw">_</span>)), <span class="string">"video stays up"</span>);
+<a href=#496 id=496 data-nosnippet>496</a>    }
+<a href=#497 id=497 data-nosnippet>497</a>
+<a href=#498 id=498 data-nosnippet>498</a>    <span class="doccomment">/// Drops dominate RTT: when both fire, the loss-equivalent is the stronger
+<a href=#499 id=499 data-nosnippet>499</a>    /// (the drop fraction), not the sum — so a congested link that both inflates
+<a href=#500 id=500 data-nosnippet>500</a>    /// RTT and drops frames is not double-counted.
+<a href=#501 id=501 data-nosnippet>501</a>    </span><span class="attr">#[test]
+<a href=#502 id=502 data-nosnippet>502</a>    </span><span class="kw">fn </span>drops_dominate_rtt_no_double_count() {
+<a href=#503 id=503 data-nosnippet>503</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#504 id=504 data-nosnippet>504</a>        <span class="comment">// Establish a baseline first.
+<a href=#505 id=505 data-nosnippet>505</a>        </span>a.on_tick(
+<a href=#506 id=506 data-nosnippet>506</a>            <span class="kw-2">&amp;</span>AdaptSignals {
+<a href=#507 id=507 data-nosnippet>507</a>                produced: <span class="number">30</span>,
+<a href=#508 id=508 data-nosnippet>508</a>                dropped: <span class="number">0</span>,
+<a href=#509 id=509 data-nosnippet>509</a>                rtt_us: <span class="prelude-val">Some</span>(<span class="number">50_000</span>),
+<a href=#510 id=510 data-nosnippet>510</a>                remote_loss: <span class="prelude-val">None</span>,
+<a href=#511 id=511 data-nosnippet>511</a>            },
+<a href=#512 id=512 data-nosnippet>512</a>            <span class="number">0</span>,
+<a href=#513 id=513 data-nosnippet>513</a>        );
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="comment">// 50% drops + saturated RTT. loss_equivalent must equal the drop fraction
+<a href=#515 id=515 data-nosnippet>515</a>        // (0.5), the max of the two terms — not 0.5 + 0.08.
+<a href=#516 id=516 data-nosnippet>516</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>probe = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#517 id=517 data-nosnippet>517</a>        probe.on_tick(
+<a href=#518 id=518 data-nosnippet>518</a>            <span class="kw-2">&amp;</span>AdaptSignals {
+<a href=#519 id=519 data-nosnippet>519</a>                produced: <span class="number">30</span>,
+<a href=#520 id=520 data-nosnippet>520</a>                dropped: <span class="number">0</span>,
+<a href=#521 id=521 data-nosnippet>521</a>                rtt_us: <span class="prelude-val">Some</span>(<span class="number">50_000</span>),
+<a href=#522 id=522 data-nosnippet>522</a>                remote_loss: <span class="prelude-val">None</span>,
+<a href=#523 id=523 data-nosnippet>523</a>            },
+<a href=#524 id=524 data-nosnippet>524</a>            <span class="number">0</span>,
+<a href=#525 id=525 data-nosnippet>525</a>        );
+<a href=#526 id=526 data-nosnippet>526</a>        <span class="kw">let </span>le = probe.loss_equivalent(<span class="kw-2">&amp;</span>AdaptSignals {
+<a href=#527 id=527 data-nosnippet>527</a>            produced: <span class="number">30</span>,
+<a href=#528 id=528 data-nosnippet>528</a>            dropped: <span class="number">15</span>,
+<a href=#529 id=529 data-nosnippet>529</a>            rtt_us: <span class="prelude-val">Some</span>(<span class="number">50_000 </span>+ <span class="number">300_000</span>),
+<a href=#530 id=530 data-nosnippet>530</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#531 id=531 data-nosnippet>531</a>        });
+<a href=#532 id=532 data-nosnippet>532</a>        <span class="macro">assert!</span>(
+<a href=#533 id=533 data-nosnippet>533</a>            (le - <span class="number">0.5</span>).abs() &lt; <span class="number">1e-9</span>,
+<a href=#534 id=534 data-nosnippet>534</a>            <span class="string">"loss-equivalent must be max, got {le}"
+<a href=#535 id=535 data-nosnippet>535</a>        </span>);
+<a href=#536 id=536 data-nosnippet>536</a>    }
+<a href=#537 id=537 data-nosnippet>537</a>
+<a href=#538 id=538 data-nosnippet>538</a>    <span class="doccomment">/// Receiver-reported loss with NO local signals (no drops, healthy RTT) must
+<a href=#539 id=539 data-nosnippet>539</a>    /// still drive the controller down — this is the whole point of the feedback
+<a href=#540 id=540 data-nosnippet>540</a>    /// loop: the sender is blind to a lossy downstream leg, and only the receiver
+<a href=#541 id=541 data-nosnippet>541</a>    /// report reveals it. A sustained heavy remote loss collapses to AudioOnly.
+<a href=#542 id=542 data-nosnippet>542</a>    </span><span class="attr">#[test]
+<a href=#543 id=543 data-nosnippet>543</a>    </span><span class="kw">fn </span>remote_loss_alone_drives_bitrate_down() {
+<a href=#544 id=544 data-nosnippet>544</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="comment">// Establish a clean baseline (no drops, RTT at the floor).
+<a href=#546 id=546 data-nosnippet>546</a>        </span><span class="kw">let </span>clean = AdaptSignals {
+<a href=#547 id=547 data-nosnippet>547</a>            produced: <span class="number">30</span>,
+<a href=#548 id=548 data-nosnippet>548</a>            dropped: <span class="number">0</span>,
+<a href=#549 id=549 data-nosnippet>549</a>            rtt_us: <span class="prelude-val">Some</span>(<span class="number">40_000</span>),
+<a href=#550 id=550 data-nosnippet>550</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#551 id=551 data-nosnippet>551</a>        };
+<a href=#552 id=552 data-nosnippet>552</a>        <span class="kw">let </span>baseline = a.on_tick(<span class="kw-2">&amp;</span>clean, <span class="number">0</span>).target_bps;
+<a href=#553 id=553 data-nosnippet>553</a>
+<a href=#554 id=554 data-nosnippet>554</a>        <span class="comment">// Now a receiver reports sustained 40% loss while every LOCAL signal stays
+<a href=#555 id=555 data-nosnippet>555</a>        // healthy. With only local signals the controller would climb; the remote
+<a href=#556 id=556 data-nosnippet>556</a>        // report alone must force it down instead.
+<a href=#557 id=557 data-nosnippet>557</a>        </span><span class="kw">let </span>lossy = AdaptSignals {
+<a href=#558 id=558 data-nosnippet>558</a>            produced: <span class="number">30</span>,
+<a href=#559 id=559 data-nosnippet>559</a>            dropped: <span class="number">0</span>,
+<a href=#560 id=560 data-nosnippet>560</a>            rtt_us: <span class="prelude-val">Some</span>(<span class="number">40_000</span>), <span class="comment">// no bufferbloat locally
+<a href=#561 id=561 data-nosnippet>561</a>            </span>remote_loss: <span class="prelude-val">Some</span>(<span class="number">0.40</span>),
+<a href=#562 id=562 data-nosnippet>562</a>        };
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="kw">let </span><span class="kw-2">mut </span>now = <span class="number">1_000_000i64</span>;
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw">let </span><span class="kw-2">mut </span>saw_audio_only = <span class="bool-val">false</span>;
+<a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">let </span><span class="kw-2">mut </span>min_target = baseline;
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">30 </span>{
+<a href=#567 id=567 data-nosnippet>567</a>            <span class="kw">let </span>d = a.on_tick(<span class="kw-2">&amp;</span>lossy, now);
+<a href=#568 id=568 data-nosnippet>568</a>            min_target = min_target.min(d.target_bps);
+<a href=#569 id=569 data-nosnippet>569</a>            <span class="kw">if </span>d.is_audio_only() {
+<a href=#570 id=570 data-nosnippet>570</a>                saw_audio_only = <span class="bool-val">true</span>;
+<a href=#571 id=571 data-nosnippet>571</a>            }
+<a href=#572 id=572 data-nosnippet>572</a>            now += <span class="number">1_000_000</span>;
+<a href=#573 id=573 data-nosnippet>573</a>        }
+<a href=#574 id=574 data-nosnippet>574</a>        <span class="macro">assert!</span>(
+<a href=#575 id=575 data-nosnippet>575</a>            min_target &lt; baseline,
+<a href=#576 id=576 data-nosnippet>576</a>            <span class="string">"remote loss alone must walk the target down (baseline {baseline}, min {min_target})"
+<a href=#577 id=577 data-nosnippet>577</a>        </span>);
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="macro">assert!</span>(
+<a href=#579 id=579 data-nosnippet>579</a>            saw_audio_only,
+<a href=#580 id=580 data-nosnippet>580</a>            <span class="string">"sustained 40% remote loss must degrade to AudioOnly with no local signals"
+<a href=#581 id=581 data-nosnippet>581</a>        </span>);
+<a href=#582 id=582 data-nosnippet>582</a>    }
+<a href=#583 id=583 data-nosnippet>583</a>
+<a href=#584 id=584 data-nosnippet>584</a>    <span class="doccomment">/// Multiple receivers: the orchestrator pre-reduces to the worst leg, so the
+<a href=#585 id=585 data-nosnippet>585</a>    /// core only ever sees one `remote_loss`. Verify the fold uses it as the max:
+<a href=#586 id=586 data-nosnippet>586</a>    /// a small drop_fraction plus a larger remote_loss yields the remote value
+<a href=#587 id=587 data-nosnippet>587</a>    /// (serve the worst leg / worst signal), not the sum.
+<a href=#588 id=588 data-nosnippet>588</a>    </span><span class="attr">#[test]
+<a href=#589 id=589 data-nosnippet>589</a>    </span><span class="kw">fn </span>remote_loss_takes_max_with_local_signals() {
+<a href=#590 id=590 data-nosnippet>590</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#591 id=591 data-nosnippet>591</a>        a.on_tick(
+<a href=#592 id=592 data-nosnippet>592</a>            <span class="kw-2">&amp;</span>AdaptSignals {
+<a href=#593 id=593 data-nosnippet>593</a>                produced: <span class="number">30</span>,
+<a href=#594 id=594 data-nosnippet>594</a>                dropped: <span class="number">0</span>,
+<a href=#595 id=595 data-nosnippet>595</a>                rtt_us: <span class="prelude-val">Some</span>(<span class="number">50_000</span>),
+<a href=#596 id=596 data-nosnippet>596</a>                remote_loss: <span class="prelude-val">None</span>,
+<a href=#597 id=597 data-nosnippet>597</a>            },
+<a href=#598 id=598 data-nosnippet>598</a>            <span class="number">0</span>,
+<a href=#599 id=599 data-nosnippet>599</a>        );
+<a href=#600 id=600 data-nosnippet>600</a>        <span class="comment">// 10% local drops, 30% remote loss, saturated RTT — the loss-equivalent
+<a href=#601 id=601 data-nosnippet>601</a>        // must be the single strongest term (0.30), never a sum.
+<a href=#602 id=602 data-nosnippet>602</a>        </span><span class="kw">let </span>le = a.loss_equivalent(<span class="kw-2">&amp;</span>AdaptSignals {
+<a href=#603 id=603 data-nosnippet>603</a>            produced: <span class="number">30</span>,
+<a href=#604 id=604 data-nosnippet>604</a>            dropped: <span class="number">3</span>, <span class="comment">// 0.10 drop fraction
+<a href=#605 id=605 data-nosnippet>605</a>            </span>rtt_us: <span class="prelude-val">Some</span>(<span class="number">50_000 </span>+ <span class="number">300_000</span>),
+<a href=#606 id=606 data-nosnippet>606</a>            remote_loss: <span class="prelude-val">Some</span>(<span class="number">0.30</span>),
+<a href=#607 id=607 data-nosnippet>607</a>        });
+<a href=#608 id=608 data-nosnippet>608</a>        <span class="macro">assert!</span>(
+<a href=#609 id=609 data-nosnippet>609</a>            (le - <span class="number">0.30</span>).abs() &lt; <span class="number">1e-9</span>,
+<a href=#610 id=610 data-nosnippet>610</a>            <span class="string">"loss-equivalent must be the max term (remote 0.30), got {le}"
+<a href=#611 id=611 data-nosnippet>611</a>        </span>);
+<a href=#612 id=612 data-nosnippet>612</a>    }
+<a href=#613 id=613 data-nosnippet>613</a>
+<a href=#614 id=614 data-nosnippet>614</a>    <span class="doccomment">/// Keyframe throttling: a storm of PLIs in one interval yields exactly one
+<a href=#615 id=615 data-nosnippet>615</a>    /// forced keyframe; the next is gated by the min interval.
+<a href=#616 id=616 data-nosnippet>616</a>    </span><span class="attr">#[test]
+<a href=#617 id=617 data-nosnippet>617</a>    </span><span class="kw">fn </span>keyframe_storm_coalesces_to_one() {
+<a href=#618 id=618 data-nosnippet>618</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#619 id=619 data-nosnippet>619</a>        <span class="comment">// Eight receivers PLI after one shared loss.
+<a href=#620 id=620 data-nosnippet>620</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">8 </span>{
+<a href=#621 id=621 data-nosnippet>621</a>            a.on_pli();
+<a href=#622 id=622 data-nosnippet>622</a>        }
+<a href=#623 id=623 data-nosnippet>623</a>        <span class="macro">assert!</span>(a.poll_keyframe(<span class="number">0</span>), <span class="string">"first PLI in the window forces one IDR"</span>);
+<a href=#624 id=624 data-nosnippet>624</a>        <span class="macro">assert!</span>(!a.poll_keyframe(<span class="number">0</span>), <span class="string">"the storm coalesces — no second IDR"</span>);
+<a href=#625 id=625 data-nosnippet>625</a>        <span class="macro">assert!</span>(
+<a href=#626 id=626 data-nosnippet>626</a>            !a.poll_keyframe(<span class="number">500_000</span>),
+<a href=#627 id=627 data-nosnippet>627</a>            <span class="string">"still within the min interval: held"
+<a href=#628 id=628 data-nosnippet>628</a>        </span>);
+<a href=#629 id=629 data-nosnippet>629</a>        <span class="comment">// A fresh PLI after the interval gets its own keyframe.
+<a href=#630 id=630 data-nosnippet>630</a>        </span>a.on_pli();
+<a href=#631 id=631 data-nosnippet>631</a>        <span class="macro">assert!</span>(
+<a href=#632 id=632 data-nosnippet>632</a>            a.poll_keyframe(<span class="number">1_000_000</span>),
+<a href=#633 id=633 data-nosnippet>633</a>            <span class="string">"a new PLI past the interval forces a fresh IDR"
+<a href=#634 id=634 data-nosnippet>634</a>        </span>);
+<a href=#635 id=635 data-nosnippet>635</a>    }
+<a href=#636 id=636 data-nosnippet>636</a>
+<a href=#637 id=637 data-nosnippet>637</a>    <span class="doccomment">/// A keyframe emitted for any reason (the encoder's own periodic IDR)
+<a href=#638 id=638 data-nosnippet>638</a>    /// satisfies a pending PLI without a redundant forced one, and the interval is
+<a href=#639 id=639 data-nosnippet>639</a>    /// measured from that emission.
+<a href=#640 id=640 data-nosnippet>640</a>    </span><span class="attr">#[test]
+<a href=#641 id=641 data-nosnippet>641</a>    </span><span class="kw">fn </span>emitted_keyframe_satisfies_pending_pli() {
+<a href=#642 id=642 data-nosnippet>642</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#643 id=643 data-nosnippet>643</a>        a.on_pli();
+<a href=#644 id=644 data-nosnippet>644</a>        a.on_keyframe_emitted(<span class="number">200_000</span>); <span class="comment">// periodic IDR went out
+<a href=#645 id=645 data-nosnippet>645</a>        </span><span class="macro">assert!</span>(
+<a href=#646 id=646 data-nosnippet>646</a>            !a.poll_keyframe(<span class="number">300_000</span>),
+<a href=#647 id=647 data-nosnippet>647</a>            <span class="string">"the pending PLI is satisfied by the emitted keyframe"
+<a href=#648 id=648 data-nosnippet>648</a>        </span>);
+<a href=#649 id=649 data-nosnippet>649</a>    }
+<a href=#650 id=650 data-nosnippet>650</a>
+<a href=#651 id=651 data-nosnippet>651</a>    <span class="doccomment">/// `quality_changed` is set only on a transition, so the orchestrator acts
+<a href=#652 id=652 data-nosnippet>652</a>    /// (set_bitrate / pause) only when something actually moved.
+<a href=#653 id=653 data-nosnippet>653</a>    </span><span class="attr">#[test]
+<a href=#654 id=654 data-nosnippet>654</a>    </span><span class="kw">fn </span>quality_changed_flags_only_transitions() {
+<a href=#655 id=655 data-nosnippet>655</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::standard(<span class="number">600_000</span>);
+<a href=#656 id=656 data-nosnippet>656</a>        <span class="kw">let </span>sig = AdaptSignals {
+<a href=#657 id=657 data-nosnippet>657</a>            produced: <span class="number">30</span>,
+<a href=#658 id=658 data-nosnippet>658</a>            dropped: <span class="number">0</span>,
+<a href=#659 id=659 data-nosnippet>659</a>            rtt_us: <span class="prelude-val">Some</span>(<span class="number">40_000</span>),
+<a href=#660 id=660 data-nosnippet>660</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#661 id=661 data-nosnippet>661</a>        };
+<a href=#662 id=662 data-nosnippet>662</a>        <span class="comment">// Drive to a steady top rung.
+<a href=#663 id=663 data-nosnippet>663</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>now = <span class="number">0i64</span>;
+<a href=#664 id=664 data-nosnippet>664</a>        <span class="kw">let </span><span class="kw-2">mut </span>last_changed_at = <span class="prelude-val">None</span>;
+<a href=#665 id=665 data-nosnippet>665</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">20 </span>{
+<a href=#666 id=666 data-nosnippet>666</a>            <span class="kw">let </span>d = a.on_tick(<span class="kw-2">&amp;</span>sig, now);
+<a href=#667 id=667 data-nosnippet>667</a>            <span class="kw">if </span>d.quality_changed {
+<a href=#668 id=668 data-nosnippet>668</a>                last_changed_at = <span class="prelude-val">Some</span>(i);
+<a href=#669 id=669 data-nosnippet>669</a>            }
+<a href=#670 id=670 data-nosnippet>670</a>            now += <span class="number">1_000_000</span>;
+<a href=#671 id=671 data-nosnippet>671</a>        }
+<a href=#672 id=672 data-nosnippet>672</a>        <span class="comment">// Once settled at the ceiling, a steady link stops transitioning.
+<a href=#673 id=673 data-nosnippet>673</a>        </span><span class="kw">let </span>settled = last_changed_at.unwrap();
+<a href=#674 id=674 data-nosnippet>674</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">5 </span>{
+<a href=#675 id=675 data-nosnippet>675</a>            <span class="kw">let </span>d = a.on_tick(<span class="kw-2">&amp;</span>sig, now);
+<a href=#676 id=676 data-nosnippet>676</a>            <span class="macro">assert!</span>(
+<a href=#677 id=677 data-nosnippet>677</a>                !d.quality_changed,
+<a href=#678 id=678 data-nosnippet>678</a>                <span class="string">"a settled steady link must not keep reporting changes"
+<a href=#679 id=679 data-nosnippet>679</a>            </span>);
+<a href=#680 id=680 data-nosnippet>680</a>            now += <span class="number">1_000_000</span>;
+<a href=#681 id=681 data-nosnippet>681</a>        }
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="macro">assert!</span>(settled &lt; <span class="number">20</span>);
+<a href=#683 id=683 data-nosnippet>683</a>    }
+<a href=#684 id=684 data-nosnippet>684</a>
+<a href=#685 id=685 data-nosnippet>685</a>    <span class="doccomment">/// A live `set_screen_quality` swaps the ladder *and* moves the BWE ceiling
+<a href=#686 id=686 data-nosnippet>686</a>    /// under the running controller, so a fast link re-targets to the new top rung.
+<a href=#687 id=687 data-nosnippet>687</a>    /// Proves the wiring the screen task uses to honour a mid-share resolution/fps
+<a href=#688 id=688 data-nosnippet>688</a>    /// cap — and that the default ceiling really is 1080p (not stranded low by a
+<a href=#689 id=689 data-nosnippet>689</a>    /// flat BWE cap). Each phase climbs a clean link to saturation, then reads the
+<a href=#690 id=690 data-nosnippet>690</a>    /// settled rung.
+<a href=#691 id=691 data-nosnippet>691</a>    </span><span class="attr">#[test]
+<a href=#692 id=692 data-nosnippet>692</a>    </span><span class="kw">fn </span>set_screen_quality_swaps_the_ladder_live() {
+<a href=#693 id=693 data-nosnippet>693</a>        <span class="kw">use crate</span>::{DegradePriority, MaxResolution};
+<a href=#694 id=694 data-nosnippet>694</a>
+<a href=#695 id=695 data-nosnippet>695</a>        <span class="kw">let </span>healthy = AdaptSignals {
+<a href=#696 id=696 data-nosnippet>696</a>            produced: <span class="number">60</span>,
+<a href=#697 id=697 data-nosnippet>697</a>            dropped: <span class="number">0</span>,
+<a href=#698 id=698 data-nosnippet>698</a>            rtt_us: <span class="prelude-val">Some</span>(AdaptConfig::default().rtt_floor_us),
+<a href=#699 id=699 data-nosnippet>699</a>            remote_loss: <span class="prelude-val">None</span>,
+<a href=#700 id=700 data-nosnippet>700</a>        };
+<a href=#701 id=701 data-nosnippet>701</a>        <span class="comment">// Climb to saturation and return the settled rung (ignores any AudioOnly
+<a href=#702 id=702 data-nosnippet>702</a>        // ticks while the estimate is still below the lowest rung).
+<a href=#703 id=703 data-nosnippet>703</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>now = <span class="number">0i64</span>;
+<a href=#704 id=704 data-nosnippet>704</a>        <span class="kw">let </span><span class="kw-2">mut </span>climb = |a: <span class="kw-2">&amp;mut </span>VideoAdaptation| {
+<a href=#705 id=705 data-nosnippet>705</a>            <span class="kw">let </span><span class="kw-2">mut </span>last = <span class="prelude-val">None</span>;
+<a href=#706 id=706 data-nosnippet>706</a>            <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">200 </span>{
+<a href=#707 id=707 data-nosnippet>707</a>                now += <span class="number">1_000_000</span>;
+<a href=#708 id=708 data-nosnippet>708</a>                <span class="kw">if let </span>Quality::Video(r) = a.on_tick(<span class="kw-2">&amp;</span>healthy, now).quality {
+<a href=#709 id=709 data-nosnippet>709</a>                    last = <span class="prelude-val">Some</span>(r);
+<a href=#710 id=710 data-nosnippet>710</a>                }
+<a href=#711 id=711 data-nosnippet>711</a>            }
+<a href=#712 id=712 data-nosnippet>712</a>            last.expect(<span class="string">"a healthy link must climb to a video rung"</span>)
+<a href=#713 id=713 data-nosnippet>713</a>        };
+<a href=#714 id=714 data-nosnippet>714</a>
+<a href=#715 id=715 data-nosnippet>715</a>        <span class="comment">// Seed above the screen floor rung (~1.1 Mbps) so it carries video at once.
+<a href=#716 id=716 data-nosnippet>716</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>a = VideoAdaptation::screen_with(<span class="number">2_000_000</span>, ScreenQuality::default());
+<a href=#717 id=717 data-nosnippet>717</a>        <span class="comment">// Default screen quality is legibility / P1080 / 60 — the ladder-derived
+<a href=#718 id=718 data-nosnippet>718</a>        // BWE ceiling makes the 1080p60 top rung reachable (a flat 4 Mbps cap
+<a href=#719 id=719 data-nosnippet>719</a>        // would strand the climb at 1080p15).
+<a href=#720 id=720 data-nosnippet>720</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#721 id=721 data-nosnippet>721</a>            climb(<span class="kw-2">&amp;mut </span>a).height,
+<a href=#722 id=722 data-nosnippet>722</a>            <span class="number">1080</span>,
+<a href=#723 id=723 data-nosnippet>723</a>            <span class="string">"default screen ceiling is 1080p"
+<a href=#724 id=724 data-nosnippet>724</a>        </span>);
+<a href=#725 id=725 data-nosnippet>725</a>
+<a href=#726 id=726 data-nosnippet>726</a>        <span class="comment">// Live cap at 480p → the controller re-targets down to a ≤480 rung.
+<a href=#727 id=727 data-nosnippet>727</a>        </span>a.set_screen_quality(ScreenQuality {
+<a href=#728 id=728 data-nosnippet>728</a>            degrade: DegradePriority::Legibility,
+<a href=#729 id=729 data-nosnippet>729</a>            max_resolution: MaxResolution::P480,
+<a href=#730 id=730 data-nosnippet>730</a>            max_fps: <span class="number">60</span>,
+<a href=#731 id=731 data-nosnippet>731</a>        });
+<a href=#732 id=732 data-nosnippet>732</a>        <span class="macro">assert!</span>(
+<a href=#733 id=733 data-nosnippet>733</a>            climb(<span class="kw-2">&amp;mut </span>a).height &lt;= <span class="number">480</span>,
+<a href=#734 id=734 data-nosnippet>734</a>            <span class="string">"a live resolution cap must bound the rung's height"
+<a href=#735 id=735 data-nosnippet>735</a>        </span>);
+<a href=#736 id=736 data-nosnippet>736</a>
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="comment">// Live cap at 30 fps (Source resolution) → the rung's fps obeys it even as
+<a href=#738 id=738 data-nosnippet>738</a>        // the ceiling rises to a larger resolution.
+<a href=#739 id=739 data-nosnippet>739</a>        </span>a.set_screen_quality(ScreenQuality {
+<a href=#740 id=740 data-nosnippet>740</a>            degrade: DegradePriority::Motion,
+<a href=#741 id=741 data-nosnippet>741</a>            max_resolution: MaxResolution::Source,
+<a href=#742 id=742 data-nosnippet>742</a>            max_fps: <span class="number">30</span>,
+<a href=#743 id=743 data-nosnippet>743</a>        });
+<a href=#744 id=744 data-nosnippet>744</a>        <span class="macro">assert!</span>(
+<a href=#745 id=745 data-nosnippet>745</a>            climb(<span class="kw-2">&amp;mut </span>a).fps &lt;= <span class="number">30</span>,
+<a href=#746 id=746 data-nosnippet>746</a>            <span class="string">"a live fps cap must bound the rung"
+<a href=#747 id=747 data-nosnippet>747</a>        </span>);
+<a href=#748 id=748 data-nosnippet>748</a>    }
+<a href=#749 id=749 data-nosnippet>749</a>}
+</code></pre></div></section></main></body></html>

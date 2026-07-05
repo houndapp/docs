@@ -1,0 +1,229 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Voice/video call orchestration — the UI-free engine that drives a live call from `HoundClient`."><title>hound_client::call - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_client" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module call</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../hound_client/index.html">hound_<wbr>client</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module call</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#what-a-join-wires-up" title="What a join wires up">What a join wires up</a></li><li><a href="#module-tree" title="Module tree">Module tree</a></li><li><a href="#observable-state" title="Observable state">Observable state</a></li><li><a href="#auto-reconnect-supervisor" title="Auto-reconnect supervisor">Auto-reconnect supervisor</a></li></ul><h3><a href="#modules">Module Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#traits" title="Traits">Traits</a></li><li><a href="#functions" title="Functions">Functions</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate hound_<wbr>client</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">hound_client</a></div><h1>Module <span>call</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/hound_client/call/mod.rs.html#1-817">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Voice/video <strong>call orchestration</strong> — the UI-free engine that drives a live
+call from <code>HoundClient</code>.</p>
+<p>It parallels the legacy Tauri orchestration in <code>src/voice/session/*</code> but
+reuses the engine/transport/control crates directly and stays free of any
+UI/FFI machinery (no Tauri <code>Channel</code>/<code>AppHandle</code>/<code>emit</code>). The decode→render
+seam is a <a href="trait.VideoSink.html" title="trait hound_client::call::VideoSink"><code>VideoSink</code></a> trait the FRB layer supplies (its closure calls
+<code>video_render::push_frame(...)</code>); decoded frames reach the right tile keyed by
+peer without this crate ever knowing about textures or Dart.</p>
+<h3 id="what-a-join-wires-up"><a class="doc-anchor" href="#what-a-join-wires-up">§</a>What a join wires up</h3><div class="example-wrap"><pre class="language-text"><code>REST voice/join  ──► relay_url + relay_token + sfu_node_id + peers
+       │
+       ├─► control WS (hound-control)  ──► SessionView reducer ──► watch&lt;CallView&gt;
+       │
+       └─► dial iroh ──► MoqRelaySession ─┬─► publish mic (Opus)
+                                          ├─► publish camera (H.264) [if enabled]
+                                          └─► subscribe loop: for each remote track
+                                                video → decode → VideoSink (push_frame)
+                                                audio → decode → mix bus (PlayoutBus)</code></pre></div><h3 id="module-tree"><a class="doc-anchor" href="#module-tree">§</a>Module tree</h3>
+<p>This module is the shared hub — the public seams (<a href="trait.VideoSink.html" title="trait hound_client::call::VideoSink"><code>VideoSink</code></a>,
+<a href="enum.RenderSurfaceHandle.html" title="enum hound_client::call::RenderSurfaceHandle"><code>RenderSurfaceHandle</code></a>), the picker enumerations, the observable snapshot
+types, the dedicated runtimes, and the cross-module tuning constants. The
+orchestration lives in the submodules:</p>
+<ul>
+<li><a href="session/index.html" title="mod hound_client::call::session"><code>session</code></a> — <a href="struct.CallSession.html" title="struct hound_client::call::CallSession"><code>CallSession</code></a> (join/leave/commands), <code>establish_live</code>, the
+auto-reconnect supervisor + screen-share command handling.</li>
+<li><a href="reconnect/index.html" title="mod hound_client::call::reconnect"><code>reconnect</code></a> — the pure backoff/classification policy + the retry loop.</li>
+<li><a href="control/index.html" title="mod hound_client::call::control"><code>control</code></a> — the <code>/control</code> WebSocket IO shell + the iroh relay dial.</li>
+<li><a href="policy/index.html" title="mod hound_client::call::policy"><code>policy</code></a> — the pure, unit-tested decision policies (codec switch, layer
+hysteresis, restart pacing, resize debounce, gain, gap math…).</li>
+<li><a href="adapt/index.html" title="mod hound_client::call::adapt"><code>adapt</code></a> — sender-side BWE/congestion adaptation glue (<a href="adapt/struct.AdaptShared.html" title="struct hound_client::call::adapt::AdaptShared"><code>adapt::AdaptShared</code></a>,
+the 1 s tick, the keyframe/feedback listeners, the shared encode core).</li>
+<li><a href="simulcast/index.html" title="mod hound_client::call::simulcast"><code>simulcast</code></a> — demand-driven simulcast (the layer planner + low publish).</li>
+<li><a href="audio_tx/index.html" title="mod hound_client::call::audio_tx"><code>audio_tx</code></a> / <a href="camera_tx/index.html" title="mod hound_client::call::camera_tx"><code>camera_tx</code></a> / <a href="screen_tx/index.html" title="mod hound_client::call::screen_tx"><code>screen_tx</code></a> — the publish paths.</li>
+<li><a href="subscribe/index.html" title="mod hound_client::call::subscribe"><code>subscribe</code></a> — the roster-diffing subscribe loop + per-track pipelines.</li>
+<li><a href="audio_rx/index.html" title="mod hound_client::call::audio_rx"><code>audio_rx</code></a> / <a href="video_rx/index.html" title="mod hound_client::call::video_rx"><code>video_rx</code></a> — the decode pipelines.</li>
+</ul>
+<h3 id="observable-state"><a class="doc-anchor" href="#observable-state">§</a>Observable state</h3>
+<p>Three <code>watch</code> channels, driven the same way as the realtime→reducer→watch task
+in <a href="../app/index.html" title="mod hound_client::app"><code>crate::app</code></a>: <a href="struct.CallView.html" title="struct hound_client::call::CallView"><code>CallView</code></a> (self id, peers, tracks) is derived from the
+control plane’s <a href="../../hound_control/session/struct.SessionView.html" title="struct hound_control::session::SessionView"><code>SessionView</code></a>; <a href="enum.ConnectionState.html" title="enum hound_client::call::ConnectionState"><code>ConnectionState</code></a> reflects the control WS +
+reconnect attempts; <a href="struct.LevelsView.html" title="struct hound_client::call::LevelsView"><code>LevelsView</code></a> carries mic + per-peer speaking levels.</p>
+<h3 id="auto-reconnect-supervisor"><a class="doc-anchor" href="#auto-reconnect-supervisor">§</a>Auto-reconnect supervisor</h3>
+<p>A live call heals a dropped control WebSocket or MoQ/iroh connection <strong>without
+the user re-joining</strong> — “nothing drops a call except total network loss.”</p>
+<ul>
+<li><a href="reconnect/struct.Backoff.html" title="struct hound_client::call::reconnect::Backoff"><code>reconnect::Backoff</code></a> + [<code>reconnect::classify</code>] — the pure, headless policy
+(exp-backoff+jitter; retryable-vs-fatal over <a href="../error/enum.HoundError.html" title="enum hound_client::error::HoundError"><code>HoundError</code></a>). Only an
+auth/permission outcome (<code>Http 401/403</code> or <code>Auth</code>) is fatal; everything
+transient retries FOREVER.</li>
+<li><a href="session/struct.LiveSession.html" title="struct hound_client::call::session::LiveSession"><code>session::LiveSession</code></a> — the per-establish layers (relay/conn/control/tasks).
+Its <code>monitor</code> selects over the control-WS-closed signal and the iroh
+<code>Connection::closed()</code>, naming which layer dropped.</li>
+<li><a href="session/struct.ConnectionParams.html" title="struct hound_client::call::session::ConnectionParams"><code>session::ConnectionParams</code></a> — the Arc-cloneable cross-reconnect state.
+<code>establish_live</code> builds one <code>LiveSession</code> (re-minting the relay token via
+<code>voice/join</code> each time, so no standalone token-refresh task is needed).</li>
+<li>[<code>session::spawn_supervisor</code>] — owns <code>live</code> + a <code>Backoff</code> + the screen-share
+state; monitors, tears down on failure, and rebuilds with backoff. Recovery is
+a FULL re-establish (fresh <code>PeerId</code>); the reactive subscribe loop re-diffs the
+roster for free and re-publish is a fresh mic/cam announce.</li>
+</ul>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="adapt/index.html" title="mod hound_client::call::adapt">adapt</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Sender-side BWE/congestion adaptation. The camera +
+screen video the client PUBLISHES adapts its bitrate/resolution to network
+conditions and serves keyframes on demand. The brain —
+<a href="../../hound_media/adapt/struct.VideoAdaptation.html" title="struct hound_media::adapt::VideoAdaptation"><code>hound_media::VideoAdaptation</code></a> — is shared; this is the local IO glue:</dd><dt><a class="mod" href="audio_rx/index.html" title="mod hound_client::call::audio_rx">audio_<wbr>rx</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Inbound audio: pull → reorder by timestamp → Opus decode (bounded PLC on
+genuine gaps) → per-peer jitter buffer on the mix bus, plus level metering.
+The encoded-frame reorder hold undoes the cross-stream reordering a
+screenshare induces on the shared connection BEFORE the stateful decoder;
+release is purely count-based — the moq group read is not cancel-safe
+mid-object, so no recv timeout is ever raced against it.</dd><dt><a class="mod" href="audio_tx/index.html" title="mod hound_client::call::audio_tx">audio_<wbr>tx</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Outbound audio: the mic capture loop + Opus publish, and the screen APP-AUDIO
+leg (its <code>!Send</code> capture thread + publish task). Encode + publish run on the
+RT audio runtime (“audio is sacred”: a screenshare encode can’t stall the
+mic), and audio frames publish via the ordered-substream path (count-rolled
+groups) so successive Opus frames ride one in-order QUIC stream — never one
+stream per frame.</dd><dt><a class="mod" href="camera_tx/index.html" title="mod hound_client::call::camera_tx">camera_<wbr>tx</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Outbound camera: the <code>!Send</code> capture+encode thread (device hot-swap,
+self-preview tee, adaptive encode) and the async publish task running the 1 s
+BWE adaptation tick. The capture side reads its decisions off
+<a href="adapt/struct.AdaptShared.html" title="struct hound_client::call::adapt::AdaptShared"><code>adapt::AdaptShared</code></a>; the codec is negotiated against the roster and
+re-driven mid-call by the re-negotiator. Self-preview keeps running even
+while the ladder pauses video (AudioOnly), so the local tile never freezes.</dd><dt><a class="mod" href="control/index.html" title="mod hound_client::call::control">control</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The control-plane IO shell: <a href="control/struct.ControlClient.html" title="struct hound_client::call::control::ControlClient"><code>ControlClient</code></a> drives the <code>/control</code> WebSocket
+(applies each <code>ServerMessage</code> to the <code>SessionView</code> reducer, publishes
+<code>CallView</code> snapshots, exposes the outbound intent queue, and fans the
+keyframe/feedback/quality signals out to the per-track listeners), plus
+<a href="control/fn.dial_relay.html" title="fn hound_client::call::control::dial_relay"><code>dial_relay</code></a> — the iroh endpoint + QUIC connection the MoQ session rides.
+Invariant: the returned iroh <code>Endpoint</code> must outlive the connection — the SFU
+is relay-only reachable, so dropping the endpoint wedges every stream after
+the handshake.</dd><dt><a class="mod" href="policy/index.html" title="mod hound_client::call::policy">policy</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Pure, unit-tested call policy — the sans-IO decision layer. Inputs (sizes,
+instants, samples, roster caps) in, decisions out: codec negotiation + the
+mid-call <a href="policy/struct.CodecSwitch.html" title="struct hound_client::call::policy::CodecSwitch"><code>CodecSwitch</code></a>, spatial-layer <a href="policy/struct.LayerHysteresis.html" title="struct hound_client::call::policy::LayerHysteresis"><code>LayerHysteresis</code></a>, <a href="policy/struct.RestartPacer.html" title="struct hound_client::call::policy::RestartPacer"><code>RestartPacer</code></a>,
+<a href="policy/struct.ResizeWatch.html" title="struct hound_client::call::policy::ResizeWatch"><code>ResizeWatch</code></a>, mic route warmup / dead-silence detection, per-stream playback
+gain, and the audio gap/cadence math. Nothing here touches sockets, clocks, or
+devices, so every policy is pinned by unit tests without a live source.</dd><dt><a class="mod" href="reconnect/index.html" title="mod hound_client::call::reconnect">reconnect</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Reconnect policy + the retry loop: the pure exponential <a href="reconnect/struct.Backoff.html" title="struct hound_client::call::reconnect::Backoff"><code>Backoff</code></a> with
+bounded jitter, the fatal-vs-retryable <a href="reconnect/fn.classify.html" title="fn hound_client::call::reconnect::classify"><code>classify</code></a> verdict over
+<a href="../error/enum.HoundError.html" title="enum hound_client::error::HoundError"><code>HoundError</code></a>, and <a href="reconnect/fn.reconnect_loop.html" title="fn hound_client::call::reconnect::reconnect_loop"><code>reconnect_loop</code></a> — which re-runs <code>establish_live</code> until
+success, a fatal error, or cancel. Invariant: only an auth/permission outcome
+is fatal; everything transient retries FOREVER (each attempt re-mints the
+relay token via <code>voice/join</code>, so a stale token heals on retry).</dd><dt><a class="mod" href="screen_tx/index.html" title="mod hound_client::call::screen_tx">screen_<wbr>tx</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Outbound screen share: open → <code>!Send</code> capture/encode thread → publish, plus
+the LOW simulcast rung and the classified exit protocol back to the
+supervisor (<a href="screen_tx/enum.ScreenCaptureExit.html" title="enum hound_client::call::screen_tx::ScreenCaptureExit"><code>ScreenCaptureExit</code></a>: a clean end vs a held resize vs a
+transient fault — a share must NOT end on a resize or a glitch). Static
+content is re-emitted on a slow cadence for fresh subscribers, and an idle
+source is liveness-probed so a terminated window ends the share instead of
+freezing on its last frame.</dd><dt><a class="mod" href="session/index.html" title="mod hound_client::call::session">session</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The live call: <a href="struct.CallSession.html" title="struct hound_client::call::CallSession"><code>CallSession</code></a> (join/leave/commands + the cross-reconnect
+command seams), <a href="session/fn.establish_live.html" title="fn hound_client::call::session::establish_live"><code>establish_live</code></a> (one full control+MoQ session), and the
+auto-reconnect supervisor — which owns the live session, the backoff, and the
+screen-share state (so a share is republished against each fresh session).
+Invariant: recovery is a FULL re-establish (fresh <code>PeerId</code>) — the broken
+session’s tasks/threads are fully torn down before a rebuild, and only an
+auth/permission failure (or an explicit leave) ends the call.</dd><dt><a class="mod" href="simulcast/index.html" title="mod hound_client::call::simulcast">simulcast</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Demand-driven simulcast, producer side: <a href="simulcast/struct.LayerControl.html" title="struct hound_client::call::simulcast::LayerControl"><code>LayerControl</code></a> folds every
+receiver’s standing quality demand (<a href="adapt/struct.QualityReport.html" title="struct hound_client::call::adapt::QualityReport"><code>QualityReport</code></a> via
+<a href="simulcast/fn.spawn_quality_listener.html" title="fn hound_client::call::simulcast::spawn_quality_listener"><code>spawn_quality_listener</code></a>) into a <a href="../../hound_media/congestion/struct.SimulcastPlanner.html" title="struct hound_media::congestion::SimulcastPlanner"><code>hound_media::SimulcastPlanner</code></a>, driving
+the shared LOW-layer supervisor; <a href="simulcast/fn.spawn_low_video_publish.html" title="fn hound_client::call::simulcast::spawn_low_video_publish"><code>spawn_low_video_publish</code></a> drains the
+capture thread’s low encode onto its own moq track, announcing it on the
+FIRST frame only (dark until actually producing). Invariant: the source
+encode is never dropped — the low layer is purely additive, so any low-layer
+fault costs a thumbnail, never the full-quality source.</dd><dt><a class="mod" href="subscribe/index.html" title="mod hound_client::call::subscribe">subscribe</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The subscribe loop: reconcile remote tracks → decode → sink / mix bus. Diffs
+the <code>SessionView</code> roster into per-track pipelines (<a href="subscribe/fn.start_pipeline.html" title="fn hound_client::call::subscribe::start_pipeline"><code>start_pipeline</code></a>), picks
+source vs low layer per tile demand (debounced through the policy hysteresis),
+and self-heals: every pipeline carries a <a href="subscribe/struct.PipelineEndGuard.html" title="struct hound_client::call::subscribe::PipelineEndGuard"><code>PipelineEndGuard</code></a> whose Drop
+reports the death so the reconcile reaps + re-subscribes it (restart-paced).
+Invariant: audio subscribes with arrival-order drain and the smaller moq
+priority value — audio must strictly outrank video on the shared connection.</dd><dt><a class="mod" href="video_rx/index.html" title="mod hound_client::call::video_rx">video_<wbr>rx</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Inbound video: the async pull half (receive-side keyframe gate; the nag task
+lives with the subscribe loop) feeds a blocking decode thread that owns the
+<code>!Send</code> <code>VideoDecoder</code> and rebuilds it whenever the sender’s per-packet codec
+byte changes — the sender’s choice drives decode. Decoded frames reach the
+sink surface-first (zero-copy GPU handle) with materialized I420 as the
+universal fallback; <a href="video_rx/fn.push_preview.html" title="fn hound_client::call::video_rx::push_preview"><code>push_preview</code></a> is the borrow-based capture-side twin
+the publish loops use for self-preview.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.CallParticipant.html" title="struct hound_client::call::CallParticipant">Call<wbr>Participant</a></dt><dd>A control-plane peer with a known identity. The UI joins <code>user_id</code> against the
+display roster (the same one text channels use) for the name + avatar. Carries
+no name/avatar itself — identity lives in the roster, not the call plane.</dd><dt><a class="struct" href="struct.CallSession.html" title="struct hound_client::call::CallSession">Call<wbr>Session</a></dt><dd>One live voice/video call. The supervisor task owns the live session(s) + every
+capture thread; this struct holds the cross-reconnect command seams + the
+supervisor handle. Dropping it (or <a href="struct.CallSession.html#method.leave" title="method hound_client::call::CallSession::leave"><code>CallSession::leave</code></a>) cancels + tears down.</dd><dt><a class="struct" href="struct.CallTrack.html" title="struct hound_client::call::CallTrack">Call<wbr>Track</a></dt><dd>One published track, carried with the control-plane enums (not flattened to
+strings) so the binding compares them type-driven — <code>t.kind == MediaKind::Video</code>
+— with exhaustiveness on both sides. The enums are <code>Copy + Eq</code> (serde snake_case).</dd><dt><a class="struct" href="struct.CallView.html" title="struct hound_client::call::CallView">Call<wbr>View</a></dt><dd>The call’s roster as the UI renders it: self id, peers, and the tracks (with
+kind/source/mute). Built from the control plane’s <a href="../../hound_control/session/struct.SessionView.html" title="struct hound_control::session::SessionView"><code>SessionView</code></a> reducer — the
+same source of truth the media plane subscribes off of. Empty before <code>Welcome</code>.</dd><dt><a class="struct" href="struct.DeviceListView.html" title="struct hound_client::call::DeviceListView">Device<wbr>List<wbr>View</a></dt><dd>The available media devices grouped by kind — the data the Devices panel renders.
+A kind whose platform backend is absent simply comes back empty (a capability
+miss, not an error).</dd><dt><a class="struct" href="struct.DeviceView.html" title="struct hound_client::call::DeviceView">Device<wbr>View</a></dt><dd>One enumerated media device for a picker row. FFI-flat: <code>id</code> is the opaque
+selection token to pass back to <code>call_select_device</code> for this kind (for audio it
+equals the cpal device name; for a camera the AVFoundation <code>uniqueID</code>), and
+<code>is_default</code> flags the host’s current default for that kind.</dd><dt><a class="struct" href="struct.LevelsView.html" title="struct hound_client::call::LevelsView">Levels<wbr>View</a></dt><dd>Speaking levels: the local mic level plus a per-peer map, each <code>0.0..=1.0</code>
+(perceptual, from RMS). The UI renders these as the ring/glow around a tile.</dd><dt><a class="struct" href="struct.NullVideoSink.html" title="struct hound_client::call::NullVideoSink">Null<wbr>Video<wbr>Sink</a></dt><dd>A no-op sink (tests / headless): decoded frames are discarded. The call still
+runs end to end (audio plays, state updates); only video display is dropped.</dd><dt><a class="struct" href="struct.ScreenSourceView.html" title="struct hound_client::call::ScreenSourceView">Screen<wbr>Source<wbr>View</a></dt><dd>A shareable screen source for the picker — a display, a window, or a camera
+streamed as a screen. UI-friendly + FFI-flat: the typed engine selection token
+is encoded into <a href="struct.ScreenSourceView.html#structfield.id" title="field hound_client::call::ScreenSourceView::id"><code>id</code></a> (see <a href="fn.encode_screen_source.html" title="fn hound_client::call::encode_screen_source"><code>encode_screen_source</code></a>) so the UI round-
+trips an opaque string back into <a href="struct.CallSession.html#method.screen_share_start" title="method hound_client::call::CallSession::screen_share_start"><code>CallSession::screen_share_start</code></a>.</dd><dt><a class="struct" href="struct.ScreenThumbnail.html" title="struct hound_client::call::ScreenThumbnail">Screen<wbr>Thumbnail</a></dt><dd>A share-picker preview image: opaque RGBA8888, <code>width * height * 4</code> bytes.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.ConnectionState.html" title="enum hound_client::call::ConnectionState">Connection<wbr>State</a></dt><dd>The connection state of the call’s control plane (and, by extension, whether
+media can flow). Drives a UI banner. <code>attempt</code> is the reconnect attempt count.</dd><dt><a class="enum" href="enum.RenderSurfaceHandle.html" title="enum hound_client::call::RenderSurfaceHandle">Render<wbr>Surface<wbr>Handle</a></dt><dd>A decoded frame still resident in a platform GPU buffer, handed to the renderer
+for a zero-copy sample (no NV12→I420 readback, no re-upload). One variant per
+GPU backend; a platform without a surface renderer never builds one (the
+<a href="trait.VideoSink.html#method.push_surface" title="method hound_client::call::VideoSink::push_surface"><code>VideoSink::push_surface</code></a> default declines and the I420 path runs).</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.ADAPT_TICK_INTERVAL.html" title="constant hound_client::call::ADAPT_TICK_INTERVAL">ADAPT_<wbr>TICK_<wbr>INTERVAL</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Sender-side BWE/congestion adaptation tick cadence: one decision per second
+folds RTT + the worst receiver-reported loss into a target bitrate/rung the
+encode loop applies.</dd><dt><a class="constant" href="constant.AUDIO_PRIORITY.html" title="constant hound_client::call::AUDIO_PRIORITY">AUDIO_<wbr>PRIORITY</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>moq-net delivery priorities — <strong>audio must strictly outrank video on the wire</strong> so
+a high-bitrate screenshare can never delay/burst the Opus streams on the SHARED
+QUIC connection (the “audio is sacred” wire guarantee).</dd><dt><a class="constant" href="constant.CAM_BITRATE.html" title="constant hound_client::call::CAM_BITRATE">CAM_<wbr>BITRATE</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Camera publish bitrate ceiling.</dd><dt><a class="constant" href="constant.CAM_DIMS.html" title="constant hound_client::call::CAM_DIMS">CAM_<wbr>DIMS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Self-view / camera publish geometry. The engine scales native → this.</dd><dt><a class="constant" href="constant.CAM_FPS.html" title="constant hound_client::call::CAM_FPS">CAM_FPS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.CAM_KEYFRAME_CADENCE.html" title="constant hound_client::call::CAM_KEYFRAME_CADENCE">CAM_<wbr>KEYFRAME_<wbr>CADENCE</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Camera keyframe cadence: a periodic IDR. Camera content changes wholesale
+(deltas are already large), so the periodic refresh is cheap insurance for
+loss recovery.</dd><dt><a class="constant" href="constant.CAM_TRACK.html" title="constant hound_client::call::CAM_TRACK">CAM_<wbr>TRACK</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.HEARTBEAT_INTERVAL.html" title="constant hound_client::call::HEARTBEAT_INTERVAL">HEARTBEAT_<wbr>INTERVAL</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Heartbeat cadence (keeps the backend’s voice-membership alive).</dd><dt><a class="constant" href="constant.LOW_SCREEN_LONG_EDGE.html" title="constant hound_client::call::LOW_SCREEN_LONG_EDGE">LOW_<wbr>SCREEN_<wbr>LONG_<wbr>EDGE</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Long-edge budget for the LOW simulcast layer — what a small/unfocused screenshare
+tile pulls instead of the full source. 640 px long edge = 640×360 for a 16:9
+share, ~8× fewer pixels than 1080p.</dd><dt><a class="constant" href="constant.MIC_TRACK.html" title="constant hound_client::call::MIC_TRACK">MIC_<wbr>TRACK</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>moq-net track names (one per source) under the per-peer broadcast path.</dd><dt><a class="constant" href="constant.PLAYOUT_TARGET_US.html" title="constant hound_client::call::PLAYOUT_TARGET_US">PLAYOUT_<wbr>TARGET_<wbr>US</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Per-peer jitter-buffer depth floor the adaptive jitter grows from. 80 ms buys
+headroom so a brief fill-thread scheduling hiccup under heavy video load can’t
+drain the buffer before the next frame lands — defense in depth behind the RT
+audio runtime (which is what actually prevents starvation). The adaptive
+estimator still grows above this on a jittery link; the extra baseline latency
+is inaudible for conversation and buys a full Opus frame of slack.</dd><dt><a class="constant" href="constant.SCREEN_AUDIO_BITRATE.html" title="constant hound_client::call::SCREEN_AUDIO_BITRATE">SCREEN_<wbr>AUDIO_<wbr>BITRATE</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>App-audio Opus bitrate for a shared window’s audio. This is music/system
+audio, not a mic — encoded in <code>OpusProfile::Music</code> (general-audio) mode, so it
+needs a music-grade rate: speech-grade rates (~32 kbps) audibly crush music.
+96 kbps mono is near-transparent for general audio.</dd><dt><a class="constant" href="constant.SCREEN_AUDIO_TRACK.html" title="constant hound_client::call::SCREEN_AUDIO_TRACK">SCREEN_<wbr>AUDIO_<wbr>TRACK</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.SCREEN_BITRATE.html" title="constant hound_client::call::SCREEN_BITRATE">SCREEN_<wbr>BITRATE</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Screen publish bitrate seed — the initial encoder target before the BWE
+adaptation settles onto a ladder rung. Matches the 1080p30 SCREEN rung
+(~2.4 Mbps, see <code>screen_bitrate_bps</code>) — a screen-content target, NOT a
+camera-video one. A camera-grade seed (several Mbps) would saturate the shared
+QUIC connection before BWE reacts and starve audio/other video, while screen
+content (mostly static, text) looks crisp in H.265 at this rate. The BWE climbs
+from here if the link genuinely has headroom.</dd><dt><a class="constant" href="constant.SCREEN_FPS.html" title="constant hound_client::call::SCREEN_FPS">SCREEN_<wbr>FPS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.SCREEN_IDLE_POLL.html" title="constant hound_client::call::SCREEN_IDLE_POLL">SCREEN_<wbr>IDLE_<wbr>POLL</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Damage-driven screen capture: bounded wait for a frame (a static screen
+produces none) so the loop can re-emit a cached frame for new subscribers.</dd><dt><a class="constant" href="constant.SCREEN_KEYFRAME_CADENCE.html" title="constant hound_client::call::SCREEN_KEYFRAME_CADENCE">SCREEN_<wbr>KEYFRAME_<wbr>CADENCE</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Screen keyframe cadence: IDRs <strong>on demand only</strong> (a subscriber’s
+<code>RequestKeyframe</code> — sent at subscribe and re-sent by the receiver’s
+awaiting-keyframe nag — or a PLI), plus a slow safety net. Screen content is
+mostly static, and a periodic IDR of an unchanged 1080p frame is pure
+redundancy — a short fixed cadence would dominate the data cost of a static
+share (hundreds of kbps for zero new information).
+<code>max_gop_frames = 900</code>: one GOP = one moq group, and moq-net evicts a group
+past 1024 objects (a fatal <code>CacheFull</code> for the drain) — 900 bounds the GOP
+safely under that cap even at sustained 60 fps (≈15 s), while the 60 s
+safety interval governs low-fps/static content (tiny groups).</dd><dt><a class="constant" href="constant.SCREEN_MAX_H.html" title="constant hound_client::call::SCREEN_MAX_H">SCREEN_<wbr>MAX_<wbr>H</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.SCREEN_MAX_W.html" title="constant hound_client::call::SCREEN_MAX_W">SCREEN_<wbr>MAX_<wbr>W</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Screen-share publish geometry: capture is native, scaled to this 1080p-class
+cap preserving aspect (text stays legible without 4K uplink cost).</dd><dt><a class="constant" href="constant.SCREEN_RESIZE_DEBOUNCE.html" title="constant hound_client::call::SCREEN_RESIZE_DEBOUNCE">SCREEN_<wbr>RESIZE_<wbr>DEBOUNCE</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>How long a changed window size must hold before the share restarts at the new
+geometry — one restart when a live drag-resize settles, not dozens.</dd><dt><a class="constant" href="constant.SCREEN_RETRY_BACKOFF.html" title="constant hound_client::call::SCREEN_RETRY_BACKOFF">SCREEN_<wbr>RETRY_<wbr>BACKOFF</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Backoff the screen capture thread sleeps before signalling <code>Retry</code> after a
+transient capture error/panic — bounds the restart rate if the source keeps
+faulting immediately (the share restart itself paces it further).</dd><dt><a class="constant" href="constant.SCREEN_STATIC_REFRESH.html" title="constant hound_client::call::SCREEN_STATIC_REFRESH">SCREEN_<wbr>STATIC_<wbr>REFRESH</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Re-emit the last screen frame at least this often (timestamp advanced) so a
+static share still delivers pixels to a freshly-subscribed peer.</dd><dt><a class="constant" href="constant.SCREEN_TRACK.html" title="constant hound_client::call::SCREEN_TRACK">SCREEN_<wbr>TRACK</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.SELF_KEY.html" title="constant hound_client::call::SELF_KEY">SELF_<wbr>KEY</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The self-preview stream key, and the <code>cam:{peer}</code> / <code>screen:{peer}</code> builders —
+kept here so the key scheme has one source of truth across publish + subscribe.</dd><dt><a class="constant" href="constant.VIDEO_PRIORITY.html" title="constant hound_client::call::VIDEO_PRIORITY">VIDEO_<wbr>PRIORITY</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.VideoSink.html" title="trait hound_client::call::VideoSink">Video<wbr>Sink</a></dt><dd>The decode→render seam. The orchestration decodes remote video into tightly
+packed I420 and hands it here, keyed by a stream key (<code>"self"</code>, <code>"cam:{peer}"</code>,
+<code>"screen:{peer}"</code>). The FRB layer supplies an impl whose body calls
+<code>video_render::push_frame(key, w, h, i420)</code> — so this crate stays free of any
+texture/FFI dependency. The sink must be cheap and non-blocking (drop-oldest);
+it is called on a decode task, never on a real-time audio thread.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.audio_runtime.html" title="fn hound_client::call::audio_runtime">audio_<wbr>runtime</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The dedicated runtime for the audio RECEIVE/fill path (per-peer Opus decode → mix
+jitter buffer). Isolated from <a href="fn.call_runtime.html" title="fn hound_client::call::call_runtime"><code>call_runtime</code></a> and <strong>real-time promoted</strong> (each
+worker runs [<code>promote_current_thread_for_audio_fill</code>] on start) so a CPU-heavy
+screen-share decode/scale/render load can never deschedule the fill — the RT mix
+bus would otherwise find the jitter buffer dry at its 10 ms pull tick and the call
+audibly stutters (<code>mix_starve</code>). The playout (mix) side is already RT; this extends
+the same guarantee to the producer side. “Audio is sacred”: video can freeze, voice
+cannot.</dd><dt><a class="fn" href="fn.broadcast_path.html" title="fn hound_client::call::broadcast_path">broadcast_<wbr>path</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The per-peer broadcast path under the relay token’s <code>space/{id}</code> scope.</dd><dt><a class="fn" href="fn.build_participants.html" title="fn hound_client::call::build_participants">build_<wbr>participants</a></dt><dd>Join <code>peers</code> (the control-plane roster) against the <code>peer_id → user_id</code> map into
+a deterministic (sorted by peer_id) list of <a href="struct.CallParticipant.html" title="struct hound_client::call::CallParticipant"><code>CallParticipant</code></a>. Peers with no
+known identity are simply omitted (the UI falls back to “Peer N”). Shared by the
+call reader (control-plane changes) and the realtime reducer (identity changes).</dd><dt><a class="fn" href="fn.call_runtime.html" title="fn hound_client::call::call_runtime">call_<wbr>runtime</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The runtime every call task is spawned onto.</dd><dt><a class="fn" href="fn.cam_key.html" title="fn hound_client::call::cam_key">cam_key</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.device_view.html" title="fn hound_client::call::device_view">device_<wbr>view</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Map a typed engine <a href="../../hound_engine/api/struct.DeviceDescriptor.html" title="struct hound_engine::api::DeviceDescriptor"><code>DeviceDescriptor</code></a> onto
+the FFI-flat <a href="struct.DeviceView.html" title="struct hound_client::call::DeviceView"><code>DeviceView</code></a> (id as a plain string). The typed ids keep device
+kinds apart inside the engine; the wire stays stringly so one
+<code>call_select_device(kind, id)</code> round-trips all three kinds.</dd><dt><a class="fn" href="fn.encode_screen_source.html" title="fn hound_client::call::encode_screen_source">encode_<wbr>screen_<wbr>source</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Encode the engine’s typed selection token into the opaque <code>"{kind}:{id}"</code> string
+the UI round-trips. Inverse of <a href="fn.parse_screen_source.html" title="fn hound_client::call::parse_screen_source"><code>parse_screen_source</code></a>.</dd><dt><a class="fn" href="fn.inbound_video_kind.html" title="fn hound_client::call::inbound_video_kind">inbound_<wbr>video_<wbr>kind</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Which inbound-video stats bucket a remote video track feeds: a screen source is
+counted as <a href="../stats/enum.InboundVideoKind.html#variant.Screen" title="variant hound_client::stats::InboundVideoKind::Screen"><code>InboundVideoKind::Screen</code></a>, everything else (camera) as <code>Camera</code>. So
+a peer publishing BOTH cam + screen has each tile’s fps/bitrate reported from its
+own track, not the summed total.</dd><dt><a class="fn" href="fn.list_devices.html" title="fn hound_client::call::list_devices">list_<wbr>devices</a></dt><dd>Enumerate the available microphones, cameras, and speakers for the picker. UI-free
+and needs no active call. The engine enumeration is synchronous and may briefly
+touch the host, so the facade runs it on a blocking thread. Best-effort.</dd><dt><a class="fn" href="fn.list_screen_sources.html" title="fn hound_client::call::list_screen_sources">list_<wbr>screen_<wbr>sources</a></dt><dd>Enumerate the shareable screen sources (displays + windows). UI-free + needs no
+active call, so it lives as a free function the facade/FRB call directly. Blocking
+(round-trips ScreenCaptureKit’s async enumeration); a Screen-Recording TCC denial
+or an unsupported platform surfaces as a typed <a href="../error/enum.HoundError.html#variant.Media" title="variant hound_client::error::HoundError::Media"><code>HoundError::Media</code></a>.</dd><dt><a class="fn" href="fn.parse_screen_source.html" title="fn hound_client::call::parse_screen_source">parse_<wbr>screen_<wbr>source</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Parse the opaque <code>"{kind}:{id}"</code> picker token back into the engine’s typed
+<a href="../../hound_engine/types/enum.ScreenSource.html" title="enum hound_engine::types::ScreenSource"><code>ScreenSource</code></a>. Inverse of
+<a href="fn.encode_screen_source.html" title="fn hound_client::call::encode_screen_source"><code>encode_screen_source</code></a>.</dd><dt><a class="fn" href="fn.publish_one.html" title="fn hound_client::call::publish_one">publish_<wbr>one</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.screen_key.html" title="fn hound_client::call::screen_key">screen_<wbr>key</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.screen_thumbnail.html" title="fn hound_client::call::screen_thumbnail">screen_<wbr>thumbnail</a></dt><dd>One-shot preview thumbnail of a screen source for the picker, aspect-fit within
+(<code>max_w</code>, <code>max_h</code>). Best-effort and cross-platform (ScreenCaptureKit on macOS, a
+scap one-shot on Windows/Linux): a capture failure — unsupported platform, a
+permission/portal denial, an undeliverable source — surfaces as a typed
+<a href="../error/enum.HoundError.html#variant.Media" title="variant hound_client::error::HoundError::Media"><code>HoundError::Media</code></a> the picker treats as “no thumbnail” (title-only card).
+Blocking (drives a one-shot engine capture); the facade runs it off-runtime.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.PeerIdentities.html" title="type hound_client::call::PeerIdentities">Peer<wbr>Identities</a></dt><dd>Shared <code>peer_id (u32) → user_id (Uuid)</code> map. Seeded at join from the REST
+<code>VoiceJoin.peers</code> (+ self), then kept current by the realtime voice events
+(<code>VoiceJoined</code>/<code>VoiceState</code>/<code>VoiceLeft</code>). An <code>ArcSwap</code> so the call’s reader task
+reads a cheap snapshot while the realtime reducer task swaps in updates — no lock
+across the media plane. Cleared on call join/leave so identities never leak.</dd><dt><a class="type" href="type.SharedScreenQuality.html" title="type hound_client::call::SharedScreenQuality">Shared<wbr>Screen<wbr>Quality</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The sharer’s live screen-quality preference (motion↔legibility + a resolution/fps
+cap), shared between <a href="struct.CallSession.html#method.set_screen_quality" title="method hound_client::call::CallSession::set_screen_quality"><code>CallSession::set_screen_quality</code></a> (the writer) and the
+running screen adaptation tick (the reader, which <code>set_screen_quality</code>s its ladder
+when it changes). An <code>ArcSwap</code> so the command writes lock-free while the tick reads
+a cheap snapshot. Lives on <a href="session/struct.ConnectionParams.html" title="struct hound_client::call::session::ConnectionParams"><code>ConnectionParams</code></a> so it survives a reconnect (the
+republished share re-seeds its ladder from it).</dd></dl></section></div></main></body></html>

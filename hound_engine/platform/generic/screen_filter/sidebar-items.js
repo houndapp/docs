@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MIN_SHAREABLE_EDGE","NORMAL_WINDOW_LAYER","SYSTEM_BUNDLES"],"fn":["downmix_f32_planar_to_mono_i16","f32_to_i16","fit_even","is_shareable_window","source_rank"],"struct":["WindowMeta"]};

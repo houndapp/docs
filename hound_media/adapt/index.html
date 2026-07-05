@@ -1,0 +1,48 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Sender-side video adaptation (the BWE → encoder glue)"><title>hound_media::adapt - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_media" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module adapt</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../hound_media/index.html">hound_<wbr>media</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module adapt</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#sender-side-video-adaptation-the-bwe--encoder-glue" title="Sender-side video adaptation (the BWE → encoder glue)">Sender-side video adaptation (the BWE → encoder glue)</a><ul><li><a href="#why-these-signals" title="Why these signals">Why these signals</a></li><li><a href="#determinism" title="Determinism">Determinism</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate hound_<wbr>media</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">hound_media</a></div><h1>Module <span>adapt</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/hound_media/adapt.rs.html#1-749">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="sender-side-video-adaptation-the-bwe--encoder-glue"><a class="doc-anchor" href="#sender-side-video-adaptation-the-bwe--encoder-glue">§</a>Sender-side video adaptation (the BWE → encoder glue)</h2>
+<p>The <strong>deterministic, sans-IO</strong> core that turns the signals a publisher can
+observe <em>without any new transport surface</em> into encoder decisions. It wraps
+three <code>hound_media</code> pieces and is the single place the cam-publish path
+consults each tick:</p>
+<ul>
+<li><a href="../congestion/struct.RateController.html" title="struct hound_media::congestion::RateController"><code>RateController</code></a> — loss-based AIMD BWE. Produces a target send bitrate.</li>
+<li><a href="../congestion/struct.QualityLadder.html" title="struct hound_media::congestion::QualityLadder"><code>QualityLadder</code></a> — maps that bitrate to a discrete video <a href="../congestion/struct.Rung.html" title="struct hound_media::congestion::Rung"><code>Rung</code></a> (or
+<a href="../congestion/enum.Quality.html#variant.AudioOnly" title="variant hound_media::congestion::Quality::AudioOnly"><code>Quality::AudioOnly</code></a> when even the lowest rung won’t fit). <em>Audio is
+sacred; video is the release valve.</em></li>
+<li><a href="../keyframe/struct.KeyframeThrottle.html" title="struct hound_media::keyframe::KeyframeThrottle"><code>KeyframeThrottle</code></a> — coalesces a PLI storm into one IDR and spaces forced
+keyframes so a burst of receiver requests can’t spike the bitrate.</li>
+</ul>
+<h3 id="why-these-signals"><a class="doc-anchor" href="#why-these-signals">§</a>Why these signals</h3>
+<p>Real BWE wants receiver-reported loss. <a href="struct.VideoAdaptation.html" title="struct hound_media::adapt::VideoAdaptation"><code>VideoAdaptation</code></a> folds three
+signals into one loss-equivalent each tick:</p>
+<ul>
+<li><strong>Encoder/publisher backpressure.</strong> The capture→publish channel is bounded;
+when the encoder outruns the publisher (a slow/congested uplink) frames are
+dropped at <code>try_send</code>. The dropped-fraction over an interval is a direct,
+local overload signal — it behaves like loss for the AIMD controller.</li>
+<li><strong>RTT.</strong> <code>iroh::endpoint::Connection::rtt</code> is a cheap delay signal. A sharp
+rise over the connection’s own baseline is bufferbloat — congestion before
+outright drops — so we fold an RTT-inflation term into the loss-equivalent.</li>
+<li><strong>Receiver-reported loss.</strong> The receiver→producer feedback loop (the
+<code>MediaFeedback</code>/<code>MediaFeedbackReceived</code> control messages) reports the loss
+fraction each subscriber observes on the downstream leg the relay hides —
+the one signal the sender cannot see locally. When several receivers report,
+the orchestrator pre-reduces to the <strong>worst</strong> leg (serve the worst
+receiver) and passes that single fraction in.</li>
+</ul>
+<p>All three collapse to a single <strong>loss-equivalent fraction</strong> fed to the AIMD
+controller, keeping the controller’s contract (one loss number per interval)
+intact. The mapping is the only policy here.</p>
+<h3 id="determinism"><a class="doc-anchor" href="#determinism">§</a>Determinism</h3>
+<p>Everything here is pure: time enters as <code>now_us</code>, every signal is an explicit
+input, and the only outputs are returned data (<a href="struct.AdaptDecision.html" title="struct hound_media::adapt::AdaptDecision"><code>AdaptDecision</code></a>). No clocks,
+no IO, no threads. The orchestrator samples the live signals and feeds them
+in; this core decides. That keeps the policy unit-testable with synthetic
+signals and no devices (see the tests below).</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.AdaptConfig.html" title="struct hound_media::adapt::AdaptConfig">Adapt<wbr>Config</a></dt><dd>How an RTT rise maps to loss-equivalent. Tuned conservatively: the delay
+signal nudges the controller toward backing off <em>before</em> drops appear, but
+drops (real overload) dominate when both fire.</dd><dt><a class="struct" href="struct.AdaptDecision.html" title="struct hound_media::adapt::AdaptDecision">Adapt<wbr>Decision</a></dt><dd>What the encoder/publisher should do after a tick. Pure data — the
+orchestrator applies it (calls <code>set_bitrate</code>, pauses/resumes publish,
+forces a keyframe).</dd><dt><a class="struct" href="struct.AdaptSignals.html" title="struct hound_media::adapt::AdaptSignals">Adapt<wbr>Signals</a></dt><dd>The signals one publish tick observes. Built by the orchestrator from the
+bounded-channel drop counters, the iroh connection RTT, and (when receivers
+report) the worst receiver-reported loss fraction this interval.</dd><dt><a class="struct" href="struct.VideoAdaptation.html" title="struct hound_media::adapt::VideoAdaptation">Video<wbr>Adaptation</a></dt><dd>Sender-side video adaptation: the BWE controller, the quality ladder, and the
+keyframe throttle behind one sans-IO façade.</dd></dl></section></div></main></body></html>

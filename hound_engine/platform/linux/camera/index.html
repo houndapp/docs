@@ -1,0 +1,69 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="V4L2 camera capturer (Linux)"><title>hound_engine::platform::linux::camera - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module camera</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../hound_engine/index.html">hound_<wbr>engine</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module camera</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#v4l2-camera-capturer-linux" title="V4L2 camera capturer (Linux)">V4L2 camera capturer (Linux)</a><ul><li><a href="#pipeline" title="Pipeline">Pipeline</a></li><li><a href="#format-negotiation-prefer-raw-avoid-a-jpeg-dep" title="Format negotiation (prefer raw, avoid a JPEG dep)">Format negotiation (prefer raw, avoid a JPEG dep)</a></li><li><a href="#typed-errors-never-a-silent-zero-stream" title="Typed errors (never a silent zero stream)">Typed errors (never a silent zero stream)</a></li><li><a href="#threading" title="Threading">Threading</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In hound_<wbr>engine::<wbr>platform::<wbr>linux</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">hound_engine</a>::<wbr><a href="../../index.html">platform</a>::<wbr><a href="../index.html">linux</a></div><h1>Module <span>camera</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/hound_engine/platform/linux/camera.rs.html#1-500">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="v4l2-camera-capturer-linux"><a class="doc-anchor" href="#v4l2-camera-capturer-linux">§</a>V4L2 camera capturer (Linux)</h2>
+<p>The camera <a href="../../../backend/trait.VideoCapture.html" title="trait hound_engine::backend::VideoCapture"><code>VideoCapture</code></a> for Linux, built on <strong>V4L2</strong> via the [<code>v4l</code>]
+crate (safe Rust over the kernel ioctl ABI). It mirrors the AVFoundation
+capturer’s contract exactly so the engine facade treats the two identically:
+construct-is-start, <code>next_frame</code> blocks for the next frame, drop stops the
+stream and releases the device.</p>
+<h3 id="pipeline"><a class="doc-anchor" href="#pipeline">§</a>Pipeline</h3><div class="example-wrap"><pre class="language-text"><code>/dev/videoN ─► Device::with_path ─► enum_formats ─► rank (NV12&gt;YUYV&gt;MJPEG)
+       │                                                   │
+       │            set_format(best @ native size) ◄───────┘
+       │            set_params(1/fps)
+       ▼
+  MmapStream::with_buffers (REQBUFS/QBUF) ── kernel mmap ring
+       │
+  next_frame(): DQBUF ─► convert (YUYV/NV12 → tightly-packed I420)
+                         ─► scale native → encode target (scale_i420)
+                         ─► stamp on CaptureClock ─► RawFrame ── QBUF (recycle)</code></pre></div>
+<p>Unlike AVFoundation (whose delegate fires on an Apple-owned dispatch queue,
+forcing a bounded ring + panic containment across an FFI callback boundary),
+V4L2’s <code>MmapStream::next()</code> is a <strong>blocking pull on our own thread</strong> — there
+is no foreign callback thread, so <code>next_frame</code> simply dequeues, converts, and
+requeues inline. The kernel’s mmap buffer ring (REQBUFS count) is the
+backpressure: if we fall behind, the kernel overwrites the oldest buffer
+(the V4L2 analogue of the AVFoundation drop-oldest policy).</p>
+<h3 id="format-negotiation-prefer-raw-avoid-a-jpeg-dep"><a class="doc-anchor" href="#format-negotiation-prefer-raw-avoid-a-jpeg-dep">§</a>Format negotiation (prefer raw, avoid a JPEG dep)</h3>
+<p>We rank the device’s offered formats with the shared, pure
+<a href="../../generic/camera_format/fn.select_capture_format.html" title="fn hound_engine::platform::generic::camera_format::select_capture_format"><code>select_capture_format</code></a> (NV12 &gt; YUYV &gt; MJPEG). NV12 is a plane
+de-interleave to I420; YUYV is a cheap repack + chroma average — both need no
+extra dependency. A camera that offers <strong>only MJPEG</strong> would need a JPEG
+decoder we deliberately do not pull in, so it surfaces a typed
+<a href="../../../error/enum.CaptureError.html#variant.UnsupportedFormat" title="variant hound_engine::error::CaptureError::UnsupportedFormat"><code>CaptureError::UnsupportedFormat</code></a> naming MJPEG as the follow-up rather than
+silently pulling a dep. (Most UVC webcams offer YUYV alongside MJPEG, so this
+is rare.)</p>
+<h3 id="typed-errors-never-a-silent-zero-stream"><a class="doc-anchor" href="#typed-errors-never-a-silent-zero-stream">§</a>Typed errors (never a silent zero stream)</h3>
+<ul>
+<li><code>EACCES</code> opening the device ⇒ <a href="../../../error/enum.CaptureError.html#variant.PermissionDenied" title="variant hound_engine::error::CaptureError::PermissionDenied"><code>CaptureError::PermissionDenied</code></a> (the user
+is not in the <code>video</code> group / lacks device perms) — distinct from absence.</li>
+<li>No <code>/dev/video*</code> / a vanished named device with no default ⇒
+<a href="../../../error/enum.CaptureError.html#variant.NoDevice" title="variant hound_engine::error::CaptureError::NoDevice"><code>CaptureError::NoDevice</code></a>.</li>
+<li>No convertible format ⇒ <a href="../../../error/enum.CaptureError.html#variant.UnsupportedFormat" title="variant hound_engine::error::CaptureError::UnsupportedFormat"><code>CaptureError::UnsupportedFormat</code></a>.</li>
+<li>Any other ioctl failure ⇒ <a href="../../../error/enum.CaptureError.html#variant.Device" title="variant hound_engine::error::CaptureError::Device"><code>CaptureError::Device</code></a> with the OS error text.</li>
+</ul>
+<h3 id="threading"><a class="doc-anchor" href="#threading">§</a>Threading</h3>
+<p>Like the other capturers it is <code>!Send</code> in our contract: construct, drive
+(<code>next_frame</code>), and drop on the one dedicated capture thread. Drop stops the
+stream (the <code>v4l</code> <code>Stream</code>’s own Drop issues STREAMOFF and unmaps the
+buffers — RAII), so there is no explicit teardown to forget.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.V4l2Camera.html" title="struct hound_engine::platform::linux::camera::V4l2Camera">V4l2<wbr>Camera</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>V4L2 camera backend (Linux). Holds the open device + the running mmap stream;
+pulls a frame per <a href="../../../backend/trait.VideoCapture.html#tymethod.next_frame" title="method hound_engine::backend::VideoCapture::next_frame"><code>VideoCapture::next_frame</code></a>, converts it to I420, and
+scales it to the encode target. Not <code>Send</code> (the V4L2 stream/device are tied
+to this capture thread). Open is construct (<a href="struct.V4l2Camera.html#method.open" title="associated function hound_engine::platform::linux::camera::V4l2Camera::open"><code>Self::open</code></a>); dropping it
+stops the stream (STREAMOFF + unmap, via the <code>v4l</code> <code>Stream</code>’s Drop).</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.MMAP_BUFFER_COUNT.html" title="constant hound_engine::platform::linux::camera::MMAP_BUFFER_COUNT">MMAP_<wbr>BUFFER_<wbr>COUNT</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>How many mmap buffers to request from the kernel. A few frames of slack so a
+brief consumer hiccup does not stall capture, but small (video frames are
+large): a deep queue here is just latency. Matches the AVFoundation ring
+depth (4).</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.build_stream.html" title="fn hound_engine::platform::linux::camera::build_stream">build_<wbr>stream</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Build the mmap capture stream for <code>device</code>.</dd><dt><a class="fn" href="fn.convert_native.html" title="fn hound_engine::platform::linux::camera::convert_native">convert_<wbr>native</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Convert one raw V4L2 buffer (in the negotiated <code>format</code>) to a tightly-packed
+I420 buffer at the <code>native</code> geometry. A free function over snapshotted config
+(not a <code>&amp;self</code> method) so it does not borrow the capturer while the mmap
+buffer slice from <code>stream.next()</code> is still alive (that slice mutably borrows
+<code>self.stream</code>, so any concurrent <code>&amp;self</code> borrow would not type-check).
+<code>None</code> (a skippable frame) on a malformed/short buffer rather than a panic.</dd><dt><a class="fn" href="fn.default_device_path.html" title="fn hound_engine::platform::linux::camera::default_device_path">default_<wbr>device_<wbr>path</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The default camera device path: the lowest-numbered <code>/dev/video*</code> that is a
+capture device. Uses the <code>v4l</code> context enumeration so it matches what the
+kernel reports, falling back to a <code>/dev/video*</code> scan if that yields nothing.</dd><dt><a class="fn" href="fn.enumerate_cameras.html" title="fn hound_engine::platform::linux::camera::enumerate_cameras">enumerate_<wbr>cameras</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Enumerate the connected V4L2 cameras (<code>/dev/video*</code>). Best-effort: returns an
+empty list if nothing is connected; never panics, never opens a stream (so it
+is safe from a blocking pool). The typed <a href="../../../types/struct.CameraId.html" title="struct hound_engine::types::CameraId"><code>CameraId</code></a> is the device PATH
+(stable for a fixed USB port; the human name comes from the driver). Only
+devices that report a video-capture capability are listed (a <code>/dev/videoN</code>
+can be a metadata or output node).</dd><dt><a class="fn" href="fn.format_name.html" title="fn hound_engine::platform::linux::camera::format_name">format_<wbr>name</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Human-readable name for a capture format, for error/log text.</dd><dt><a class="fn" href="fn.map_open_error.html" title="fn hound_engine::platform::linux::camera::map_open_error">map_<wbr>open_<wbr>error</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Map a device-open <code>io::Error</code> to a typed <a href="../../../error/enum.CaptureError.html" title="enum hound_engine::error::CaptureError"><code>CaptureError</code></a>, via the shared
+(host-independent, unit-tested) <a href="../../generic/camera_format/fn.classify_open_errno.html" title="fn hound_engine::platform::generic::camera_format::classify_open_errno"><code>classify_open_errno</code></a>: EACCES ⇒
+PermissionDenied (not in the <code>video</code> group), ENOENT/ENODEV ⇒ NoDevice,
+anything else ⇒ Device with the OS text.</dd></dl></section></div></main></body></html>

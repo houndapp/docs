@@ -1,0 +1,151 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/engine/src/platform/generic/mf_format.rs`."><title>mf_format.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_engine/platform/generic/</div>mf_format.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Media Foundation capture-subtype selection (pure, platform-agnostic)
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! The Windows analogue of [`crate::platform::generic::camera_format`]: the
+<a href=#4 id=4 data-nosnippet>4</a>//! preference ordering the Media Foundation camera backend uses to pick which
+<a href=#5 id=5 data-nosnippet>5</a>//! video subtype to negotiate on an `IMFSourceReader`, expressed purely over
+<a href=#6 id=6 data-nosnippet>6</a>//! the subtype's 16-byte GUID **data** so the ranking — the part most likely to
+<a href=#7 id=7 data-nosnippet>7</a>//! harbour a "we picked a format we can't convert" bug — is unit-tested on
+<a href=#8 id=8 data-nosnippet>8</a>//! every host, INCLUDING this macOS dev box where the Media Foundation capturer
+<a href=#9 id=9 data-nosnippet>9</a>//! itself cannot compile.
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! ## Why GUID bytes, not the `windows` crate's `GUID` type
+<a href=#12 id=12 data-nosnippet>12</a>//!
+<a href=#13 id=13 data-nosnippet>13</a>//! Keeping this module free of any `windows` type is what lets it compile and
+<a href=#14 id=14 data-nosnippet>14</a>//! be tested off-Windows. The Media Foundation video subtype GUIDs all share
+<a href=#15 id=15 data-nosnippet>15</a>//! the fixed tail `00000000-0010-8000-00AA-00389B71` (the "MFVideoFormat"
+<a href=#16 id=16 data-nosnippet>16</a>//! family — a FourCC packed into `Data1`), so a subtype is fully identified by
+<a href=#17 id=17 data-nosnippet>17</a>//! its `Data1` FourCC. We match on the FourCC bytes here and the Windows module
+<a href=#18 id=18 data-nosnippet>18</a>//! maps the chosen [`MfSubtype`] back to the concrete `windows` GUID constant
+<a href=#19 id=19 data-nosnippet>19</a>//! (`MFVideoFormat_NV12`, …) at the one call site.
+<a href=#20 id=20 data-nosnippet>20</a>//!
+<a href=#21 id=21 data-nosnippet>21</a>//! ## Preference order (best first)
+<a href=#22 id=22 data-nosnippet>22</a>//!
+<a href=#23 id=23 data-nosnippet>23</a>//! 1. **NV12** — biplanar 4:2:0, the format MF camera capture and the MFT
+<a href=#24 id=24 data-nosnippet>24</a>//!    H.264 encoder both speak natively; the cheapest path to tightly-packed
+<a href=#25 id=25 data-nosnippet>25</a>//!    I420 (a plane de-interleave, no colour math), reusing the exact
+<a href=#26 id=26 data-nosnippet>26</a>//!    `nv12_bytes_to_i420` the AVFoundation/V4L2 paths use.
+<a href=#27 id=27 data-nosnippet>27</a>//! 2. **YUY2** — packed 4:2:2 (the Windows name for YUYV), the near-universal
+<a href=#28 id=28 data-nosnippet>28</a>//!    UVC webcam format; a repack + chroma reduction to I420 with no decoder
+<a href=#29 id=29 data-nosnippet>29</a>//!    (the same `yuyv_to_i420`).
+<a href=#30 id=30 data-nosnippet>30</a>//!
+<a href=#31 id=31 data-nosnippet>31</a>//! MJPEG and other compressed subtypes are intentionally NOT ranked: unlike the
+<a href=#32 id=32 data-nosnippet>32</a>//! V4L2 path (where the kernel hands a `MmapStream` of whatever raw format), the
+<a href=#33 id=33 data-nosnippet>33</a>//! MF source reader can be asked to deliver NV12/YUY2 directly and will insert
+<a href=#34 id=34 data-nosnippet>34</a>//! its own decoder/converter MFT for most cameras, so we always request a raw
+<a href=#35 id=35 data-nosnippet>35</a>//! subtype and let MF satisfy it. A camera MF cannot serve as NV12 *or* YUY2
+<a href=#36 id=36 data-nosnippet>36</a>//! surfaces as a typed `UnsupportedFormat` at open, never a silent path.
+<a href=#37 id=37 data-nosnippet>37</a>
+<a href=#38 id=38 data-nosnippet>38</a></span><span class="comment">// Pure logic consumed by the Windows MF capturer (cfg(windows)); on non-Windows
+<a href=#39 id=39 data-nosnippet>39</a>// the only consumer is the test module below, so the items read as dead — allow
+<a href=#40 id=40 data-nosnippet>40</a>// it rather than gate, exactly so the ranking is provable on this dev box.
+<a href=#41 id=41 data-nosnippet>41</a></span><span class="attr">#![cfg_attr(not(target_os = <span class="string">"windows"</span>), allow(dead_code))]
+<a href=#42 id=42 data-nosnippet>42</a>
+<a href=#43 id=43 data-nosnippet>43</a></span><span class="doccomment">/// A Media Foundation video subtype the engine knows how to turn into I420,
+<a href=#44 id=44 data-nosnippet>44</a>/// ordered by how cheaply it converts (the `Ord` derive ranks `Nv12 &lt; Yuy2`,
+<a href=#45 id=45 data-nosnippet>45</a>/// i.e. NV12 is "smallest"/best — preferred = the minimum, mirroring
+<a href=#46 id=46 data-nosnippet>46</a>/// [`crate::platform::generic::camera_format::CaptureFormat`]).
+<a href=#47 id=47 data-nosnippet>47</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+<a href=#48 id=48 data-nosnippet>48</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>MfSubtype {
+<a href=#49 id=49 data-nosnippet>49</a>    <span class="doccomment">/// Biplanar YUV 4:2:0 (`MFVideoFormat_NV12`). Best: a plane de-interleave
+<a href=#50 id=50 data-nosnippet>50</a>    /// to I420, no colour conversion — the same `nv12_bytes_to_i420` path the
+<a href=#51 id=51 data-nosnippet>51</a>    /// AVFoundation and V4L2 capturers use.
+<a href=#52 id=52 data-nosnippet>52</a>    </span>Nv12,
+<a href=#53 id=53 data-nosnippet>53</a>    <span class="doccomment">/// Packed YUV 4:2:2 (`MFVideoFormat_YUY2`, the Windows name for YUYV). The
+<a href=#54 id=54 data-nosnippet>54</a>    /// common UVC format: a repack + chroma reduction to I420 via `yuyv_to_i420`.
+<a href=#55 id=55 data-nosnippet>55</a>    </span>Yuy2,
+<a href=#56 id=56 data-nosnippet>56</a>}
+<a href=#57 id=57 data-nosnippet>57</a>
+<a href=#58 id=58 data-nosnippet>58</a><span class="kw">impl </span>MfSubtype {
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="doccomment">/// The subtype's `Data1` FourCC — the 4 bytes (little-endian within the
+<a href=#60 id=60 data-nosnippet>60</a>    /// GUID's `Data1`, i.e. the ASCII FourCC in memory order) that identify it
+<a href=#61 id=61 data-nosnippet>61</a>    /// within the `MFVideoFormat` GUID family. The Windows module compares these
+<a href=#62 id=62 data-nosnippet>62</a>    /// against an enumerated media type's subtype `Data1` to recognise it, and
+<a href=#63 id=63 data-nosnippet>63</a>    /// maps the chosen variant to the concrete `windows` GUID constant.
+<a href=#64 id=64 data-nosnippet>64</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const fn </span>fourcc(<span class="self">self</span>) -&gt; [u8; <span class="number">4</span>] {
+<a href=#65 id=65 data-nosnippet>65</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#66 id=66 data-nosnippet>66</a>            MfSubtype::Nv12 =&gt; <span class="kw-2">*</span><span class="string">b"NV12"</span>,
+<a href=#67 id=67 data-nosnippet>67</a>            MfSubtype::Yuy2 =&gt; <span class="kw-2">*</span><span class="string">b"YUY2"</span>,
+<a href=#68 id=68 data-nosnippet>68</a>        }
+<a href=#69 id=69 data-nosnippet>69</a>    }
+<a href=#70 id=70 data-nosnippet>70</a>
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="doccomment">/// Recognise a subtype by its FourCC (the GUID `Data1`, read as 4 ASCII
+<a href=#72 id=72 data-nosnippet>72</a>    /// bytes in memory order). `None` for subtypes the engine cannot convert
+<a href=#73 id=73 data-nosnippet>73</a>    /// directly (so they are never selected — MF is asked for a raw subtype and
+<a href=#74 id=74 data-nosnippet>74</a>    /// inserts its own decoder for compressed cameras).
+<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>from_fourcc(fourcc: [u8; <span class="number">4</span>]) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">match </span><span class="kw-2">&amp;</span>fourcc {
+<a href=#77 id=77 data-nosnippet>77</a>            <span class="string">b"NV12" </span>=&gt; <span class="prelude-val">Some</span>(MfSubtype::Nv12),
+<a href=#78 id=78 data-nosnippet>78</a>            <span class="string">b"YUY2" </span>=&gt; <span class="prelude-val">Some</span>(MfSubtype::Yuy2),
+<a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#80 id=80 data-nosnippet>80</a>        }
+<a href=#81 id=81 data-nosnippet>81</a>    }
+<a href=#82 id=82 data-nosnippet>82</a>}
+<a href=#83 id=83 data-nosnippet>83</a>
+<a href=#84 id=84 data-nosnippet>84</a><span class="doccomment">/// Pick the best subtype to *request* from the source reader, applying the
+<a href=#85 id=85 data-nosnippet>85</a>/// preference order (NV12 &gt; YUY2). This is the request preference, independent
+<a href=#86 id=86 data-nosnippet>86</a>/// of what the camera natively offers: MF will convert most cameras to the
+<a href=#87 id=87 data-nosnippet>87</a>/// requested raw subtype via an inserted MFT. The Windows backend tries these
+<a href=#88 id=88 data-nosnippet>88</a>/// in order and takes the first the reader accepts.
+<a href=#89 id=89 data-nosnippet>89</a>///
+<a href=#90 id=90 data-nosnippet>90</a>/// Returned as a fixed slice (best first) so the caller iterates request
+<a href=#91 id=91 data-nosnippet>91</a>/// attempts deterministically.
+<a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const fn </span>request_order() -&gt; [MfSubtype; <span class="number">2</span>] {
+<a href=#93 id=93 data-nosnippet>93</a>    [MfSubtype::Nv12, MfSubtype::Yuy2]
+<a href=#94 id=94 data-nosnippet>94</a>}
+<a href=#95 id=95 data-nosnippet>95</a>
+<a href=#96 id=96 data-nosnippet>96</a><span class="doccomment">/// Given the FourCCs a camera's native media types advertise, pick the best one
+<a href=#97 id=97 data-nosnippet>97</a>/// we can convert — the fallback used when the reader will not transcode to a
+<a href=#98 id=98 data-nosnippet>98</a>/// requested subtype and we must instead accept a native one. Mirrors
+<a href=#99 id=99 data-nosnippet>99</a>/// [`crate::platform::generic::camera_format::select_capture_format`]: ignores
+<a href=#100 id=100 data-nosnippet>100</a>/// unrecognised subtypes, `None` when nothing is convertible.
+<a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>select_native_subtype(offered: <span class="kw-2">&amp;</span>[[u8; <span class="number">4</span>]]) -&gt; <span class="prelude-ty">Option</span>&lt;MfSubtype&gt; {
+<a href=#102 id=102 data-nosnippet>102</a>    offered
+<a href=#103 id=103 data-nosnippet>103</a>        .iter()
+<a href=#104 id=104 data-nosnippet>104</a>        .filter_map(|<span class="kw-2">&amp;</span>fourcc| MfSubtype::from_fourcc(fourcc))
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="comment">// `Ord` makes NV12 the minimum (best); pick the most-preferred offered.
+<a href=#106 id=106 data-nosnippet>106</a>        </span>.min()
+<a href=#107 id=107 data-nosnippet>107</a>}
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a><span class="attr">#[cfg(test)]
+<a href=#110 id=110 data-nosnippet>110</a></span><span class="kw">mod </span>tests {
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#112 id=112 data-nosnippet>112</a>
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="attr">#[test]
+<a href=#114 id=114 data-nosnippet>114</a>    </span><span class="kw">fn </span>request_order_is_nv12_then_yuy2() {
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="macro">assert_eq!</span>(request_order(), [MfSubtype::Nv12, MfSubtype::Yuy2]);
+<a href=#116 id=116 data-nosnippet>116</a>    }
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="attr">#[test]
+<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">fn </span>fourcc_round_trips() {
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">for </span>sub <span class="kw">in </span>[MfSubtype::Nv12, MfSubtype::Yuy2] {
+<a href=#121 id=121 data-nosnippet>121</a>            <span class="macro">assert_eq!</span>(MfSubtype::from_fourcc(sub.fourcc()), <span class="prelude-val">Some</span>(sub));
+<a href=#122 id=122 data-nosnippet>122</a>        }
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="attr">#[test]
+<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="kw">fn </span>nv12_outranks_yuy2() {
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="comment">// The `Ord` derive: NV12 is the minimum (best).
+<a href=#128 id=128 data-nosnippet>128</a>        </span><span class="macro">assert!</span>(MfSubtype::Nv12 &lt; MfSubtype::Yuy2);
+<a href=#129 id=129 data-nosnippet>129</a>    }
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="attr">#[test]
+<a href=#132 id=132 data-nosnippet>132</a>    </span><span class="kw">fn </span>select_native_prefers_nv12_then_yuy2_ignores_rest() {
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="comment">// Both offered → NV12 wins.
+<a href=#134 id=134 data-nosnippet>134</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#135 id=135 data-nosnippet>135</a>            select_native_subtype(<span class="kw-2">&amp;</span>[<span class="kw-2">*</span><span class="string">b"YUY2"</span>, <span class="kw-2">*</span><span class="string">b"NV12"</span>]),
+<a href=#136 id=136 data-nosnippet>136</a>            <span class="prelude-val">Some</span>(MfSubtype::Nv12)
+<a href=#137 id=137 data-nosnippet>137</a>        );
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="comment">// NV12 absent → YUY2.
+<a href=#139 id=139 data-nosnippet>139</a>        </span><span class="macro">assert_eq!</span>(select_native_subtype(<span class="kw-2">&amp;</span>[<span class="kw-2">*</span><span class="string">b"YUY2"</span>]), <span class="prelude-val">Some</span>(MfSubtype::Yuy2));
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="comment">// Unrecognised (e.g. MJPG / RGB24) ignored; nothing convertible → None.
+<a href=#141 id=141 data-nosnippet>141</a>        </span><span class="macro">assert_eq!</span>(select_native_subtype(<span class="kw-2">&amp;</span>[<span class="kw-2">*</span><span class="string">b"MJPG"</span>, <span class="kw-2">*</span><span class="string">b"RGB3"</span>]), <span class="prelude-val">None</span>);
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="comment">// One convertible among junk → that one.
+<a href=#143 id=143 data-nosnippet>143</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#144 id=144 data-nosnippet>144</a>            select_native_subtype(<span class="kw-2">&amp;</span>[<span class="kw-2">*</span><span class="string">b"MJPG"</span>, <span class="kw-2">*</span><span class="string">b"YUY2"</span>, <span class="kw-2">*</span><span class="string">b"H264"</span>]),
+<a href=#145 id=145 data-nosnippet>145</a>            <span class="prelude-val">Some</span>(MfSubtype::Yuy2)
+<a href=#146 id=146 data-nosnippet>146</a>        );
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="comment">// Empty → None.
+<a href=#148 id=148 data-nosnippet>148</a>        </span><span class="macro">assert_eq!</span>(select_native_subtype(<span class="kw-2">&amp;</span>[]), <span class="prelude-val">None</span>);
+<a href=#149 id=149 data-nosnippet>149</a>    }
+<a href=#150 id=150 data-nosnippet>150</a>}
+</code></pre></div></section></main></body></html>

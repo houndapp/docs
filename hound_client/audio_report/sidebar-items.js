@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GLITCH_LOG_LINES","JITTER_HIGH_MS","LOSS_HIGH_PCT","SHALLOW_RATIO","TICK_LATE_HIGH_MS"],"enum":["Verdict"],"fn":["audio_active","audio_report","backlogged","buffered_ms","diagnose","jitterbuf_shallow","loss_pct","streams","write_audio_stage"]};

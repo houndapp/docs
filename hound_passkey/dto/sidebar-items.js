@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["openapi"],"struct":["FinishLoginRequest","FinishLoginResponse","FinishRegisterRequest","ProfileResponse","PublicKeyCredentialCreationOptionsJSON","PublicKeyCredentialRequestOptionsJSON","StartLoginRequest","StartLoginResponse","StartRegisterRequest","StartRegisterResponse"],"type":["FinishRegisterResponse"]};

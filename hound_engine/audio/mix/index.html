@@ -1,0 +1,153 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Mixed-playout audio bus — one device stream + one coherent AEC reference"><title>hound_engine::audio::mix - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module mix</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../hound_engine/index.html">hound_<wbr>engine</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module mix</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#mixed-playout-audio-bus--one-device-stream--one-coherent-aec-reference" title="Mixed-playout audio bus — one device stream + one coherent AEC reference">Mixed-playout audio bus — one device stream + one coherent AEC reference</a><ul><li><a href="#the-tick-model-pull-based-the-rt-thread-is-the-sole-release-clock" title="The tick model (PULL-based: the RT thread is the sole release clock)">The tick model (PULL-based: the RT thread is the sole release clock)</a></li><li><a href="#registration--bounds" title="Registration + bounds">Registration + bounds</a></li><li><a href="#hot-swap--vanish--reopen" title="Hot-swap / vanish / reopen">Hot-swap / vanish / reopen</a></li><li><a href="#send-discipline" title="`!Send` discipline"><code>!Send</code> discipline</a></li><li><a href="#decoupling" title="Decoupling">Decoupling</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#functions" title="Functions">Functions</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In hound_<wbr>engine::<wbr>audio</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">hound_engine</a>::<wbr><a href="../index.html">audio</a></div><h1>Module <span>mix</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/hound_engine/audio/mix.rs.html#1-1803">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="mixed-playout-audio-bus--one-device-stream--one-coherent-aec-reference"><a class="doc-anchor" href="#mixed-playout-audio-bus--one-device-stream--one-coherent-aec-reference">§</a>Mixed-playout audio bus — one device stream + one coherent AEC reference</h2>
+<p>All remote peers play through ONE mixed output stream. Echo cancellation
+requires it: <a href="../apm/struct.Apm.html#method.process_render" title="method hound_engine::audio::apm::Apm::process_render"><code>Apm::process_render</code></a> must be fed the one coherent stream the
+speaker actually plays — interleaving independent per-peer render references
+corrupts AEC3’s canceller for any N&gt;1. A single mixed playout makes the
+render reference exact for any N by construction, and halves the device
+handles (one stream per call, not one per peer).</p>
+<h3 id="the-tick-model-pull-based-the-rt-thread-is-the-sole-release-clock"><a class="doc-anchor" href="#the-tick-model-pull-based-the-rt-thread-is-the-sole-release-clock">§</a>The tick model (PULL-based: the RT thread is the sole release clock)</h3>
+<p>One dedicated playback thread per call owns the single <a href="../../platform/generic/cpal_io/struct.CpalPlayback.html" title="struct hound_engine::platform::generic::cpal_io::CpalPlayback"><code>CpalPlayback</code></a>. It
+ticks on a <strong>wall-clock 10 ms cadence</strong> (the APM chunk size,
+<a href="constant.MIX_CHUNK_SAMPLES.html" title="constant hound_engine::audio::mix::MIX_CHUNK_SAMPLES"><code>MIX_CHUNK_SAMPLES</code></a>) — driven by the OUTPUT side, never by peer frame
+arrival, because the cpal ring absorbs the jitter between the tick and the
+DAC. On each tick the bus, for EACH registered producer:</p>
+<ol>
+<li><strong>pops every due frame from that peer’s jitter buffer</strong> on its OWN
+real-time clock — <code>playout.pop_due(clock.now() + lookahead)</code> — appending the
+released PCM to the slot’s sample carry-queue, then drains up to
+<a href="constant.MIX_CHUNK_SAMPLES.html" title="constant hound_engine::audio::mix::MIX_CHUNK_SAMPLES"><code>MIX_CHUNK_SAMPLES</code></a> from the carry,</li>
+<li><strong>sums</strong> the producers sample-for-sample in <strong>i32</strong> then <strong>saturating-clamps
+to i16</strong> (no wrap distortion on overload),</li>
+<li>feeds the MIXED 10 ms chunk to <a href="../apm/struct.Apm.html#method.process_render" title="method hound_engine::audio::apm::Apm::process_render"><code>Apm::process_render</code></a> <strong>once</strong> (the single
+coherent reference), and</li>
+<li>pushes the mixed chunk to the <a href="../../platform/generic/cpal_io/struct.CpalPlayback.html" title="struct hound_engine::platform::generic::cpal_io::CpalPlayback"><code>CpalPlayback</code></a> ring.</li>
+</ol>
+<h4 id="why-pull-not-push"><a class="doc-anchor" href="#why-pull-not-push">§</a>Why pull, not push</h4>
+<p>A push design — a per-peer pump task (a normal async task) calling <code>pop_due</code>
+and PUSHING samples into the slot for this RT thread to drain — puts a
+<strong>second, non-real-time scheduler on the release path</strong>: under video-encode
+load the pump gets descheduled, feeds its slot late, and the RT drain finds
+the slot short — an audible per-peer gap (<code>mix_starves</code>) with the device ring
+still full (<code>output_underruns == 0</code>). No slot lead or cushion can fix that,
+because the producer’s <em>timing</em> is the variable. Pull — the RT thread is the
+ONLY thing that calls <code>pop_due</code>, on its own steady clock — removes that
+scheduler from the release path entirely. The pump’s sole job is to FILL
+the jitter buffer (network-paced; its scheduling never affects playout),
+and the jitter buffer IS the cushion that absorbs the pump’s arrival jitter.
+Both push (pump) and pop (this thread) read the same <code>Copy</code> <a href="../../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock"><code>CaptureClock</code></a>,
+so the buffer’s sender→local timeline mapping is consistent across the two
+threads.</p>
+<p>When <strong>zero</strong> producers are registered the bus STILL ticks (pushing silence),
+so the device stream and the AEC reference stay warm for the whole call —
+AEC3’s delay/echo state does not have to re-converge each time the room goes
+briefly quiet or the last peer’s pipeline is mid-rebuild.</p>
+<h3 id="registration--bounds"><a class="doc-anchor" href="#registration--bounds">§</a>Registration + bounds</h3>
+<p>A per-peer pipeline, instead of owning a playback thread, registers a
+<a href="struct.BusProducer.html" title="struct hound_engine::audio::mix::BusProducer"><code>BusProducer</code></a> and PUSHES its decoded, timestamped PCM into the slot’s jitter
+buffer via <a href="struct.BusProducer.html#method.push" title="method hound_engine::audio::mix::BusProducer::push"><code>BusProducer::push</code></a> (which also folds the arrival into the slot’s
+<a href="../../../hound_media/jitter/struct.AdaptiveJitter.html" title="struct hound_media::jitter::AdaptiveJitter"><code>AdaptiveJitter</code></a> and reports back the depth/jitter for stats). The RT thread
+pulls from that buffer. The jitter buffer is bounded (drop-oldest at its frame
+cap) and the sample carry-queue is bounded to ~100 ms (<a href="constant.SLOT_CAPACITY_SAMPLES.html" title="constant hound_engine::audio::mix::SLOT_CAPACITY_SAMPLES"><code>SLOT_CAPACITY_SAMPLES</code></a>)
+drop-oldest, so one stalled or runaway peer can never grow the bus’s memory.
+Dropping a <a href="struct.BusProducer.html" title="struct hound_engine::audio::mix::BusProducer"><code>BusProducer</code></a> (its pipeline torn down / aborted) unregisters its
+slot from the bus, so a left peer stops contributing to the mix with no explicit
+teardown call.</p>
+<h3 id="hot-swap--vanish--reopen"><a class="doc-anchor" href="#hot-swap--vanish--reopen">§</a>Hot-swap / vanish / reopen</h3>
+<p>The bus thread owns the speaker <a href="../../types/enum.DeviceChoice.html" title="enum hound_engine::types::DeviceChoice"><code>DeviceChoice</code></a> hot-swap, the vanished-device
+fallback (handled inside [<code>CpalPlayback::start</code>]), and the reopen backoff —
+in ONE place targeting the ONE stream. <code>call_set_speaker</code> nudges the shared <code>watch</code> sender;
+the bus thread re-opens the single device in place without disturbing the mix.</p>
+<h3 id="send-discipline"><a class="doc-anchor" href="#send-discipline">§</a><code>!Send</code> discipline</h3>
+<p><code>cpal::Stream</code> is <code>!Send</code> on CoreAudio, so the <a href="../../platform/generic/cpal_io/struct.CpalPlayback.html" title="struct hound_engine::platform::generic::cpal_io::CpalPlayback"><code>CpalPlayback</code></a> is constructed,
+driven, and dropped on the bus’s own thread and never crosses a thread
+boundary. Producers (<code>Send</code>/<code>Sync</code>) only ever touch the bounded slot queues.</p>
+<h3 id="decoupling"><a class="doc-anchor" href="#decoupling">§</a>Decoupling</h3>
+<p>This module is deliberately free of session-specific types: it takes raw mono
+i16 PCM (<code>&amp;[i16]</code>) in and plain handles out. The only audio dependencies are
+<a href="../apm/struct.Apm.html" title="struct hound_engine::audio::apm::Apm"><code>Apm</code></a> (the render-reference sink) and <a href="../../platform/generic/cpal_io/struct.CpalPlayback.html" title="struct hound_engine::platform::generic::cpal_io::CpalPlayback"><code>CpalPlayback</code></a> (the device), both
+behind narrow calls.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.AudioGlitch.html" title="struct hound_engine::audio::mix::AudioGlitch">Audio<wbr>Glitch</a></dt><dd>One discrete audio-glitch event captured at the instant it happened in the RT mix
+loop. The client drains these into a rolling history the debug report renders as a
+timestamped, cause-attributed glitch log.</dd><dt><a class="struct" href="struct.BusProducer.html" title="struct hound_engine::audio::mix::BusProducer">BusProducer</a></dt><dd>A handle a per-peer pipeline holds to push its decoded PCM into the mix. Pushing
+is non-blocking and bounded (the jitter buffer + the ~100 ms carry are both
+drop-oldest). Dropping the handle unregisters the producer’s slot from the bus
+(so a torn-down peer stops contributing with no explicit call) — the Drop-safe
+teardown the ghost discipline requires.</dd><dt><a class="struct" href="struct.MixFrame.html" title="struct hound_engine::audio::mix::MixFrame">MixFrame</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>One decoded audio frame in a slot’s jitter buffer: the sender’s capture-clock
+timestamp (for playout scheduling) plus its 48 kHz mono PCM. The pump pushes
+these; the RT thread pops the due ones into the carry-queue.</dd><dt><a class="struct" href="struct.PlayoutBus.html" title="struct hound_engine::audio::mix::PlayoutBus">Playout<wbr>Bus</a></dt><dd>The mixed-playout bus for one call. Owns the dedicated playback thread (which
+owns the single <a href="../../platform/generic/cpal_io/struct.CpalPlayback.html" title="struct hound_engine::platform::generic::cpal_io::CpalPlayback"><code>CpalPlayback</code></a> and runs the 10 ms mix tick) and the producer
+registry. Per-peer pipelines <a href="struct.PlayoutBus.html#method.register" title="method hound_engine::audio::mix::PlayoutBus::register"><code>register</code></a> a <a href="struct.BusProducer.html" title="struct hound_engine::audio::mix::BusProducer"><code>BusProducer</code></a> and
+push their due PCM into it; the bus sums them, feeds the mixed chunk to the APM
+render reference once, and plays it.</dd><dt><a class="struct" href="struct.PlayoutState.html" title="struct hound_engine::audio::mix::PlayoutState">Playout<wbr>State</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The per-peer jitter state the PUMP mutates (push) and the RT thread reads (pop),
+behind one mutex held only for the bounded buffer op. Owning the
+<a href="../../../hound_media/jitter/struct.AdaptiveJitter.html" title="struct hound_media::jitter::AdaptiveJitter"><code>AdaptiveJitter</code></a> here keeps push (fold arrival → retarget depth) and pop (the
+release schedule) operating on one consistent buffer under one lock.</dd><dt><a class="struct" href="struct.PullOutcome.html" title="struct hound_engine::audio::mix::PullOutcome">Pull<wbr>Outcome</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>What <a href="struct.Slot.html#method.pull_into" title="method hound_engine::audio::mix::Slot::pull_into"><code>Slot::pull_into</code></a> reports back to the bus loop for one tick.</dd><dt><a class="struct" href="struct.PushStatus.html" title="struct hound_engine::audio::mix::PushStatus">Push<wbr>Status</a></dt><dd>What a <a href="struct.BusProducer.html#method.push" title="method hound_engine::audio::mix::BusProducer::push"><code>BusProducer::push</code></a> reports back so the caller can surface per-peer
+audio-health stats without a second lock — everything the debug report needs to
+attribute a glitch to the jitter-buffer stage.</dd><dt><a class="struct" href="struct.Registry.html" title="struct hound_engine::audio::mix::Registry">Registry</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The set of live producer slots, shared between the bus thread (which iterates
+it every tick) and <code>register</code>/<code>unregister</code> (called from the async subscribe
+loop as peers come and go). A <code>std::sync::Mutex</code> is right: the critical section
+is a <code>HashMap</code> insert/remove or a cheap clone of the slot <code>Arc</code>s, never held
+across IO.</dd><dt><a class="struct" href="struct.Slot.html" title="struct hound_engine::audio::mix::Slot">Slot</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>One producer’s per-peer slot. The PUMP pushes decoded, timestamped PCM into
+<code>state.buffer</code> (the jitter buffer); the BUS THREAD pops the due frames on its
+own real-time clock into <code>carry</code> and drains <a href="constant.MIX_CHUNK_SAMPLES.html" title="constant hound_engine::audio::mix::MIX_CHUNK_SAMPLES"><code>MIX_CHUNK_SAMPLES</code></a> per tick. The
+two mutexes are each held only for a bounded op, never across IO; the producer
+is the async per-peer pump, the consumer is the bus’s own thread (neither is a
+cpal RT callback).</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.GlitchKind.html" title="enum hound_engine::audio::mix::GlitchKind">Glitch<wbr>Kind</a></dt><dd>What an <a href="struct.AudioGlitch.html" title="struct hound_engine::audio::mix::AudioGlitch"><code>AudioGlitch</code></a> is — the discrete audible-gap events the bus records, each
+already attributed to a stage so the debug report reads a cause, not a raw count.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.GLITCH_RING_CAP.html" title="constant hound_engine::audio::mix::GLITCH_RING_CAP">GLITCH_<wbr>RING_<wbr>CAP</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Max glitch events the bus retains between drains (bounded, drop-oldest). The
+client drains every stats window (1 Hz), so this only needs one window’s events
+plus headroom.</dd><dt><a class="constant" href="constant.MIX_CHUNK_SAMPLES.html" title="constant hound_engine::audio::mix::MIX_CHUNK_SAMPLES">MIX_<wbr>CHUNK_<wbr>SAMPLES</a></dt><dd>Samples in one mix tick: 10 ms @ 48 kHz mono = <strong>480</strong>. Identical to the APM’s
+native chunk (<a href="../apm/constant.APM_FRAME_SAMPLES.html" title="constant hound_engine::audio::apm::APM_FRAME_SAMPLES"><code>APM_FRAME_SAMPLES</code></a>) so the mixed chunk feeds <code>process_render</code>
+as exactly one block, and the tick cadence matches the canceller’s frame size.</dd><dt><a class="constant" href="constant.MIX_PULL_LOOKAHEAD_US.html" title="constant hound_engine::audio::mix::MIX_PULL_LOOKAHEAD_US">MIX_<wbr>PULL_<wbr>LOOKAHEAD_<wbr>US</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>How far PAST strictly-due the RT thread pops each tick: exactly one <a href="constant.MIX_TICK.html" title="constant hound_engine::audio::mix::MIX_TICK"><code>MIX_TICK</code></a>
+(10 ms). A 20 ms audio frame spans two 10 ms ticks, so its due-instant lands
+between ticks for some phase offsets; a one-tick lookahead releases the next
+frame into the carry-queue <em>before</em> the carry can bottom out, so the slot
+always has a full chunk to drain regardless of how the frame-due phase aligns
+to the tick grid. Because the RT thread (not the pump) owns this read, the
+lookahead is immune to producer scheduling — it just smooths the frame/tick
+phase. Net latency is unchanged: a frame released <code>lookahead</code> early simply
+waits that long in the carry-queue instead of the jitter buffer.</dd><dt><a class="constant" href="constant.MIX_TICK.html" title="constant hound_engine::audio::mix::MIX_TICK">MIX_<wbr>TICK</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The wall-clock period the bus thread ticks at: 10 ms, matching
+<a href="constant.MIX_CHUNK_SAMPLES.html" title="constant hound_engine::audio::mix::MIX_CHUNK_SAMPLES"><code>MIX_CHUNK_SAMPLES</code></a> at 48 kHz. Output-side cadence — the cpal ring absorbs
+the difference between this and the DAC’s real pull timing.</dd><dt><a class="constant" href="constant.MIX_TICK_MS.html" title="constant hound_engine::audio::mix::MIX_TICK_MS">MIX_<wbr>TICK_<wbr>MS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><a href="constant.MIX_TICK.html" title="constant hound_engine::audio::mix::MIX_TICK"><code>MIX_TICK</code></a> in milliseconds — the chunk duration the output cushion is counted in.</dd><dt><a class="constant" href="constant.NO_PEER_TAG.html" title="constant hound_engine::audio::mix::NO_PEER_TAG">NO_<wbr>PEER_<wbr>TAG</a></dt><dd>A sentinel <code>peer_tag</code> for a producer registered without attribution (the plain
+<a href="struct.PlayoutBus.html#method.register" title="method hound_engine::audio::mix::PlayoutBus::register"><code>PlayoutBus::register</code></a>) or a bus-global event (a late tick) — the glitch is
+recorded but not tied to a specific peer.</dd><dt><a class="constant" href="constant.OUTPUT_CUSHION_MS.html" title="constant hound_engine::audio::mix::OUTPUT_CUSHION_MS">OUTPUT_<wbr>CUSHION_<wbr>MS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Target depth of the output device ring the bus keeps filled (~3 chunks). The
+device drains the ring on its hardware clock while this thread refills it on a
+software clock; without a cushion the ring sits at ~0 and underruns on the
+slightest pacing jitter (or when encode load deschedules this thread). 30 ms
+absorbs normal jitter at a small, constant added output latency (AEC3 tolerates
+the fixed delay); the thread-priority promotion handles longer stalls.</dd><dt><a class="constant" href="constant.REOPEN_BACKOFF.html" title="constant hound_engine::audio::mix::REOPEN_BACKOFF">REOPEN_<wbr>BACKOFF</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Initial rate-limit on device-reopen attempts when no speaker is open (a down
+device must not hammer <code>start</code> every tick); first retry after ~500 ms.</dd><dt><a class="constant" href="constant.REOPEN_BACKOFF_MAX.html" title="constant hound_engine::audio::mix::REOPEN_BACKOFF_MAX">REOPEN_<wbr>BACKOFF_<wbr>MAX</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Ceiling for the reopen backoff. A <em>persistently</em> unavailable output device
+(e.g. an ALSA <code>hw:</code> held exclusively by another process on Linux — where each
+failed open/close churn can itself prolong the <code>EBUSY</code>) must not retry at
+2 Hz forever, flooding the log and thrashing the device. The interval doubles
+from <a href="constant.REOPEN_BACKOFF.html" title="constant hound_engine::audio::mix::REOPEN_BACKOFF"><code>REOPEN_BACKOFF</code></a> up to this cap, then holds — a slow heartbeat that
+still recovers automatically once the device frees, without the storm.</dd><dt><a class="constant" href="constant.SLOT_CAPACITY_SAMPLES.html" title="constant hound_engine::audio::mix::SLOT_CAPACITY_SAMPLES">SLOT_<wbr>CAPACITY_<wbr>SAMPLES</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Per-producer slot bound: ~100 ms of 48 kHz mono audio (4800 samples). A
+drop-oldest policy keeps a stalled/runaway peer from growing the bus’s memory;
+100 ms is ~5 mix chunks of slack, enough to ride out a scheduling hiccup
+without unbounded growth.</dd><dt><a class="constant" href="constant.TICK_LATE_GLITCH_US.html" title="constant hound_engine::audio::mix::TICK_LATE_GLITCH_US">TICK_<wbr>LATE_<wbr>GLITCH_<wbr>US</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>A mix tick this late (µs) or more is recorded as a <a href="enum.GlitchKind.html#variant.LateTick" title="variant hound_engine::audio::mix::GlitchKind::LateTick"><code>GlitchKind::LateTick</code></a>. Half a
+tick (5 ms) — below this is ordinary scheduler noise the output cushion absorbs;
+above it the RT feeder genuinely slipped and the device ring risks draining.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.chunk_to_frame.html" title="fn hound_engine::audio::mix::chunk_to_frame">chunk_<wbr>to_<wbr>frame</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Wrap a mixed 10 ms chunk in the <a href="../../types/struct.PcmFrame.html" title="struct hound_engine::types::PcmFrame"><code>PcmFrame</code></a> shape the output sink and
+<code>Apm::process_render</code> take. The timestamp is unused on the render/playout side
+(the APM render path ignores it; the cpal ring is time-agnostic), so 0 is fine.</dd><dt><a class="fn" href="fn.cpal_sink_factory.html" title="fn hound_engine::audio::mix::cpal_sink_factory">cpal_<wbr>sink_<wbr>factory</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The production sink factory: open a <a href="../../platform/generic/cpal_io/struct.CpalPlayback.html" title="struct hound_engine::platform::generic::cpal_io::CpalPlayback"><code>CpalPlayback</code></a> for the choice (with the
+vanish-fallback inside <code>open</code>), boxed as <a href="../../backend/trait.AudioOutput.html" title="trait hound_engine::backend::AudioOutput"><code>AudioOutput</code></a>. <code>None</code> on an open
+failure (logged) — the bus keeps ticking the AEC reference and retries.</dd><dt><a class="fn" href="fn.mix_bus_loop.html" title="fn hound_engine::audio::mix::mix_bus_loop">mix_<wbr>bus_<wbr>loop</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The bus thread body: own the single output sink (opened via <code>sink_factory</code>,
+with the speaker hot-swap / vanish-fallback / reopen-backoff), and every
+<a href="constant.MIX_TICK.html" title="constant hound_engine::audio::mix::MIX_TICK"><code>MIX_TICK</code></a> sum the producers into one chunk, feed it
+to the APM render reference once, and play it. Ticks silence with zero
+producers so the device stream + AEC reference stay warm. The <code>!Send</code> sink
+never leaves this thread.</dd><dt><a class="fn" href="fn.mix_chunk.html" title="fn hound_engine::audio::mix::mix_chunk">mix_<wbr>chunk</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Pull one mixed <a href="constant.MIX_CHUNK_SAMPLES.html" title="constant hound_engine::audio::mix::MIX_CHUNK_SAMPLES"><code>MIX_CHUNK_SAMPLES</code></a>-sample chunk from the snapshot’s slots at
+local time <code>now_us</code>: each slot releases its due jitter-buffered frames (on the
+RT clock) into its carry-queue and accumulates a chunk in i32 (no overflow on N
+loud peers), then saturating-clamp to i16 (no wrap distortion on overload). A
+slot with nothing due contributes silence. Returns the mixed chunk.</dd><dt><a class="fn" href="fn.prefill_output.html" title="fn hound_engine::audio::mix::prefill_output">prefill_<wbr>output</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Pre-fill a freshly-opened output sink’s ring with <a href="constant.OUTPUT_CUSHION_MS.html" title="constant hound_engine::audio::mix::OUTPUT_CUSHION_MS"><code>OUTPUT_CUSHION_MS</code></a> of
+SILENCE. This establishes the device cushion ONCE, at open, so the steady
+one-chunk-per-tick mix keeps the ring ~stable (RT-paced ticks ≈ the device drain
+rate) WITHOUT ever draining the per-peer slots faster than real time to refill it.
+Silence (not slot audio) means the pre-fill costs nothing from any peer’s stream;
+it is a fixed ~cushion of added output latency, which AEC absorbs.</dd><dt><a class="fn" href="fn.warmup_reopen_at.html" title="fn hound_engine::audio::mix::warmup_reopen_at">warmup_<wbr>reopen_<wbr>at</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Arm the one-shot <a href="../constant.ROUTE_WARMUP_DELAY.html" title="constant hound_engine::audio::ROUTE_WARMUP_DELAY"><code>super::ROUTE_WARMUP_DELAY</code></a> timer iff the just-opened sink runs at a
+non-engine rate (a resampled device — in practice a Bluetooth HFP headset whose
+SCO link may not be carrying audio yet). 48 kHz devices return <code>None</code> (no warmup
+reopen), so the common path is untouched. See <a href="../constant.ROUTE_WARMUP_DELAY.html" title="constant hound_engine::audio::ROUTE_WARMUP_DELAY"><code>super::ROUTE_WARMUP_DELAY</code></a>.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.SinkFactory.html" title="type hound_engine::audio::mix::SinkFactory">Sink<wbr>Factory</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Opens the output sink for a <a href="../../types/enum.DeviceChoice.html" title="enum hound_engine::types::DeviceChoice"><code>DeviceChoice</code></a> on the bus thread, returning a
+boxed <a href="../../backend/trait.AudioOutput.html" title="trait hound_engine::backend::AudioOutput"><code>AudioOutput</code></a> or <code>None</code> on failure. Production passes
+<a href="fn.cpal_sink_factory.html" title="fn hound_engine::audio::mix::cpal_sink_factory"><code>cpal_sink_factory</code></a> (<a href="../../platform/generic/cpal_io/struct.CpalPlayback.html" title="struct hound_engine::platform::generic::cpal_io::CpalPlayback"><code>CpalPlayback</code></a>); tests inject a fake so they never
+touch a real (possibly sandbox-blocked) audio device. Runs ONLY on the bus
+thread, so the <code>!Send</code> <code>cpal::Stream</code> never crosses a thread boundary.</dd></dl></section></div></main></body></html>

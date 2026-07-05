@@ -1,0 +1,72 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="The Linux platform backend (V4L2 camera)"><title>hound_engine::platform::linux - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module linux</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../hound_engine/index.html">hound_<wbr>engine</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module linux</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#the-linux-platform-backend-v4l2-camera" title="The Linux platform backend (V4L2 camera)">The Linux platform backend (V4L2 camera)</a><ul><li><a href="#what-this-backend-provides" title="What this backend provides">What this backend provides</a></li><li><a href="#codecs-on-linux-capability-posture" title="Codecs on Linux (capability posture)">Codecs on Linux (capability posture)</a></li><li><a href="#where-the-testable-logic-lives-codecs" title="Where the testable logic lives (codecs)">Where the testable logic lives (codecs)</a></li><li><a href="#where-the-testable-logic-lives" title="Where the testable logic lives">Where the testable logic lives</a></li></ul></li></ul><h3><a href="#modules">Module Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In hound_<wbr>engine::<wbr>platform</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">hound_engine</a>::<wbr><a href="../index.html">platform</a></div><h1>Module <span>linux</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/hound_engine/platform/linux/mod.rs.html#1-105">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="the-linux-platform-backend-v4l2-camera"><a class="doc-anchor" href="#the-linux-platform-backend-v4l2-camera">§</a>The Linux platform backend (V4L2 camera)</h2>
+<p>Camera capture on Linux via <strong>V4L2</strong> through the [<code>v4l</code>] crate, which is a
+safe Rust wrapper over the kernel’s <code>videodev2</code> ioctl ABI (its default
+<code>v4l2</code>/<code>v4l2-sys</code> features bind the kernel UAPI directly — <strong>no <code>libv4l</code>
+system library</strong>, only the always-present <code>linux/videodev2.h</code> UAPI header).
+Because <code>v4l</code> already owns the unsafe ioctl boundary, this module needs <strong>no
+raw-FFI sys wrapper</strong> of its own (the apple backend has one because it talks
+to Obj-C frameworks directly; here the safe boundary is the <code>v4l</code> crate). If
+a future need for a raw ioctl appears (e.g. a control <code>v4l</code> doesn’t expose),
+add a small <code>v4l2.rs</code> sys wrapper following the <code>apple</code> style — one
+<code>// SAFETY:</code> per block, every public fn safe.</p>
+<h3 id="what-this-backend-provides"><a class="doc-anchor" href="#what-this-backend-provides">§</a>What this backend provides</h3>
+<ul>
+<li><a href="camera/struct.V4l2Camera.html" title="struct hound_engine::platform::linux::camera::V4l2Camera"><code>camera::V4l2Camera</code></a> — the <a href="../../backend/trait.VideoCapture.html" title="trait hound_engine::backend::VideoCapture"><code>crate::backend::VideoCapture</code></a> implementation
+(MMAP streaming, format negotiation, conversion to tightly-packed I420,
+scale-to-encode-target), with the same construct-is-start / drop-is-stop
+typestate as the AVFoundation capturer.</li>
+<li><a href="camera/fn.enumerate_cameras.html" title="fn hound_engine::platform::linux::camera::enumerate_cameras"><code>camera::enumerate_cameras</code></a> — the Linux device listing (<code>/dev/video*</code>),
+wired into the engine’s device inventory.</li>
+</ul>
+<p>Mics/speakers already come from cpal (CoreAudio’s Linux sibling, ALSA/Pulse)
+via <code>platform::generic</code> — a Linux desktop starts with working audio calls and
+this module adds the camera.</p>
+<h3 id="codecs-on-linux-capability-posture"><a class="doc-anchor" href="#codecs-on-linux-capability-posture">§</a>Codecs on Linux (capability posture)</h3>
+<p>The default is the portable <strong>SW H.264 (openh264)</strong> path, both ways — the
+codec ladder’s universal floor, which always builds and interops with Apple /
+Windows peers. A hardware <strong>VAAPI</strong> backend (via <code>cros-libva</code> / <code>cros-codecs</code>,
+safe Rust over the system <code>libva.so</code>) is implemented behind the off-by-default
+<strong><code>linux-vaapi</code></strong> feature; when enabled it supersedes the floor:</p>
+<ul>
+<li>[<code>video_codec::LinuxVideoEncoder</code>] — VAAPI HW <strong>H.264</strong> encode, SW openh264
+fallback (no GPU / HW-open failure). HEVC <strong>encode</strong> is <code>Unsupported</code>:
+cros-codecs 0.0.6 has no VAAPI HEVC encoder (an upstream gap, not a choice).</li>
+<li>[<code>video_codec::LinuxVideoDecoder</code>] — VAAPI HW <strong>H.264 + HEVC</strong> decode, SW
+openh264 fallback for H.264 (HEVC has no SW path — a headless box reports
+HEVC decode unsupported). The decode-caps probe ([<code>va_display</code>]) advertises
+HEVC only when the device exposes an HEVC <code>VLD</code> entrypoint.</li>
+</ul>
+<p><strong>Why the feature is off by default:</strong> cros-libva bindgens the system libva
+headers at build time but its source only sets the struct fields that existed
+in the libva it was written for, so it fails to compile against newer system
+libva (e.g. the VP9 encode-param struct gained <code>seg_id_block_size</code> in libva
+≳2.21). Until cros-libva tracks current libva (or we vendor a patched copy),
+the default Linux build uses the SW floor and the VAAPI path is opt-in for
+boxes whose libva matches. When <code>linux-vaapi</code> is on and a GPU is present, Linux
+does H.264 both ways in HW and decodes HEVC in HW (an Apple peer may send it);
+a headless box / HW-open failure falls back to SW H.264 and never loses video.
+AV1 stays unwired. NVENC/NVDEC, a VAAPI HEVC encoder, and a libva-current
+cros-libva are the documented follow-ups.</p>
+<h3 id="where-the-testable-logic-lives-codecs"><a class="doc-anchor" href="#where-the-testable-logic-lives-codecs">§</a>Where the testable logic lives (codecs)</h3>
+<p>Like the camera path, the platform-coupled VAAPI plumbing only runs on a Linux
+host with a GPU, so the pure pixel logic is factored into
+<a href="../generic/convert/index.html" title="mod hound_engine::platform::generic::convert"><code>crate::platform::generic::convert</code></a> and unit-tested on every host (incl. the
+macOS dev box): <code>i420_to_nv12</code> (VA surface upload), <code>nv12_bytes_to_i420</code> (the
+shared decode readback), and <code>crop_i420</code> (coded→visible). The cros-codecs
+encode/decode lifecycle itself is validated on-target (see the round-trip tests
+in <code>video_codec</code>, gated to a live VAAPI device).</p>
+<h3 id="where-the-testable-logic-lives"><a class="doc-anchor" href="#where-the-testable-logic-lives">§</a>Where the testable logic lives</h3>
+<p>The platform-coupled parts (opening <code>/dev/video*</code>, ioctls, mmap) can only run
+on a Linux host. So the parts most prone to bugs are factored OUT into pure,
+platform-agnostic functions in <a href="../generic/index.html" title="mod hound_engine::platform::generic"><code>crate::platform::generic</code></a> that are
+unit-tested on every host (including the macOS dev box this was written on):</p>
+<ul>
+<li>format-preference ranking — <a href="../generic/camera_format/index.html" title="mod hound_engine::platform::generic::camera_format"><code>crate::platform::generic::camera_format</code></a>
+(NV12 &gt; YUYV &gt; MJPEG, ignore-unrecognised);</li>
+<li>pixel conversion — <code>yuyv_to_i420</code> / <code>nv12_bytes_to_i420</code> in
+<a href="../generic/convert/index.html" title="mod hound_engine::platform::generic::convert"><code>crate::platform::generic::convert</code></a>;</li>
+<li>frame scaling — <code>scale_i420</code> (shared with the AVFoundation capturer).</li>
+</ul>
+<p>What remains Linux-on-target-only is the V4L2 plumbing itself (device open,
+<code>set_format</code>/<code>set_params</code>, mmap stream pump), validated on a Linux box / CI.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="camera/index.html" title="mod hound_engine::platform::linux::camera">camera</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>V4L2 camera capturer (Linux)</dd></dl></section></div></main></body></html>

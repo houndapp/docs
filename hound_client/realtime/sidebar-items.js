@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["RealtimeEvent"],"fn":["handler","lifecycle","parse","payload_value"],"struct":["MessageEvent","RealtimeAttachment","RealtimeClient","SpaceEvent","VoiceJoinEvent","VoiceLeaveEvent","VoiceScreenShareEvent"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["mic_capture_loop","publish_audio_one","screen_audio_capture_loop","spawn_mic_publish","spawn_screen_audio_publish"]};

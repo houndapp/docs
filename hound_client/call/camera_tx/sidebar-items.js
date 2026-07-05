@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cam_capture_encode_loop","spawn_cam_publish"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DECREASE_COOLDOWN_US","DECREASE_FACTOR","INCREASE_BPS","MIN_VIDEO_BPS"],"fn":["allocate_send_budget"],"struct":["SendBudget"]};

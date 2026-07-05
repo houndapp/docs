@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MMAP_BUFFER_COUNT"],"fn":["build_stream","convert_native","default_device_path","enumerate_cameras","format_name","map_open_error"],"struct":["V4l2Camera"]};

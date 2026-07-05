@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="hound-render — decoded video frames → Flutter-registered native textures"><title>hound_render - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="hound_render" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate hound_render</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../hound_render/index.html">hound_<wbr>render</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#hound-render--decoded-video-frames--flutter-registered-native-textures" title="hound-render — decoded video frames → Flutter-registered native textures">hound-render — decoded video frames → Flutter-registered native textures</a><ul><li><a href="#render-model" title="Render model">Render model</a></li><li><a href="#platform-layout" title="Platform layout">Platform layout</a></li></ul></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>hound_<wbr>render</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/hound_render/lib.rs.html#1-107">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="hound-render--decoded-video-frames--flutter-registered-native-textures"><a class="doc-anchor" href="#hound-render--decoded-video-frames--flutter-registered-native-textures">§</a>hound-render — decoded video frames → Flutter-registered native textures</h2>
+<p>The display side of the video pipeline: the call orchestration decodes remote
+video (and the capture path previews local video) and pushes each frame here
+by <code>stream_key</code> (<code>"self"</code>, <code>"cam:{peer}"</code>, <code>"screen:{peer}"</code>); the Flutter
+side registers a native texture per tile and binds it to the same key via
+<a href="fn.attach.html" title="fn hound_render::attach"><code>attach</code></a>. This crate connects the two with one platform-uniform API — the
+caller (the FRB layer) never carries a <code>#[cfg(target_os = …)]</code>.</p>
+<h3 id="render-model"><a class="doc-anchor" href="#render-model">§</a>Render model</h3>
+<ul>
+<li><strong>Mailboxes</strong> — each stream key owns a drop-oldest one-frame mailbox.
+<a href="fn.push_frame.html" title="fn hound_render::push_frame"><code>push_frame</code></a>/<a href="fn.push_surface.html" title="fn hound_render::push_surface"><code>push_surface</code></a> overwrite it and never block the producer;
+a slow renderer skips stale frames. Mailboxes live independently of the
+attached texture, so a producer can push before attach and across
+re-attach.</li>
+<li><strong>Shared render loop (macOS)</strong> — ONE render thread draws every stream’s
+latest frame into its target IOSurface via wgpu(Metal), batching all draws
+into one command submit per wake, and marks each drawn Flutter
+<code>texture_id</code> “dirty”. The Swift shared <code>CVDisplayLink</code> drains the dirty
+set through the C ABI export [<code>hound_video_take_dirty</code>] and re-pulls
+exactly the tiles that got a new frame — repaint is frame-arrival-driven,
+not vsync-driven.</li>
+<li><strong>D3D11 path (Windows)</strong> — NV12 frames (the engine’s zero-copy decode/
+capture textures, or uploaded CPU I420) are blitted into the plugin’s
+shared BGRA texture by the fixed-function video processor, synchronously
+in the push; the plugin’s ticker drains the same dirty-set C ABI as macOS.</li>
+<li><strong>CPU path (Linux)</strong> — a per-stream render thread converts the latest
+I420 into the plugin’s RGBA pixel buffer (<code>crate::yuv</code>) at ~30 fps; the
+plugin pings its texture on its own timer.</li>
+</ul>
+<h3 id="platform-layout"><a class="doc-anchor" href="#platform-layout">§</a>Platform layout</h3>
+<p>The concrete renderers live under <code>platform/</code> and are selected at compile
+time (<a href="platform/index.html" title="mod hound_render::platform"><code>platform</code></a>); macOS-only primitives that callers may legitimately
+need (the IOSurface ⇄ wgpu interop) are exposed as an explicit escape hatch
+under [<code>os::macos</code>], never as cfg’d root exports.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="os/index.html" title="mod hound_render::os">os</a></dt><dd>Platform-only extension points, in the <code>std::os</code> shape: each submodule
+exists only on its platform, and nothing under it is re-exported at the
+crate root — a caller that reaches in here is knowingly platform-specific.</dd><dt><a class="mod" href="platform/index.html" title="mod hound_render::platform">platform</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Per-platform renderers</dd><dt><a class="mod" href="yuv/index.html" title="mod hound_render::yuv">yuv</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Pure I420 → RGBA8888 conversion with nearest-neighbor scaling.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.attach.html" title="fn hound_render::attach">attach</a></dt><dd>Bind <code>stream_key</code> to the native buffer the Flutter plugin registered as
+<code>texture_id</code>, and start rendering pushed frames into it. Idempotent: an
+attach under an existing key replaces the previous binding.</dd><dt><a class="fn" href="fn.detach.html" title="fn hound_render::detach">detach</a></dt><dd>Unbind <code>stream_key</code> (no-op if absent). When this returns, no render work —
+CPU thread or in-flight GPU command — still touches the native buffer, so
+the caller may free/destroy the texture immediately. The stream’s mailbox
+survives (a producer may still be pushing; a re-attach may be coming).</dd><dt><a class="fn" href="fn.push_frame.html" title="fn hound_render::push_frame">push_<wbr>frame</a></dt><dd>Push the latest decoded I420 frame for <code>stream_key</code> (drop-oldest). <code>i420</code>
+is tightly packed <code>w*h + 2*(w/2 * h/2)</code> bytes, stride == width, even
+extents. Cheap and non-blocking on every platform — safe to call from a
+decode/capture thread; never from a real-time audio thread.</dd><dt><a class="fn" href="fn.push_surface.html" title="fn hound_render::push_surface">push_<wbr>surface</a></dt><dd>Push a decoded frame that is still GPU-resident, identified by a
+platform-defined surface pointer — on macOS an IOSurface-backed NV12
+<code>CVPixelBufferRef</code> (a retain is taken synchronously), on Windows a borrowed
+NV12 <code>ID3D11Texture2D</code> (consumed synchronously: the blit into the Flutter
+target happens inside this call). Valid for the duration of the call.
+Returns <code>true</code> if the platform renderer took the surface; <code>false</code> where
+there is no surface renderer, the tile is not attached yet (Windows), or
+zero-copy is disabled via <code>HOUND_ZEROCOPY_VIDEO=0</code> — the caller then falls
+back to <a href="fn.push_frame.html" title="fn hound_render::push_frame"><code>push_frame</code></a> with materialized I420.</dd></dl></section></div></main></body></html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="hound-transport"><title>hound_transport - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="hound_transport" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate hound_transport</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../hound_transport/index.html">hound_<wbr>transport</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#hound-transport" title="hound-transport">hound-transport</a><ul><li><a href="#why-moq-and-what-it-buys-us" title="Why MoQ, and what it buys us">Why MoQ, and what it buys us</a></li><li><a href="#sans-io-discipline" title="Sans-IO discipline">Sans-IO discipline</a></li><li><a href="#the-two-connection-shapes" title="The two connection shapes">The two connection shapes</a></li></ul></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>hound_<wbr>transport</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/hound_transport/lib.rs.html#1-64">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="hound-transport"><a class="doc-anchor" href="#hound-transport">§</a>hound-transport</h2>
+<p>The <strong>IO shell</strong> that moves the native engine’s encoded media over the wire. The
+wire is a <strong>MoQ session</strong> (<a href="moq_net"><code>moq-net</code></a>) carried on a raw-QUIC <strong>iroh</strong>
+connection (<code>web-transport-iroh</code>) over the iroh <code>Endpoint</code> the app already owns.</p>
+<h3 id="why-moq-and-what-it-buys-us"><a class="doc-anchor" href="#why-moq-and-what-it-buys-us">§</a>Why MoQ, and what it buys us</h3>
+<p>Media-over-QUIC gives us a group/object model that maps cleanly onto encoded
+video and lets QUIC — not hand-rolled application code — own framing and loss
+recovery. The mapping is the whole idea:</p>
+<ul>
+<li>one media flow → one MoQ <strong>track</strong> (the unit you subscribe to),</li>
+<li>one GOP (keyframe + its deltas) → one <strong>group</strong>, carried on its own QUIC
+<strong>uni-stream</strong>,</li>
+<li>one encoded frame → one <strong>object</strong>, an opaque payload forwarded byte-for-byte.</li>
+</ul>
+<p>Two properties fall out of that, and they are why the design is shaped this way:</p>
+<ul>
+<li><strong>Within a GOP</strong>, the uni-stream is ordered and reliable, so a lost packet is
+repaired by QUIC’s own retransmit — there is no application-level NACK on the
+video path.</li>
+<li><strong>Across GOPs</strong>, each group is an independent stream, so an older GOP whose
+stream has stalled can never head-of-line-block a newer keyframe. The
+subscriber drains with <code>next_group</code>’s <em>priority-drop</em>: a stale group is
+discarded at its boundary rather than waited on. That is the direct cure for
+the classic “a keyframe queued behind a backlog of deltas freezes the picture”
+failure.</li>
+</ul>
+<h3 id="sans-io-discipline"><a class="doc-anchor" href="#sans-io-discipline">§</a>Sans-IO discipline</h3>
+<p>This crate is <strong>only</strong> the IO shell. The pure [<code>hound_media</code>] cores that own
+timing and rate control sit directly behind it, consuming bytes + timestamps and
+emitting reassembled frames / playout timing — they never touch a socket:</p>
+<ul>
+<li>jitter/playout ([<code>hound_media::PlayoutBuffer</code>]) consumes the reassembled
+[<code>hound_media::Frame</code>]s the subscriber hands out,</li>
+<li>the A/V clock ([<code>hound_media::CaptureClock</code>]) supplies <code>now_us</code>,</li>
+<li>the BWE→encoder loop ([<code>hound_media::RateController</code>] /
+[<code>hound_media::QualityLadder</code>]) drives the encoder that feeds the publisher,</li>
+<li>AEC lives in the engine, upstream of here.</li>
+</ul>
+<p>Because MoQ owns video framing and recovery, the custom packetizer/reassembler/
+<code>PacketHeader</code> in [<code>hound_media</code>] are not on the video path; they remain only for
+the impairment simulator and any datagram experiments.</p>
+<h3 id="the-two-connection-shapes"><a class="doc-anchor" href="#the-two-connection-shapes">§</a>The two connection shapes</h3>
+<ul>
+<li><strong>Peer-to-peer</strong> (<a href="moq/struct.MoqPublisher.html" title="struct hound_transport::moq::MoqPublisher"><code>MoqPublisher</code></a> / <a href="moq/struct.MoqSubscriber.html" title="struct hound_transport::moq::MoqSubscriber"><code>MoqSubscriber</code></a>): a publisher and a
+subscriber endpoint speak MoQ directly over one iroh connection. Used in tests
+and for direct links.</li>
+<li><strong>Relayed</strong> (<a href="moq/struct.MoqRelaySession.html" title="struct hound_transport::moq::MoqRelaySession"><code>MoqRelaySession</code></a> / <a href="moq/struct.MoqRelaySubscriber.html" title="struct hound_transport::moq::MoqRelaySubscriber"><code>MoqRelaySubscriber</code></a>): the client dials
+the SFU relay (<code>services/sfu</code>), presents a space-scoped relay token, and the
+relay forwards every publisher’s broadcast to the other subscribers in the same
+space. <a href="moq/struct.MoqRelaySession.html" title="struct hound_transport::moq::MoqRelaySession"><code>MoqRelaySession</code></a> multiplexes many tracks (every mic/cam/screen track
+of a call, both published and subscribed) over a SINGLE connection — see its
+docs for why that matters for congestion control and handshake cost.</li>
+</ul>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.ALPN"><code>pub use moq::<a class="constant" href="moq/constant.ALPN.html" title="constant hound_transport::moq::ALPN">ALPN</a>;</code></dt><dt id="reexport.DEFAULT_BROADCAST_PATH"><code>pub use moq::<a class="constant" href="moq/constant.DEFAULT_BROADCAST_PATH.html" title="constant hound_transport::moq::DEFAULT_BROADCAST_PATH">DEFAULT_BROADCAST_PATH</a>;</code></dt><dt id="reexport.MoqError"><code>pub use moq::<a class="enum" href="moq/enum.MoqError.html" title="enum hound_transport::moq::MoqError">MoqError</a>;</code></dt><dt id="reexport.MoqPublisher"><code>pub use moq::<a class="struct" href="moq/struct.MoqPublisher.html" title="struct hound_transport::moq::MoqPublisher">MoqPublisher</a>;</code></dt><dt id="reexport.MoqRelaySession"><code>pub use moq::<a class="struct" href="moq/struct.MoqRelaySession.html" title="struct hound_transport::moq::MoqRelaySession">MoqRelaySession</a>;</code></dt><dt id="reexport.MoqRelaySubscriber"><code>pub use moq::<a class="struct" href="moq/struct.MoqRelaySubscriber.html" title="struct hound_transport::moq::MoqRelaySubscriber">MoqRelaySubscriber</a>;</code></dt><dt id="reexport.MoqSubscriber"><code>pub use moq::<a class="struct" href="moq/struct.MoqSubscriber.html" title="struct hound_transport::moq::MoqSubscriber">MoqSubscriber</a>;</code></dt><dt id="reexport.MoqTrackPublisher"><code>pub use moq::<a class="struct" href="moq/struct.MoqTrackPublisher.html" title="struct hound_transport::moq::MoqTrackPublisher">MoqTrackPublisher</a>;</code></dt><dt id="reexport.MoqTrackSubscriber"><code>pub use moq::<a class="struct" href="moq/struct.MoqTrackSubscriber.html" title="struct hound_transport::moq::MoqTrackSubscriber">MoqTrackSubscriber</a>;</code></dt><dt id="reexport.VideoPull"><code>pub use moq::<a class="enum" href="moq/enum.VideoPull.html" title="enum hound_transport::moq::VideoPull">VideoPull</a>;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="moq/index.html" title="mod hound_transport::moq">moq</a></dt><dd>MoQ media transport over an iroh <code>Endpoint</code></dd></dl></section></div></main></body></html>

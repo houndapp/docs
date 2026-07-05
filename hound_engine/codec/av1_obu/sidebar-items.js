@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["OBU_SEQUENCE_HEADER","OBU_TEMPORAL_DELIMITER"],"fn":["av1c_from_stream","build_av1c","find_sequence_header","is_temporal_delimiter_only","parse_obus","parse_sequence_header","read_leb128"],"struct":["BitReader","Obu","SeqHeaderConfig"]};

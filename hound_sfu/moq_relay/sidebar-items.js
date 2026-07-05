@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AUTH_OK","AUTH_REJECT","AUTH_REJECT_DRAIN","MAX_TOKEN_LEN","NAMESPACE_CONVENTION","RELAY_ALPN","RELAY_ALPN_PREFIX"],"enum":["RelayError"],"fn":["authenticate","handle_connection","handle_relay_connection","new_root_origin","reject","space_scope"],"struct":["OriginProducer","Relay"]};

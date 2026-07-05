@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Cross-platform software H.264 (Cisco openh264)"><title>hound_engine::platform::generic::openh264 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module openh264</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../hound_engine/index.html">hound_<wbr>engine</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module openh264</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#cross-platform-software-h264-cisco-openh264" title="Cross-platform software H.264 (Cisco openh264)">Cross-platform software H.264 (Cisco openh264)</a><ul><li><a href="#the-interop-contract-why-this-matters" title="The interop contract (why this matters)">The interop contract (why this matters)</a></li><li><a href="#latency-profile-why-these-settings" title="Latency profile (why these settings)">Latency profile (why these settings)</a></li><li><a href="#real-time-safety" title="Real-time-safety">Real-time-safety</a></li><li><a href="#licensing-distribution-caveat--todo-before-shipping" title="LICENSING (distribution caveat — TODO before shipping)">LICENSING (distribution caveat — TODO before shipping)</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In hound_<wbr>engine::<wbr>platform::<wbr>generic</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">hound_engine</a>::<wbr><a href="../../index.html">platform</a>::<wbr><a href="../index.html">generic</a></div><h1>Module <span>openh264</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/hound_engine/platform/generic/openh264.rs.html#1-911">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="cross-platform-software-h264-cisco-openh264"><a class="doc-anchor" href="#cross-platform-software-h264-cisco-openh264">§</a>Cross-platform software H.264 (Cisco openh264)</h2>
+<p>Software H.264 encode + decode via Cisco’s <a href="https://github.com/cisco/openh264">openh264</a> (the WebRTC baseline
+real-time codec), wired behind <a href="../../../backend/trait.VideoEncode.html" title="trait hound_engine::backend::VideoEncode"><code>VideoEncode</code></a> / <a href="../../../backend/trait.VideoDecode.html" title="trait hound_engine::backend::VideoDecode"><code>VideoDecode</code></a>. This is the
+path that completes functional video parity <strong>wherever the hardware H.264
+codecs are absent</strong> — Linux/Windows desktops (VideoToolbox is
+Apple-only; there is no MediaCodec/NVENC backend). The wire codec for
+all-Apple calls is H.264 (the encoder sends HW H.264, receivers pick the
+decoder by wire codec), so a Linux client needs H.264 <strong>both ways</strong> to join a
+call with a Mac: SW-encode H.264 to send, SW-decode H.264 to receive.</p>
+<h3 id="the-interop-contract-why-this-matters"><a class="doc-anchor" href="#the-interop-contract-why-this-matters">§</a>The interop contract (why this matters)</h3>
+<p>A Linux↔Mac call only works if the bytes are mutually decodable:</p>
+<ul>
+<li>Mac VideoToolbox encodes H.264 Annex-B with SPS+PPS prepended on every IDR;
+this decoder (<a href="struct.Openh264Decoder.html" title="struct hound_engine::platform::generic::openh264::Openh264Decoder"><code>Openh264Decoder</code></a>) must decode exactly that.</li>
+<li>This encoder (<a href="struct.Openh264Encoder.html" title="struct hound_engine::platform::generic::openh264::Openh264Encoder"><code>Openh264Encoder</code></a>) must emit the SAME shape — Annex-B with
+SPS+PPS in-band on every IDR — so a Mac’s VideoToolbox decoder accepts it.</li>
+</ul>
+<p>openh264 satisfies both natively: its bitstream is Annex-B (4-byte
+<code>00 00 00 01</code> start codes) and, with the default <code>SpsPpsStrategy::ConstantId</code>,
+every IDR access unit carries SPS (NAL 7) + PPS (NAL 8) + the IDR slice
+(NAL 5) — byte-shape-identical to the VideoToolbox encoder’s output. The
+engine’s <code>h264_*</code> round-trip tests prove the cross-codec interop on this Mac
+(VT-encoded → openh264-decoded AND openh264-encoded → VT-decoded).</p>
+<h3 id="latency-profile-why-these-settings"><a class="doc-anchor" href="#latency-profile-why-these-settings">§</a>Latency profile (why these settings)</h3>
+<ul>
+<li><code>UsageType::CameraVideoRealTime</code> — the real-time usage scenario (no
+buffering for look-ahead, single reference).</li>
+<li><code>Profile::Baseline</code> — no B-frames, no CABAC: lowest decode latency and the
+widest-compatibility profile, matching the VideoToolbox path’s
+<code>Baseline_AutoLevel</code> SPS/PPS shape.</li>
+<li><code>skip_frames(false)</code> — never drop a frame to hit the rate target. For
+real-time voice/video we’d rather briefly overshoot bitrate than starve the
+receiver of a frame (a dropped frame is a freeze until the next one).
+openh264 prints a one-line warning that bitrate can’t be strictly held
+without frame-skip; that is the intended tradeoff, and the encoder’s trace
+level is lowered so the warning does not spam.</li>
+<li><code>intra_frame_period</code> caps the GOP so a late joiner is never more than a few
+seconds from a keyframe; <a href="struct.Openh264Encoder.html#method.request_keyframe" title="method hound_engine::platform::generic::openh264::Openh264Encoder::request_keyframe"><code>request_keyframe</code></a>
+forces an IDR on demand (PLI relay) via <code>ForceIntraFrame</code>.</li>
+</ul>
+<h3 id="real-time-safety"><a class="doc-anchor" href="#real-time-safety">§</a>Real-time-safety</h3>
+<p>Runs on the dedicated capture/encode (or decode) thread, never async/UI. The
+encoder borrows the I420 planes zero-copy through [<code>YUVSlices</code>] (no RGB
+round-trip, no intermediate allocation beyond openh264’s own bitstream
+buffer). The decoder copies the decoded planes out respecting openh264’s
+internal (padded) stride into a tightly-packed I420 buffer — the same
+stride-respecting plane copy the NV12→I420 path does.</p>
+<h3 id="licensing-distribution-caveat--todo-before-shipping"><a class="doc-anchor" href="#licensing-distribution-caveat--todo-before-shipping">§</a>LICENSING (distribution caveat — TODO before shipping)</h3>
+<p>Cisco grants a royalty-bearing-by-Cisco H.264 patent license that rides on
+the <strong>binary</strong> openh264 releases Cisco publishes; a <strong>from-source</strong> build like
+this one (the <code>source</code> Cargo feature) does NOT carry that grant. For
+distribution we must either ship Cisco’s signed binary <code>libopenh264</code> (and
+load it dynamically) or obtain H.264 patent licensing ourselves. This is a
+pre-distribution decision, not a build blocker — development and CI build the
+source codec freely.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Openh264Decoder.html" title="struct hound_engine::platform::generic::openh264::Openh264Decoder">Openh264<wbr>Decoder</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Software H.264 decoder (Cisco openh264). One per inbound video track. Decodes
+the Annex-B access units the encoders (this one OR VideoToolbox) emit — SPS/
+PPS arrive in-band on each IDR, so there is no separate bootstrap step: the
+decoder buffers internally until it has seen a keyframe and returns
+<code>Ok(None)</code> until then. Not <code>Send</code> in our contract.</dd><dt><a class="struct" href="struct.Openh264Encoder.html" title="struct hound_engine::platform::generic::openh264::Openh264Encoder">Openh264<wbr>Encoder</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Software H.264 encoder (Cisco openh264). One per outbound video track. Not
+<code>Send</code> in our contract: construct, drive, and drop on the one encode thread.</dd></dl></section></div></main></body></html>

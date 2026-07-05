@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ScreenCommand"],"fn":["choice_from","establish_live","handle_screen_command","restart_screen_share","spawn_heartbeat","spawn_supervisor"],"struct":["CallChannels","CallSession","Cancel","ConnectionParams","DeviceControl","LiveSession","MuteFlags","ScreenShareHandle"],"type":["SharedControlOutbound"]};

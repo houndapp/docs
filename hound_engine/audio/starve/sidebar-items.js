@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ACTIVE_DECAY_TICKS","SILENCE_FLOOR","STARVE_IDLE_TICKS"],"struct":["StarveTracker","Tick"]};

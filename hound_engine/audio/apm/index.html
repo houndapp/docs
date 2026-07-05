@@ -1,0 +1,63 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Acoustic echo cancellation (full-duplex APM)"><title>hound_engine::audio::apm - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module apm</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../hound_engine/index.html">hound_<wbr>engine</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module apm</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#acoustic-echo-cancellation-full-duplex-apm" title="Acoustic echo cancellation (full-duplex APM)">Acoustic echo cancellation (full-duplex APM)</a><ul><li><a href="#why-sonora-and-not-webrtc-audio-processing" title="Why `sonora` and not `webrtc-audio-processing`">Why <code>sonora</code> and not <code>webrtc-audio-processing</code></a></li><li><a href="#the-timing-contract-the-one-thing-that-must-be-right" title="The timing contract (the one thing that must be right)">The timing contract (the one thing that must be right)</a></li><li><a href="#threading--locking" title="Threading / locking">Threading / locking</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#constants" title="Constants">Constants</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In hound_<wbr>engine::<wbr>audio</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">hound_engine</a>::<wbr><a href="../index.html">audio</a></div><h1>Module <span>apm</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/hound_engine/audio/apm.rs.html#1-313">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="acoustic-echo-cancellation-full-duplex-apm"><a class="doc-anchor" href="#acoustic-echo-cancellation-full-duplex-apm">§</a>Acoustic echo cancellation (full-duplex APM)</h2>
+<p>Wraps the [<code>sonora</code>] audio-processing module (a pure-Rust port of WebRTC’s
+<code>modules/audio_processing</code>: AEC3 + noise suppression + AGC2 + high-pass) into
+the live call so speaker-mode calls (no headphones) do not feed the far-end
+audio back into the mic: the <strong>render reference</strong> (what we play out) is
+subtracted from the <strong>capture</strong> (the mic).</p>
+<h3 id="why-sonora-and-not-webrtc-audio-processing"><a class="doc-anchor" href="#why-sonora-and-not-webrtc-audio-processing">§</a>Why <code>sonora</code> and not <code>webrtc-audio-processing</code></h3>
+<p><code>webrtc-audio-processing</code> (the tonarino C++ binding) has a <code>-sys</code> crate that
+hard-requires <code>meson</code> to build the bundled WebRTC C++, and there is no
+system <code>libwebrtc-audio-processing</code> to dynamically link. <code>sonora</code> is the same
+WebRTC algorithms ported to pure Rust: it builds with only the toolchain. It
+is <strong>v0.1.0</strong> — newer and less battle-tested than the C++ original — so the
+toggle below degrades to pass-through if init ever fails.</p>
+<h3 id="the-timing-contract-the-one-thing-that-must-be-right"><a class="doc-anchor" href="#the-timing-contract-the-one-thing-that-must-be-right">§</a>The timing contract (the one thing that must be right)</h3>
+<ul>
+<li><strong>Sample rate / channels:</strong> the whole endpoint is 48 kHz mono i16
+(<a href="../../types/constant.SAMPLE_RATE.html" title="constant hound_engine::types::SAMPLE_RATE"><code>SAMPLE_RATE</code></a>/<a href="../../types/constant.CHANNELS.html" title="constant hound_engine::types::CHANNELS"><code>CHANNELS</code></a>); the APM is configured to match, so there is
+no resample on either the capture or render path.</li>
+<li><strong>Frame size:</strong> the APM’s native chunk is <strong>10 ms</strong> (480 samples @ 48 kHz),
+NOT our 20 ms Opus frame (960 samples). Every 20 ms <a href="../../types/struct.PcmFrame.html" title="struct hound_engine::types::PcmFrame"><code>PcmFrame</code></a> is split
+into <strong>two</strong> 10 ms passes (<a href="constant.APM_FRAME_SAMPLES.html" title="constant hound_engine::audio::apm::APM_FRAME_SAMPLES"><code>APM_FRAME_SAMPLES</code></a>) — both for capture
+(<a href="struct.Apm.html#method.process_capture" title="method hound_engine::audio::apm::Apm::process_capture"><code>Apm::process_capture</code></a>) and render (<a href="struct.Apm.html#method.process_render" title="method hound_engine::audio::apm::Apm::process_render"><code>Apm::process_render</code></a>). A frame
+whose length is not a whole number of 10 ms chunks is passed through
+unprocessed (defensive; the live path always hands exact 960-sample frames).</li>
+<li><strong>Stream delay:</strong> AEC3 needs an estimate of the capture-vs-render delay to
+seed its delay search. We set a fixed <a href="constant.INITIAL_STREAM_DELAY_MS.html" title="constant hound_engine::audio::apm::INITIAL_STREAM_DELAY_MS"><code>INITIAL_STREAM_DELAY_MS</code></a> once; AEC3
+is adaptive and refines the true delay itself, so the estimate only has to
+be in the right ballpark (it is not a hard alignment requirement like a
+fixed-delay canceller). The render reference is tapped just before playout,
+so the real loop delay is roughly the playout buffer + device output latency.</li>
+</ul>
+<h3 id="threading--locking"><a class="doc-anchor" href="#threading--locking">§</a>Threading / locking</h3>
+<p>One <a href="struct.Apm.html" title="struct hound_engine::audio::apm::Apm"><code>Apm</code></a> is shared (<code>Arc</code>) between the <strong>capture thread</strong> (which calls
+<a href="struct.Apm.html#method.process_capture" title="method hound_engine::audio::apm::Apm::process_capture"><code>Apm::process_capture</code></a>) and the <strong>mix-bus thread</strong> (which calls
+<a href="struct.Apm.html#method.process_render" title="method hound_engine::audio::apm::Apm::process_render"><code>Apm::process_render</code></a> on each mixed chunk it plays).
+<code>sonora::AudioProcessing</code> is <code>Send</code> but not <code>Sync</code>, so it lives behind a
+<code>Mutex</code>. The processing calls are short (a few hundred µs for two 10 ms
+chunks) and the lock is never held across IO or <code>.await</code>. <strong>Neither call
+happens inside a cpal RT callback</strong> — capture processing is on the mic worker
+thread (between <code>next_frame</code> and the encode channel) and render processing is
+on the bus thread (between the mix and the playback ring),
+so the RT audio callbacks are never blocked on this lock.</p>
+<h4 id="render-reference-the-single-mixed-playout-bus"><a class="doc-anchor" href="#render-reference-the-single-mixed-playout-bus">§</a>Render reference: the single mixed playout bus</h4>
+<p>AEC3’s render reference must be ONE coherent stream — exactly what the speaker
+plays. The <a href="../mix/index.html" title="mod hound_engine::audio::mix">mixed-playout bus</a> makes it so: all remote
+peers’ due PCM is summed into one 10 ms chunk and fed to
+<a href="struct.Apm.html#method.process_render" title="method hound_engine::audio::apm::Apm::process_render"><code>Apm::process_render</code></a> <strong>once per tick</strong>, then played on the single
+<code>CpalPlayback</code>. Because there is exactly one render feed by construction,
+AEC is correct for ANY number of peers — interleaving independent per-peer
+references corrupts the canceller. The caller is the bus, not N per-peer
+pumps.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Apm.html" title="struct hound_engine::audio::apm::Apm">Apm</a></dt><dd>The live-call audio-processing module: shared echo canceller + noise
+suppressor + gain control. Capture frames (mic) and render frames (far-end
+playout) are both fed through it; it subtracts the render reference from the
+capture so speaker audio does not echo.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.APM_FRAME_SAMPLES.html" title="constant hound_engine::audio::apm::APM_FRAME_SAMPLES">APM_<wbr>FRAME_<wbr>SAMPLES</a></dt><dd>Samples in one APM processing chunk: 10 ms @ 48 kHz mono = <strong>480</strong>. This is
+the APM’s native frame size (<code>sample_rate / 100</code>), distinct from the 960-sample
+20 ms Opus frame the rest of the pipeline carries. Every <code>PcmFrame</code> is split
+into <code>SAMPLES_PER_FRAME / APM_FRAME_SAMPLES</code> (= 2) chunks for the APM.</dd><dt><a class="constant" href="constant.INITIAL_STREAM_DELAY_MS.html" title="constant hound_engine::audio::apm::INITIAL_STREAM_DELAY_MS">INITIAL_<wbr>STREAM_<wbr>DELAY_<wbr>MS</a></dt><dd>Initial capture↔render stream-delay estimate handed to AEC3, in milliseconds.
+The true delay is roughly the playout jitter target (60 ms) plus the speaker
+device’s output latency; 70 ms is a sane seed. AEC3 is <strong>delay-adaptive</strong> — it
+searches for and tracks the real delay from this seed — so this only has to be
+in the right ballpark, not exact. Exposed as a const so the live wiring and the
+tests agree on the value.</dd></dl></section></div></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["router","webauthn"],"struct":["WebAuthnResponse"]};
+window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["apple_app_site_association","router","webauthn"],"struct":["AppleAppSiteAssociation","WebAuthnResponse","WebCredentials"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BACKOFF_FACTOR","BACKOFF_INITIAL","BACKOFF_JITTER_FRAC","BACKOFF_MAX"],"enum":["Disposition","ReconnectOutcome"],"fn":["classify","reconnect_loop","rng_jitter"],"struct":["Backoff"]};
