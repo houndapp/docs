@@ -84,7 +84,7 @@ so a permission/unsupported error surfaces to the caller.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.call_screen_share_stop" class="method"><a class="src rightside" href="../../src/hound_client/app.rs.html#322-324">Source</a><h4 class="code-header">pub async fn <a href="#method.call_screen_share_stop" class="fn">call_screen_share_stop</a>(&amp;self) -&gt; <a class="type" href="../error/type.Result.html" title="type hound_client::error::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.unit.html">()</a>&gt;</h4></section></summary><div class="docblock"><p>Stop the active screen share (if any).</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.call_set_screen_quality" class="method"><a class="src rightside" href="../../src/hound_client/app.rs.html#329-331">Source</a><h4 class="code-header">pub async fn <a href="#method.call_set_screen_quality" class="fn">call_set_screen_quality</a>(
     &amp;self,
-    quality: <a class="struct" href="../../hound_media/congestion/struct.ScreenQuality.html" title="struct hound_media::congestion::ScreenQuality">ScreenQuality</a>,
+    quality: ScreenQuality,
 ) -&gt; <a class="type" href="../error/type.Result.html" title="type hound_client::error::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.unit.html">()</a>&gt;</h4></section></summary><div class="docblock"><p>Set the live screen-share quality (motion↔legibility + a max resolution/fps cap).
 Reconfigures a running share’s ladder live (no restart); remembered for the next
 share + across a reconnect. Harmless with no active call.</p>

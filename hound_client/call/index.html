@@ -36,7 +36,7 @@ the 1 s tick, the keyframe/feedback listeners, the shared encode core).</li>
 <h3 id="observable-state"><a class="doc-anchor" href="#observable-state">§</a>Observable state</h3>
 <p>Three <code>watch</code> channels, driven the same way as the realtime→reducer→watch task
 in <a href="../app/index.html" title="mod hound_client::app"><code>crate::app</code></a>: <a href="struct.CallView.html" title="struct hound_client::call::CallView"><code>CallView</code></a> (self id, peers, tracks) is derived from the
-control plane’s <a href="../../hound_control/session/struct.SessionView.html" title="struct hound_control::session::SessionView"><code>SessionView</code></a>; <a href="enum.ConnectionState.html" title="enum hound_client::call::ConnectionState"><code>ConnectionState</code></a> reflects the control WS +
+control plane’s [<code>SessionView</code>]; <a href="enum.ConnectionState.html" title="enum hound_client::call::ConnectionState"><code>ConnectionState</code></a> reflects the control WS +
 reconnect attempts; <a href="struct.LevelsView.html" title="struct hound_client::call::LevelsView"><code>LevelsView</code></a> carries mic + per-peer speaking levels.</p>
 <h3 id="auto-reconnect-supervisor"><a class="doc-anchor" href="#auto-reconnect-supervisor">§</a>Auto-reconnect supervisor</h3>
 <p>A live call heals a dropped control WebSocket or MoQ/iroh connection <strong>without
@@ -60,7 +60,7 @@ roster for free and re-publish is a fresh mic/cam announce.</li>
 </div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="adapt/index.html" title="mod hound_client::call::adapt">adapt</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Sender-side BWE/congestion adaptation. The camera +
 screen video the client PUBLISHES adapts its bitrate/resolution to network
 conditions and serves keyframes on demand. The brain —
-<a href="../../hound_media/adapt/struct.VideoAdaptation.html" title="struct hound_media::adapt::VideoAdaptation"><code>hound_media::VideoAdaptation</code></a> — is shared; this is the local IO glue:</dd><dt><a class="mod" href="audio_rx/index.html" title="mod hound_client::call::audio_rx">audio_<wbr>rx</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Inbound audio: pull → reorder by timestamp → Opus decode (bounded PLC on
+[<code>hound_media::VideoAdaptation</code>] — is shared; this is the local IO glue:</dd><dt><a class="mod" href="audio_rx/index.html" title="mod hound_client::call::audio_rx">audio_<wbr>rx</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Inbound audio: pull → reorder by timestamp → Opus decode (bounded PLC on
 genuine gaps) → per-peer jitter buffer on the mix bus, plus level metering.
 The encoded-frame reorder hold undoes the cross-stream reordering a
 screenshare induces on the shared connection BEFORE the stateful decoder;
@@ -106,7 +106,7 @@ Invariant: recovery is a FULL re-establish (fresh <code>PeerId</code>) — the b
 session’s tasks/threads are fully torn down before a rebuild, and only an
 auth/permission failure (or an explicit leave) ends the call.</dd><dt><a class="mod" href="simulcast/index.html" title="mod hound_client::call::simulcast">simulcast</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Demand-driven simulcast, producer side: <a href="simulcast/struct.LayerControl.html" title="struct hound_client::call::simulcast::LayerControl"><code>LayerControl</code></a> folds every
 receiver’s standing quality demand (<a href="adapt/struct.QualityReport.html" title="struct hound_client::call::adapt::QualityReport"><code>QualityReport</code></a> via
-<a href="simulcast/fn.spawn_quality_listener.html" title="fn hound_client::call::simulcast::spawn_quality_listener"><code>spawn_quality_listener</code></a>) into a <a href="../../hound_media/congestion/struct.SimulcastPlanner.html" title="struct hound_media::congestion::SimulcastPlanner"><code>hound_media::SimulcastPlanner</code></a>, driving
+<a href="simulcast/fn.spawn_quality_listener.html" title="fn hound_client::call::simulcast::spawn_quality_listener"><code>spawn_quality_listener</code></a>) into a [<code>hound_media::SimulcastPlanner</code>], driving
 the shared LOW-layer supervisor; <a href="simulcast/fn.spawn_low_video_publish.html" title="fn hound_client::call::simulcast::spawn_low_video_publish"><code>spawn_low_video_publish</code></a> drains the
 capture thread’s low encode onto its own moq track, announcing it on the
 FIRST frame only (dark until actually producing). Invariant: the source
@@ -130,7 +130,7 @@ capture thread; this struct holds the cross-reconnect command seams + the
 supervisor handle. Dropping it (or <a href="struct.CallSession.html#method.leave" title="method hound_client::call::CallSession::leave"><code>CallSession::leave</code></a>) cancels + tears down.</dd><dt><a class="struct" href="struct.CallTrack.html" title="struct hound_client::call::CallTrack">Call<wbr>Track</a></dt><dd>One published track, carried with the control-plane enums (not flattened to
 strings) so the binding compares them type-driven — <code>t.kind == MediaKind::Video</code>
 — with exhaustiveness on both sides. The enums are <code>Copy + Eq</code> (serde snake_case).</dd><dt><a class="struct" href="struct.CallView.html" title="struct hound_client::call::CallView">Call<wbr>View</a></dt><dd>The call’s roster as the UI renders it: self id, peers, and the tracks (with
-kind/source/mute). Built from the control plane’s <a href="../../hound_control/session/struct.SessionView.html" title="struct hound_control::session::SessionView"><code>SessionView</code></a> reducer — the
+kind/source/mute). Built from the control plane’s [<code>SessionView</code>] reducer — the
 same source of truth the media plane subscribes off of. Empty before <code>Welcome</code>.</dd><dt><a class="struct" href="struct.DeviceListView.html" title="struct hound_client::call::DeviceListView">Device<wbr>List<wbr>View</a></dt><dd>The available media devices grouped by kind — the data the Devices panel renders.
 A kind whose platform backend is absent simply comes back empty (a capability
 miss, not an error).</dd><dt><a class="struct" href="struct.DeviceView.html" title="struct hound_client::call::DeviceView">Device<wbr>View</a></dt><dd>One enumerated media device for a picker row. FFI-flat: <code>id</code> is the opaque

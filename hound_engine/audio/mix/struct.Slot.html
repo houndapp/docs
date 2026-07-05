@@ -44,7 +44,7 @@ registered untagged), so a recorded underflow <a href="struct.AudioGlitch.html" 
 and push it into the jitter buffer, both under one lock so the depth retarget
 and the insert stay consistent. Returns the post-push depth + jitter estimate
 for the caller’s per-peer stats. <code>now_us</code> is the local receive time and
-<code>ts_us</code> the sender’s capture timestamp — BOTH on the shared <a href="../../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock"><code>CaptureClock</code></a>
+<code>ts_us</code> the sender’s capture timestamp — BOTH on the shared [<code>CaptureClock</code>]
 the bus thread pops against.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.pull_into" class="method"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#400-468">Source</a><h4 class="code-header">fn <a href="#method.pull_into" class="fn">pull_into</a>(&amp;self, now_us: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i64.html">i64</a>, out: &amp;mut [<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i32.html">i32</a>]) -&gt; <a class="struct" href="struct.PullOutcome.html" title="struct hound_engine::audio::mix::PullOutcome">PullOutcome</a></h4></section></summary><div class="docblock"><p>Bus side (one tick): release every frame whose playout time has arrived (up
 to <code>now_us + MIX_PULL_LOOKAHEAD_US</code>) into the carry-queue, then accumulate up

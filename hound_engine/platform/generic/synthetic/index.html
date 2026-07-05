@@ -24,7 +24,7 @@ remainder of the frame interval — so <code>captureFps</code> reflects the <em>
 and the harness measures whether encode keeps up with that cadence (exactly
 the camera’s role). If the downstream encode is slower than the interval, no
 sleep happens and frames are produced back-to-back (the honest “can’t keep
-up” signal). Frames are stamped on the shared <a href="../../../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock"><code>hound_media::CaptureClock</code></a>
+up” signal). Frames are stamped on the shared [<code>hound_media::CaptureClock</code>]
 like any real capturer.</p>
 <h3 id="real-time-safety"><a class="doc-anchor" href="#real-time-safety">§</a>Real-time-safety</h3>
 <p>All buffers are sized exactly <code>w*h + 2*(w/2)*(h/2)</code> and written by index into

@@ -13,7 +13,7 @@
     pub(super) force_keyframe: <a class="struct" href="https://doc.rust-lang.org/1.93.0/core/sync/atomic/struct.AtomicBool.html" title="struct core::sync::atomic::AtomicBool">AtomicBool</a>,
     pub(super) target_codec: <a class="struct" href="https://doc.rust-lang.org/1.93.0/core/sync/atomic/struct.AtomicU8.html" title="struct core::sync::atomic::AtomicU8">AtomicU8</a>,
 </details>}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The shared seam between the async <strong>adaptation tick</strong> (owns the sans-IO
-<a href="../../../hound_media/adapt/struct.VideoAdaptation.html" title="struct hound_media::adapt::VideoAdaptation"><code>VideoAdaptation</code></a> core + observes RTT) and the <code>!Send</code> <strong>capture/encode thread</strong>
+[<code>VideoAdaptation</code>] core + observes RTT) and the <code>!Send</code> <strong>capture/encode thread</strong>
 (owns the encoder, applies the decision per frame). Plain atomics — no lock
 crosses the thread/async boundary and each field has exactly one writer.</p>
 <p>Data flow:</p>

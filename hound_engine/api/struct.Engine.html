@@ -21,7 +21,7 @@ from a blocking-friendly context.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.open_microphone" class="method"><a class="src rightside" href="../../src/hound_engine/api.rs.html#115-121">Source</a><h4 class="code-header">pub fn <a href="#method.open_microphone" class="fn">open_microphone</a>(
     self,
     choice: &amp;<a class="enum" href="../types/enum.DeviceChoice.html" title="enum hound_engine::types::DeviceChoice">DeviceChoice</a>&lt;<a class="struct" href="../types/struct.MicId.html" title="struct hound_engine::types::MicId">MicId</a>&gt;,
-    clock: <a class="struct" href="../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock">CaptureClock</a>,
+    clock: CaptureClock,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.93.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.Microphone.html" title="struct hound_engine::api::Microphone">Microphone</a>, <a class="enum" href="../error/enum.AudioError.html" title="enum hound_engine::error::AudioError">AudioError</a>&gt;</h4></section></summary><div class="docblock"><p>Open a microphone and start capturing, stamping frames on <code>clock</code>.</p>
 <p>Open is construct: the returned <a href="struct.Microphone.html" title="struct hound_engine::api::Microphone"><code>Microphone</code></a> is already delivering
 (there is no unstarted state to misuse). A named device that has
@@ -34,7 +34,7 @@ one dedicated capture thread.</p>
     self,
     speaker_rx: Receiver&lt;<a class="enum" href="../types/enum.DeviceChoice.html" title="enum hound_engine::types::DeviceChoice">DeviceChoice</a>&lt;<a class="struct" href="../types/struct.SpeakerId.html" title="struct hound_engine::types::SpeakerId">SpeakerId</a>&gt;&gt;,
     apm: <a class="enum" href="https://doc.rust-lang.org/1.93.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../audio/apm/struct.Apm.html" title="struct hound_engine::audio::apm::Apm">Apm</a>&gt;&gt;,
-    clock: <a class="struct" href="../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock">CaptureClock</a>,
+    clock: CaptureClock,
     playout_floor_us: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i64.html">i64</a>,
 ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../audio/mix/struct.PlayoutBus.html" title="struct hound_engine::audio::mix::PlayoutBus">PlayoutBus</a>&gt;</h4></section></summary><div class="docblock"><p>Start the mixed-playout bus for a call: ONE output device stream and
 ONE coherent AEC render reference, fed by per-peer <a href="../audio/mix/struct.BusProducer.html" title="struct hound_engine::audio::mix::BusProducer"><code>BusProducer</code></a>s.
@@ -56,7 +56,7 @@ contract as <a href="struct.Engine.html#method.microphones" title="method hound_
     choice: &amp;<a class="enum" href="../types/enum.DeviceChoice.html" title="enum hound_engine::types::DeviceChoice">DeviceChoice</a>&lt;<a class="struct" href="../types/struct.CameraId.html" title="struct hound_engine::types::CameraId">CameraId</a>&gt;,
     target: <a class="struct" href="../types/struct.Dimensions.html" title="struct hound_engine::types::Dimensions">Dimensions</a>,
     fps: <a class="struct" href="../types/struct.Fps.html" title="struct hound_engine::types::Fps">Fps</a>,
-    clock: <a class="struct" href="../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock">CaptureClock</a>,
+    clock: CaptureClock,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.93.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.Camera.html" title="struct hound_engine::api::Camera">Camera</a>, <a class="enum" href="../error/enum.CaptureError.html" title="enum hound_engine::error::CaptureError">CaptureError</a>&gt;</h4></section></summary><div class="docblock"><p>Open a camera and start capturing at as close to <code>target</code>@<code>fps</code> as the
 device allows; delivered frames are always scaled to exactly <code>target</code>
 (so an encoder built from the same <code>Dimensions</code> always agrees), and
@@ -93,7 +93,7 @@ picker degrades to title-only rows.</p>
     self,
     source: &amp;<a class="enum" href="../types/enum.ScreenSource.html" title="enum hound_engine::types::ScreenSource">ScreenSource</a>,
     config: <a class="struct" href="../types/struct.ScreenCaptureConfig.html" title="struct hound_engine::types::ScreenCaptureConfig">ScreenCaptureConfig</a>,
-    clock: <a class="struct" href="../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock">CaptureClock</a>,
+    clock: CaptureClock,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.93.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;(<a class="struct" href="struct.ScreenShare.html" title="struct hound_engine::api::ScreenShare">ScreenShare</a>, <a class="enum" href="https://doc.rust-lang.org/1.93.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="struct.ScreenAudio.html" title="struct hound_engine::api::ScreenAudio">ScreenAudio</a>&gt;), <a class="enum" href="../error/enum.CaptureError.html" title="enum hound_engine::error::CaptureError">CaptureError</a>&gt;</h4></section></summary><div class="docblock"><p>Open a screen/window capture per <code>config</code>, stamping frames on <code>clock</code>.</p>
 <p>Open is construct: the returned <a href="struct.ScreenShare.html" title="struct hound_engine::api::ScreenShare"><code>ScreenShare</code></a> is already delivering
 I420 frames scaled to <code>config.dimensions</code> (aspect-preserved), and dropping

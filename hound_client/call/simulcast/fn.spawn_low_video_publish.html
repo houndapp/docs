@@ -4,8 +4,8 @@
     track_name: &amp;'static <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.str.html">str</a>,
     source: <a class="enum" href="../../enum.Source.html" title="enum hound_client::Source">Source</a>,
     codec: <a class="enum" href="../../enum.Codec.html" title="enum hound_client::Codec">Codec</a>,
-    low_rx: Receiver&lt;<a class="struct" href="../../../hound_media/fragment/struct.Frame.html" title="struct hound_media::fragment::Frame">Frame</a>&gt;,
-    control_outbound: UnboundedSender&lt;<a class="enum" href="../../../hound_control/proto/enum.ClientMessage.html" title="enum hound_control::proto::ClientMessage">ClientMessage</a>&gt;,
+    low_rx: Receiver&lt;Frame&gt;,
+    control_outbound: UnboundedSender&lt;ClientMessage&gt;,
 ) -&gt; JoinHandle&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.unit.html">()</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Publish a LOW simulcast layer: drain the capture thread’s downscaled encode and
 forward it on its own moq track. The control-plane <code>Publish</code> announce is sent on
 the FIRST frame only, so the low track stays invisible to receivers until it’s

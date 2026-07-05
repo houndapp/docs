@@ -3,12 +3,12 @@
     encoder: &amp;mut <a class="struct" href="../../../hound_engine/api/struct.VideoEncoder.html" title="struct hound_engine::api::VideoEncoder">VideoEncoder</a>,
     adapt: &amp;<a class="struct" href="struct.AdaptShared.html" title="struct hound_client::call::adapt::AdaptShared">AdaptShared</a>,
     applied_bps: &amp;mut <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.u32.html">u32</a>,
-    fps_gate: &amp;mut <a class="struct" href="../../../hound_media/framerate/struct.FrameRateGate.html" title="struct hound_media::framerate::FrameRateGate">FrameRateGate</a>,
+    fps_gate: &amp;mut FrameRateGate,
     capture_dims: <a class="struct" href="../../../hound_engine/types/struct.Dimensions.html" title="struct hound_engine::types::Dimensions">Dimensions</a>,
-    forward: impl <a class="trait" href="https://doc.rust-lang.org/1.93.0/core/ops/function/trait.FnMut.html" title="trait core::ops::function::FnMut">FnMut</a>(<a class="struct" href="../../../hound_media/fragment/struct.Frame.html" title="struct hound_media::fragment::Frame">Frame</a>) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.bool.html">bool</a>,
+    forward: impl <a class="trait" href="https://doc.rust-lang.org/1.93.0/core/ops/function/trait.FnMut.html" title="trait core::ops::function::FnMut">FnMut</a>(Frame) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.bool.html">bool</a>,
     frame_seq: &amp;mut <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.u32.html">u32</a>,
     sender: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.u16.html">u16</a>,
-    track: <a class="enum" href="../../../hound_media/packet/enum.TrackKind.html" title="enum hound_media::packet::TrackKind">TrackKind</a>,
+    track: TrackKind,
     stats: &amp;<a class="struct" href="../../stats/struct.CallStats.html" title="struct hound_client::stats::CallStats">CallStats</a>,
 )</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The shared per-frame encode→adapt→publish core for both video capture loops.
 Retargets the

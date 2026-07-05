@@ -34,7 +34,7 @@ ONLY thing that calls <code>pop_due</code>, on its own steady clock — removes 
 scheduler from the release path entirely. The pump’s sole job is to FILL
 the jitter buffer (network-paced; its scheduling never affects playout),
 and the jitter buffer IS the cushion that absorbs the pump’s arrival jitter.
-Both push (pump) and pop (this thread) read the same <code>Copy</code> <a href="../../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock"><code>CaptureClock</code></a>,
+Both push (pump) and pop (this thread) read the same <code>Copy</code> [<code>CaptureClock</code>],
 so the buffer’s sender→local timeline mapping is consistent across the two
 threads.</p>
 <p>When <strong>zero</strong> producers are registered the bus STILL ticks (pushing silence),
@@ -45,7 +45,7 @@ briefly quiet or the last peer’s pipeline is mid-rebuild.</p>
 <p>A per-peer pipeline, instead of owning a playback thread, registers a
 <a href="struct.BusProducer.html" title="struct hound_engine::audio::mix::BusProducer"><code>BusProducer</code></a> and PUSHES its decoded, timestamped PCM into the slot’s jitter
 buffer via <a href="struct.BusProducer.html#method.push" title="method hound_engine::audio::mix::BusProducer::push"><code>BusProducer::push</code></a> (which also folds the arrival into the slot’s
-<a href="../../../hound_media/jitter/struct.AdaptiveJitter.html" title="struct hound_media::jitter::AdaptiveJitter"><code>AdaptiveJitter</code></a> and reports back the depth/jitter for stats). The RT thread
+[<code>AdaptiveJitter</code>] and reports back the depth/jitter for stats). The RT thread
 pulls from that buffer. The jitter buffer is bounded (drop-oldest at its frame
 cap) and the sample carry-queue is bounded to ~100 ms (<a href="constant.SLOT_CAPACITY_SAMPLES.html" title="constant hound_engine::audio::mix::SLOT_CAPACITY_SAMPLES"><code>SLOT_CAPACITY_SAMPLES</code></a>)
 drop-oldest, so one stalled or runaway peer can never grow the bus’s memory.
@@ -80,7 +80,7 @@ registry. Per-peer pipelines <a href="struct.PlayoutBus.html#method.register" ti
 push their due PCM into it; the bus sums them, feeds the mixed chunk to the APM
 render reference once, and plays it.</dd><dt><a class="struct" href="struct.PlayoutState.html" title="struct hound_engine::audio::mix::PlayoutState">Playout<wbr>State</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The per-peer jitter state the PUMP mutates (push) and the RT thread reads (pop),
 behind one mutex held only for the bounded buffer op. Owning the
-<a href="../../../hound_media/jitter/struct.AdaptiveJitter.html" title="struct hound_media::jitter::AdaptiveJitter"><code>AdaptiveJitter</code></a> here keeps push (fold arrival → retarget depth) and pop (the
+[<code>AdaptiveJitter</code>] here keeps push (fold arrival → retarget depth) and pop (the
 release schedule) operating on one consistent buffer under one lock.</dd><dt><a class="struct" href="struct.PullOutcome.html" title="struct hound_engine::audio::mix::PullOutcome">Pull<wbr>Outcome</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>What <a href="struct.Slot.html#method.pull_into" title="method hound_engine::audio::mix::Slot::pull_into"><code>Slot::pull_into</code></a> reports back to the bus loop for one tick.</dd><dt><a class="struct" href="struct.PushStatus.html" title="struct hound_engine::audio::mix::PushStatus">Push<wbr>Status</a></dt><dd>What a <a href="struct.BusProducer.html#method.push" title="method hound_engine::audio::mix::BusProducer::push"><code>BusProducer::push</code></a> reports back so the caller can surface per-peer
 audio-health stats without a second lock — everything the debug report needs to
 attribute a glitch to the jitter-buffer stage.</dd><dt><a class="struct" href="struct.Registry.html" title="struct hound_engine::audio::mix::Registry">Registry</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The set of live producer slots, shared between the bus thread (which iterates

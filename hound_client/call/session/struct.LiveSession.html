@@ -2,11 +2,11 @@
     relay: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../../../hound_transport/moq/struct.MoqRelaySession.html" title="struct hound_transport::moq::MoqRelaySession">MoqRelaySession</a>&gt;,
     endpoint: Endpoint,
     conn: Connection,
-    pub(super) control_outbound: UnboundedSender&lt;<a class="enum" href="../../../hound_control/proto/enum.ClientMessage.html" title="enum hound_control::proto::ClientMessage">ClientMessage</a>&gt;,
-    pub(super) self_id: <a class="struct" href="../../../hound_control/proto/struct.PeerId.html" title="struct hound_control::proto::PeerId">PeerId</a>,
-    clock: <a class="struct" href="../../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock">CaptureClock</a>,
-    view_rx: Receiver&lt;<a class="struct" href="../../../hound_control/session/struct.SessionView.html" title="struct hound_control::session::SessionView">SessionView</a>&gt;,
-    keyframe_tx: Sender&lt;<a class="struct" href="../../../hound_control/proto/struct.TrackId.html" title="struct hound_control::proto::TrackId">TrackId</a>&gt;,
+    pub(super) control_outbound: UnboundedSender&lt;ClientMessage&gt;,
+    pub(super) self_id: PeerId,
+    clock: CaptureClock,
+    view_rx: Receiver&lt;SessionView&gt;,
+    keyframe_tx: Sender&lt;TrackId&gt;,
     feedback_tx: Sender&lt;<a class="struct" href="../adapt/struct.MediaFeedback.html" title="struct hound_client::call::adapt::MediaFeedback">MediaFeedback</a>&gt;,
     quality_tx: Sender&lt;<a class="struct" href="../adapt/struct.QualityReport.html" title="struct hound_client::call::adapt::QualityReport">QualityReport</a>&gt;,
     rtt_conn: Connection,
@@ -24,13 +24,13 @@ actor and wedges the connection right after the handshake. Closed gracefully
 by <a href="struct.LiveSession.html#method.teardown" title="method hound_client::call::session::LiveSession::teardown"><code>Self::teardown</code></a> (a bare drop aborts the socket ungracefully).</p>
 </div><span id="structfield.conn" class="structfield section-header"><a href="#structfield.conn" class="anchor field">§</a><code>conn: Connection</code></span><div class="docblock"><p>The iroh connection under the relay session; <code>closed()</code> is one monitor leg,
 and it is closed gracefully on teardown.</p>
-</div><span id="structfield.control_outbound" class="structfield section-header"><a href="#structfield.control_outbound" class="anchor field">§</a><code>control_outbound: UnboundedSender&lt;<a class="enum" href="../../../hound_control/proto/enum.ClientMessage.html" title="enum hound_control::proto::ClientMessage">ClientMessage</a>&gt;</code></span><div class="docblock"><p>Outbound control intent for THIS session (the live control WS writer queue).</p>
-</div><span id="structfield.self_id" class="structfield section-header"><a href="#structfield.self_id" class="anchor field">§</a><code>self_id: <a class="struct" href="../../../hound_control/proto/struct.PeerId.html" title="struct hound_control::proto::PeerId">PeerId</a></code></span><div class="docblock"><p>Our assigned peer id (from this session’s <code>Welcome</code>).</p>
-</div><span id="structfield.clock" class="structfield section-header"><a href="#structfield.clock" class="anchor field">§</a><code>clock: <a class="struct" href="../../../hound_media/clock/struct.CaptureClock.html" title="struct hound_media::clock::CaptureClock">CaptureClock</a></code></span><div class="docblock"><p>The shared session receive/capture clock for this establish.</p>
-</div><span id="structfield.view_rx" class="structfield section-header"><a href="#structfield.view_rx" class="anchor field">§</a><code>view_rx: Receiver&lt;<a class="struct" href="../../../hound_control/session/struct.SessionView.html" title="struct hound_control::session::SessionView">SessionView</a>&gt;</code></span><div class="docblock"><p>The control view receiver — the keyframe/feedback listeners resolve “our
+</div><span id="structfield.control_outbound" class="structfield section-header"><a href="#structfield.control_outbound" class="anchor field">§</a><code>control_outbound: UnboundedSender&lt;ClientMessage&gt;</code></span><div class="docblock"><p>Outbound control intent for THIS session (the live control WS writer queue).</p>
+</div><span id="structfield.self_id" class="structfield section-header"><a href="#structfield.self_id" class="anchor field">§</a><code>self_id: PeerId</code></span><div class="docblock"><p>Our assigned peer id (from this session’s <code>Welcome</code>).</p>
+</div><span id="structfield.clock" class="structfield section-header"><a href="#structfield.clock" class="anchor field">§</a><code>clock: CaptureClock</code></span><div class="docblock"><p>The shared session receive/capture clock for this establish.</p>
+</div><span id="structfield.view_rx" class="structfield section-header"><a href="#structfield.view_rx" class="anchor field">§</a><code>view_rx: Receiver&lt;SessionView&gt;</code></span><div class="docblock"><p>The control view receiver — the keyframe/feedback listeners resolve “our
 track” from it. Cloned per-listener; held so a screen-share republish on this
 session can spawn its own listeners.</p>
-</div><span id="structfield.keyframe_tx" class="structfield section-header"><a href="#structfield.keyframe_tx" class="anchor field">§</a><code>keyframe_tx: Sender&lt;<a class="struct" href="../../../hound_control/proto/struct.TrackId.html" title="struct hound_control::proto::TrackId">TrackId</a>&gt;</code></span><div class="docblock"><p>Producer-side PLI broadcast for THIS session — each publish task’s keyframe
+</div><span id="structfield.keyframe_tx" class="structfield section-header"><a href="#structfield.keyframe_tx" class="anchor field">§</a><code>keyframe_tx: Sender&lt;TrackId&gt;</code></span><div class="docblock"><p>Producer-side PLI broadcast for THIS session — each publish task’s keyframe
 listener <code>.subscribe()</code>s a fresh receiver.</p>
 </div><span id="structfield.feedback_tx" class="structfield section-header"><a href="#structfield.feedback_tx" class="anchor field">§</a><code>feedback_tx: Sender&lt;<a class="struct" href="../adapt/struct.MediaFeedback.html" title="struct hound_client::call::adapt::MediaFeedback">MediaFeedback</a>&gt;</code></span><div class="docblock"><p>Producer-side BWE-feedback broadcast for THIS session — each publish task’s
 feedback listener <code>.subscribe()</code>s a fresh receiver.</p>
