@@ -3,8 +3,8 @@
 platform callback queue, or a bridge thread draining a foreign capturer)
 and a single <strong>consumer</strong> (the capture/encode thread’s blocking pull). One
 shape serves every video capture backend — AVFoundation’s delegate ring,
-ScreenCaptureKit’s frame ring, and the scap (WGC/PipeWire) bridge ring all
-reduce to this.</p>
+ScreenCaptureKit’s frame ring, and the WGC / portal-PipeWire bridge rings
+all reduce to this.</p>
 <h3 id="the-one-invariant-that-matters"><a class="doc-anchor" href="#the-one-invariant-that-matters">§</a>The one invariant that matters</h3>
 <p>The producer <strong>never blocks on the consumer</strong>. A capture callback runs on a
 platform-owned realtime queue; making it wait would stall the OS capture

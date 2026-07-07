@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["api","audio","backend","codec","error","platform","types"]};
+window.SIDEBAR_ITEMS = {"mod":["api","audio","backend","codec","error","os","platform","types"]};

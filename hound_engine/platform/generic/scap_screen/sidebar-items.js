@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["RING_FRAMES"],"fn":["bgra_to_rgba_thumbnail","bridge_loop","capture_thumbnail","convert_frame","enumerate_sources","map_build_error","resolve_target"],"struct":["ScapScreenCapturer"],"type":["ScapAppAudio"]};

@@ -11,6 +11,6 @@ rest of the pipeline). The alpha byte is ignored, so this also covers the
 <p><code>stride</code> is bytes per row in the source (≥ <code>width * 4</code>); pass <code>width * 4</code>
 for a tightly-packed buffer. <code>width</code>/<code>height</code> must be even. Returns <code>None</code>
 on a malformed input (odd/zero dimension, short buffer, or <code>stride &lt; width*4</code>).</p>
-<p>Live caller is the scap (Linux PipeWire) screen backend;
+<p>Live caller is the portal/PipeWire screen backend (Linux);
 unit-tested on macOS.</p>
 </div></details></section></div></main></body></html>

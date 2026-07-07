@@ -1069,16 +1069,19 @@
 <a href=#1069 id=1069 data-nosnippet>1069</a>    /// dedup in `watch_frame_sizes` then keeps the stream silent out of call.
 <a href=#1070 id=1070 data-nosnippet>1070</a>    </span><span class="attr">#[test]
 <a href=#1071 id=1071 data-nosnippet>1071</a>    </span><span class="kw">fn </span>frame_sizes_empty_between_calls() {
-<a href=#1072 id=1072 data-nosnippet>1072</a>        <span class="macro">assert_eq!</span>(project_frame_sizes(<span class="kw-2">&amp;</span>StatsSnapshot::default()), FrameSizesDto::default());
-<a href=#1073 id=1073 data-nosnippet>1073</a>    }
-<a href=#1074 id=1074 data-nosnippet>1074</a>
-<a href=#1075 id=1075 data-nosnippet>1075</a>    <span class="doccomment">/// The wire tokens `HoundClient` parses back into `hound_control::Source`.
-<a href=#1076 id=1076 data-nosnippet>1076</a>    /// Changing these silently turns tile-quality / stream-volume calls into no-ops.
-<a href=#1077 id=1077 data-nosnippet>1077</a>    </span><span class="attr">#[test]
-<a href=#1078 id=1078 data-nosnippet>1078</a>    </span><span class="kw">fn </span>source_wire_tokens_match_client_parsers() {
-<a href=#1079 id=1079 data-nosnippet>1079</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Microphone), <span class="string">"mic"</span>);
-<a href=#1080 id=1080 data-nosnippet>1080</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Camera), <span class="string">"camera"</span>);
-<a href=#1081 id=1081 data-nosnippet>1081</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Screen), <span class="string">"screen"</span>);
-<a href=#1082 id=1082 data-nosnippet>1082</a>    }
-<a href=#1083 id=1083 data-nosnippet>1083</a>}
+<a href=#1072 id=1072 data-nosnippet>1072</a>        <span class="macro">assert_eq!</span>(
+<a href=#1073 id=1073 data-nosnippet>1073</a>            project_frame_sizes(<span class="kw-2">&amp;</span>StatsSnapshot::default()),
+<a href=#1074 id=1074 data-nosnippet>1074</a>            FrameSizesDto::default()
+<a href=#1075 id=1075 data-nosnippet>1075</a>        );
+<a href=#1076 id=1076 data-nosnippet>1076</a>    }
+<a href=#1077 id=1077 data-nosnippet>1077</a>
+<a href=#1078 id=1078 data-nosnippet>1078</a>    <span class="doccomment">/// The wire tokens `HoundClient` parses back into `hound_control::Source`.
+<a href=#1079 id=1079 data-nosnippet>1079</a>    /// Changing these silently turns tile-quality / stream-volume calls into no-ops.
+<a href=#1080 id=1080 data-nosnippet>1080</a>    </span><span class="attr">#[test]
+<a href=#1081 id=1081 data-nosnippet>1081</a>    </span><span class="kw">fn </span>source_wire_tokens_match_client_parsers() {
+<a href=#1082 id=1082 data-nosnippet>1082</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Microphone), <span class="string">"mic"</span>);
+<a href=#1083 id=1083 data-nosnippet>1083</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Camera), <span class="string">"camera"</span>);
+<a href=#1084 id=1084 data-nosnippet>1084</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Screen), <span class="string">"screen"</span>);
+<a href=#1085 id=1085 data-nosnippet>1085</a>    }
+<a href=#1086 id=1086 data-nosnippet>1086</a>}
 </code></pre></div></section></main></body></html>

@@ -4,7 +4,7 @@
     source: <a class="enum" href="../../enum.Source.html" title="enum hound_client::Source">Source</a>,
     low: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.bool.html">bool</a>,
     space_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
-    relay: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../../../hound_transport/moq/struct.MoqRelaySession.html" title="struct hound_transport::moq::MoqRelaySession">MoqRelaySession</a>&gt;,
+    relay: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;MoqRelaySession&gt;,
     sink: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="../trait.VideoSink.html" title="trait hound_client::call::VideoSink">VideoSink</a>&gt;,
     playout_bus: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../../../hound_engine/audio/mix/struct.PlayoutBus.html" title="struct hound_engine::audio::mix::PlayoutBus">PlayoutBus</a>&gt;,
     levels: Sender&lt;<a class="struct" href="../struct.LevelsView.html" title="struct hound_client::call::LevelsView">LevelsView</a>&gt;,

@@ -73,34 +73,48 @@
 <a href=#73 id=73 data-nosnippet>73</a>//! `set_format`/`set_params`, mmap stream pump), validated on a Linux box / CI.
 <a href=#74 id=74 data-nosnippet>74</a>
 <a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>camera;
-<a href=#76 id=76 data-nosnippet>76</a>
-<a href=#77 id=77 data-nosnippet>77</a><span class="comment">// ── VAAPI HW codecs (opt-in: `linux-vaapi` feature) ─────────────────────────
-<a href=#78 id=78 data-nosnippet>78</a>// Gated behind `linux-vaapi` (off by default) because cros-codecs / cros-libva
-<a href=#79 id=79 data-nosnippet>79</a>// only build against the libva generation they were written for — see the
-<a href=#80 id=80 data-nosnippet>80</a>// crate's `[features]` note. Without the feature, Linux uses the portable SW
-<a href=#81 id=81 data-nosnippet>81</a>// openh264 floor (selected directly in `platform::mod`), and none of the
-<a href=#82 id=82 data-nosnippet>82</a>// cros-codecs surface below is compiled.
+<a href=#76 id=76 data-nosnippet>76</a><span class="doccomment">/// xdg-desktop-portal ScreenCast session (source selection + PipeWire handoff).
+<a href=#77 id=77 data-nosnippet>77</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>portal;
+<a href=#78 id=78 data-nosnippet>78</a><span class="doccomment">/// Portal + PipeWire screen/window video — the native Linux screen backend.
+<a href=#79 id=79 data-nosnippet>79</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>portal_screen;
+<a href=#80 id=80 data-nosnippet>80</a><span class="doccomment">/// PipeWire share-audio legs: default-sink-monitor loopback (display shares)
+<a href=#81 id=81 data-nosnippet>81</a>/// and app-scoped stream capture (per-application audio, the venmic/OBS model).
+<a href=#82 id=82 data-nosnippet>82</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>pw_audio;
 <a href=#83 id=83 data-nosnippet>83</a>
-<a href=#84 id=84 data-nosnippet>84</a></span><span class="doccomment">/// VAAPI display open + truthful encode/decode capability probe.
-<a href=#85 id=85 data-nosnippet>85</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
-<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>va_display;
-<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// cros-codecs stateless H.264 + HEVC VAAPI decoder.
-<a href=#88 id=88 data-nosnippet>88</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
-<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>vaapi_decoder;
-<a href=#90 id=90 data-nosnippet>90</a><span class="doccomment">/// cros-codecs stateless H.264 VAAPI encoder.
-<a href=#91 id=91 data-nosnippet>91</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
-<a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>vaapi_encoder;
-<a href=#93 id=93 data-nosnippet>93</a><span class="doccomment">/// VAAPI encode/decode dispatch (HW + SW openh264 floor) — the Linux
-<a href=#94 id=94 data-nosnippet>94</a>/// `VideoEncoderBackend` / `VideoDecoderBackend` when `linux-vaapi` is on.
-<a href=#95 id=95 data-nosnippet>95</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
-<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>video_codec;
+<a href=#84 id=84 data-nosnippet>84</a><span class="doccomment">/// `pw_init` once per process (reference-counted upstream; one init keeps
+<a href=#85 id=85 data-nosnippet>85</a>/// teardown symmetric), shared by every PipeWire bridge thread.
+<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pw_init_once() {
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">static </span>INIT: std::sync::Once = std::sync::Once::new();
+<a href=#88 id=88 data-nosnippet>88</a>    INIT.call_once(pipewire::init);
+<a href=#89 id=89 data-nosnippet>89</a>}
+<a href=#90 id=90 data-nosnippet>90</a>
+<a href=#91 id=91 data-nosnippet>91</a><span class="comment">// ── VAAPI HW codecs (opt-in: `linux-vaapi` feature) ─────────────────────────
+<a href=#92 id=92 data-nosnippet>92</a>// Gated behind `linux-vaapi` (off by default) because cros-codecs / cros-libva
+<a href=#93 id=93 data-nosnippet>93</a>// only build against the libva generation they were written for — see the
+<a href=#94 id=94 data-nosnippet>94</a>// crate's `[features]` note. Without the feature, Linux uses the portable SW
+<a href=#95 id=95 data-nosnippet>95</a>// openh264 floor (selected directly in `platform::mod`), and none of the
+<a href=#96 id=96 data-nosnippet>96</a>// cros-codecs surface below is compiled.
 <a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a><span class="doccomment">/// The NV12 [`cros_codecs::Fourcc`] — VAAPI's near-universal 4:2:0 encode input /
-<a href=#99 id=99 data-nosnippet>99</a>/// decode output layout, and the GBM allocation format for both codec paths. One
-<a href=#100 id=100 data-nosnippet>100</a>/// helper so the encoder, decoder and surface allocations can't disagree on the
-<a href=#101 id=101 data-nosnippet>101</a>/// fourcc bytes.
+<a href=#98 id=98 data-nosnippet>98</a></span><span class="doccomment">/// VAAPI display open + truthful encode/decode capability probe.
+<a href=#99 id=99 data-nosnippet>99</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
+<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>va_display;
+<a href=#101 id=101 data-nosnippet>101</a><span class="doccomment">/// cros-codecs stateless H.264 + HEVC VAAPI decoder.
 <a href=#102 id=102 data-nosnippet>102</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
-<a href=#103 id=103 data-nosnippet>103</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>nv12_fourcc() -&gt; cros_codecs::Fourcc {
-<a href=#104 id=104 data-nosnippet>104</a>    cros_codecs::Fourcc::from(<span class="string">b"NV12"</span>)
-<a href=#105 id=105 data-nosnippet>105</a>}
+<a href=#103 id=103 data-nosnippet>103</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>vaapi_decoder;
+<a href=#104 id=104 data-nosnippet>104</a><span class="doccomment">/// cros-codecs stateless H.264 VAAPI encoder.
+<a href=#105 id=105 data-nosnippet>105</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
+<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>vaapi_encoder;
+<a href=#107 id=107 data-nosnippet>107</a><span class="doccomment">/// VAAPI encode/decode dispatch (HW + SW openh264 floor) — the Linux
+<a href=#108 id=108 data-nosnippet>108</a>/// `VideoEncoderBackend` / `VideoDecoderBackend` when `linux-vaapi` is on.
+<a href=#109 id=109 data-nosnippet>109</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
+<a href=#110 id=110 data-nosnippet>110</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>video_codec;
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a><span class="doccomment">/// The NV12 [`cros_codecs::Fourcc`] — VAAPI's near-universal 4:2:0 encode input /
+<a href=#113 id=113 data-nosnippet>113</a>/// decode output layout, and the GBM allocation format for both codec paths. One
+<a href=#114 id=114 data-nosnippet>114</a>/// helper so the encoder, decoder and surface allocations can't disagree on the
+<a href=#115 id=115 data-nosnippet>115</a>/// fourcc bytes.
+<a href=#116 id=116 data-nosnippet>116</a></span><span class="attr">#[cfg(feature = <span class="string">"linux-vaapi"</span>)]
+<a href=#117 id=117 data-nosnippet>117</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>nv12_fourcc() -&gt; cros_codecs::Fourcc {
+<a href=#118 id=118 data-nosnippet>118</a>    cros_codecs::Fourcc::from(<span class="string">b"NV12"</span>)
+<a href=#119 id=119 data-nosnippet>119</a>}
 </code></pre></div></section></main></body></html>

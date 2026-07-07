@@ -181,7 +181,7 @@
 <a href=#181 id=181 data-nosnippet>181</a>/// for a tightly-packed buffer. `width`/`height` must be even. Returns `None`
 <a href=#182 id=182 data-nosnippet>182</a>/// on a malformed input (odd/zero dimension, short buffer, or `stride &lt; width*4`).
 <a href=#183 id=183 data-nosnippet>183</a>///
-<a href=#184 id=184 data-nosnippet>184</a>/// Live caller is the scap (Linux PipeWire) screen backend;
+<a href=#184 id=184 data-nosnippet>184</a>/// Live caller is the portal/PipeWire screen backend (Linux);
 <a href=#185 id=185 data-nosnippet>185</a>/// unit-tested on macOS.
 <a href=#186 id=186 data-nosnippet>186</a></span><span class="attr">#[cfg_attr(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"ios"</span>), allow(dead_code))]
 <a href=#187 id=187 data-nosnippet>187</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>bgra_to_i420(
@@ -477,7 +477,7 @@
 <a href=#477 id=477 data-nosnippet>477</a>/// calling, since this always allocates and copies.
 <a href=#478 id=478 data-nosnippet>478</a>///
 <a href=#479 id=479 data-nosnippet>479</a>/// Live callers: the AVFoundation camera + SCK screen (Apple), the V4L2 camera
-<a href=#480 id=480 data-nosnippet>480</a>/// (Linux), and the scap screen backend (Linux).
+<a href=#480 id=480 data-nosnippet>480</a>/// (Linux), and the portal/PipeWire screen backend (Linux).
 <a href=#481 id=481 data-nosnippet>481</a></span><span class="attr">#[cfg(any(
 <a href=#482 id=482 data-nosnippet>482</a>    target_os = <span class="string">"macos"</span>,
 <a href=#483 id=483 data-nosnippet>483</a>    target_os = <span class="string">"ios"</span>,

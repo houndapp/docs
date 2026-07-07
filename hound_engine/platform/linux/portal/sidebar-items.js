@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PickedKind","SourceKinds"],"fn":["available_kinds","map_portal_error","open","portal_thread","restore_tokens","runtime","setup"],"struct":["CastHandoff","PortalSession"]};

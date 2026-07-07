@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["NeverAppAudio"]};
+window.SIDEBAR_ITEMS = {};

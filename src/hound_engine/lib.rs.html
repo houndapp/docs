@@ -91,41 +91,45 @@
 <a href=#91 id=91 data-nosnippet>91</a>//! Screen/window sharing is a separate device kind with its own SPI
 <a href=#92 id=92 data-nosnippet>92</a>//! ([`backend::ScreenCapture`] + the optional [`backend::AppAudio`] leg, surfaced
 <a href=#93 id=93 data-nosnippet>93</a>//! as [`api::Engine::screen_sources`] / [`api::Engine::open_screen_capture`]).
-<a href=#94 id=94 data-nosnippet>94</a>//! Screen **video** is cross-platform: ScreenCaptureKit on Apple
+<a href=#94 id=94 data-nosnippet>94</a>//! Screen **video** is native on every desktop: ScreenCaptureKit on Apple
 <a href=#95 id=95 data-nosnippet>95</a>//! (`platform::apple::screen`), Windows Graphics Capture driven directly on
-<a href=#96 id=96 data-nosnippet>96</a>//! Windows (`platform::windows::wgc`, zero-copy D3D11), and scap (PipeWire) on
-<a href=#97 id=97 data-nosnippet>97</a>//! Linux (`platform::generic::scap_screen`) — window or display video as
-<a href=#98 id=98 data-nosnippet>98</a>//! [`types::RawFrame`]s. The **audio leg**: on Apple, per-app audio
-<a href=#99 id=99 data-nosnippet>99</a>//! (ScreenCaptureKit, macOS 13+ *window* sources) — the source application's
-<a href=#100 id=100 data-nosnippet>100</a>//! audio as 48 kHz mono [`types::PcmFrame`]s (the mic contract, so Opus/publish
-<a href=#101 id=101 data-nosnippet>101</a>//! reuse is trivial); on Windows, whole-system render loopback
-<a href=#102 id=102 data-nosnippet>102</a>//! (`platform::windows::wasapi_loopback`). On Linux (PipeWire-portal audio) the
-<a href=#103 id=103 data-nosnippet>103</a>//! app-audio leg is a documented follow-up — the `AppAudioBackend` is
-<a href=#104 id=104 data-nosnippet>104</a>//! [`api::NeverAppAudio`] there, so `open_screen_capture` returns `None` for
-<a href=#105 id=105 data-nosnippet>105</a>//! audio and a video-only share works.
-<a href=#106 id=106 data-nosnippet>106</a>//!
-<a href=#107 id=107 data-nosnippet>107</a>//! **TCC / Info.plist:** ScreenCaptureKit needs the macOS **Screen Recording**
-<a href=#108 id=108 data-nosnippet>108</a>//! permission, which the system prompts for on first capture — there is **no**
-<a href=#109 id=109 data-nosnippet>109</a>//! `Info.plist` key to add for it (unlike the camera/mic `NS*UsageDescription`
-<a href=#110 id=110 data-nosnippet>110</a>//! strings). A denial surfaces as a typed
-<a href=#111 id=111 data-nosnippet>111</a>//! [`error::CaptureError::PermissionDenied`] (kind `Screen`), so the UI can route
-<a href=#112 id=112 data-nosnippet>112</a>//! the user to System Settings → Privacy &amp; Security → Screen Recording rather
-<a href=#113 id=113 data-nosnippet>113</a>//! than showing an empty source list as if nothing were shareable.
-<a href=#114 id=114 data-nosnippet>114</a>//!
-<a href=#115 id=115 data-nosnippet>115</a>//! ## Typestate: open is construct, drop is stop
-<a href=#116 id=116 data-nosnippet>116</a>//!
-<a href=#117 id=117 data-nosnippet>117</a>//! Device handles ([`api::Microphone`], …) have no separate `start()` —
-<a href=#118 id=118 data-nosnippet>118</a>//! opening *is* constructing, so a handle that exists is capturing and
-<a href=#119 id=119 data-nosnippet>119</a>//! `next_frame()` on an unstarted device is unrepresentable (that whole
-<a href=#120 id=120 data-nosnippet>120</a>//! runtime error class is gone). Dropping a handle releases the device on the
-<a href=#121 id=121 data-nosnippet>121</a>//! owning thread (the `!Send` contract: construct, drive, and drop on one
-<a href=#122 id=122 data-nosnippet>122</a>//! dedicated thread).
-<a href=#123 id=123 data-nosnippet>123</a>
-<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub mod </span>api;
-<a href=#125 id=125 data-nosnippet>125</a><span class="kw">pub mod </span>audio;
-<a href=#126 id=126 data-nosnippet>126</a><span class="kw">pub mod </span>backend;
-<a href=#127 id=127 data-nosnippet>127</a><span class="kw">pub mod </span>codec;
-<a href=#128 id=128 data-nosnippet>128</a><span class="kw">pub mod </span>error;
-<a href=#129 id=129 data-nosnippet>129</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>platform;
-<a href=#130 id=130 data-nosnippet>130</a><span class="kw">pub mod </span>types;
+<a href=#96 id=96 data-nosnippet>96</a>//! Windows (`platform::windows::wgc`, zero-copy D3D11), and an
+<a href=#97 id=97 data-nosnippet>97</a>//! xdg-desktop-portal ScreenCast session + libpipewire driven directly on Linux
+<a href=#98 id=98 data-nosnippet>98</a>//! (`platform::linux::portal_screen` — the compositor's dialog owns source
+<a href=#99 id=99 data-nosnippet>99</a>//! selection, by Wayland design) — window or display video as
+<a href=#100 id=100 data-nosnippet>100</a>//! [`types::RawFrame`]s. The **audio leg**: on Apple, per-app audio
+<a href=#101 id=101 data-nosnippet>101</a>//! (ScreenCaptureKit, macOS 13+ *window* sources) — the source application's
+<a href=#102 id=102 data-nosnippet>102</a>//! audio as 48 kHz mono [`types::PcmFrame`]s (the mic contract, so Opus/publish
+<a href=#103 id=103 data-nosnippet>103</a>//! reuse is trivial); on Windows, WASAPI loopback (per-app process-tree for
+<a href=#104 id=104 data-nosnippet>104</a>//! window shares, whole-system for display shares); on Linux, PipeWire loopback
+<a href=#105 id=105 data-nosnippet>105</a>//! (`platform::linux::pw_audio` — whole-system default-sink monitor for display
+<a href=#106 id=106 data-nosnippet>106</a>//! shares; window shares carry no auto audio because the portal never reveals
+<a href=#107 id=107 data-nosnippet>107</a>//! the owning app, and [`os::linux`] exposes app-scoped capture by explicit
+<a href=#108 id=108 data-nosnippet>108</a>//! identity instead).
+<a href=#109 id=109 data-nosnippet>109</a>//!
+<a href=#110 id=110 data-nosnippet>110</a>//! **TCC / Info.plist:** ScreenCaptureKit needs the macOS **Screen Recording**
+<a href=#111 id=111 data-nosnippet>111</a>//! permission, which the system prompts for on first capture — there is **no**
+<a href=#112 id=112 data-nosnippet>112</a>//! `Info.plist` key to add for it (unlike the camera/mic `NS*UsageDescription`
+<a href=#113 id=113 data-nosnippet>113</a>//! strings). A denial surfaces as a typed
+<a href=#114 id=114 data-nosnippet>114</a>//! [`error::CaptureError::PermissionDenied`] (kind `Screen`), so the UI can route
+<a href=#115 id=115 data-nosnippet>115</a>//! the user to System Settings → Privacy &amp; Security → Screen Recording rather
+<a href=#116 id=116 data-nosnippet>116</a>//! than showing an empty source list as if nothing were shareable.
+<a href=#117 id=117 data-nosnippet>117</a>//!
+<a href=#118 id=118 data-nosnippet>118</a>//! ## Typestate: open is construct, drop is stop
+<a href=#119 id=119 data-nosnippet>119</a>//!
+<a href=#120 id=120 data-nosnippet>120</a>//! Device handles ([`api::Microphone`], …) have no separate `start()` —
+<a href=#121 id=121 data-nosnippet>121</a>//! opening *is* constructing, so a handle that exists is capturing and
+<a href=#122 id=122 data-nosnippet>122</a>//! `next_frame()` on an unstarted device is unrepresentable (that whole
+<a href=#123 id=123 data-nosnippet>123</a>//! runtime error class is gone). Dropping a handle releases the device on the
+<a href=#124 id=124 data-nosnippet>124</a>//! owning thread (the `!Send` contract: construct, drive, and drop on one
+<a href=#125 id=125 data-nosnippet>125</a>//! dedicated thread).
+<a href=#126 id=126 data-nosnippet>126</a>
+<a href=#127 id=127 data-nosnippet>127</a></span><span class="kw">pub mod </span>api;
+<a href=#128 id=128 data-nosnippet>128</a><span class="kw">pub mod </span>audio;
+<a href=#129 id=129 data-nosnippet>129</a><span class="kw">pub mod </span>backend;
+<a href=#130 id=130 data-nosnippet>130</a><span class="kw">pub mod </span>codec;
+<a href=#131 id=131 data-nosnippet>131</a><span class="kw">pub mod </span>error;
+<a href=#132 id=132 data-nosnippet>132</a><span class="kw">pub mod </span>os;
+<a href=#133 id=133 data-nosnippet>133</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>platform;
+<a href=#134 id=134 data-nosnippet>134</a><span class="kw">pub mod </span>types;
 </code></pre></div></section></main></body></html>

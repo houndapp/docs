@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FORMAT_WAIT","LOOP_TICK","PORTAL_SCREEN_ID","PORTAL_WINDOW_ID","RING_FRAMES"],"fn":["bridge_loop","capture_thumbnail","convert_frame","enumerate_sources","video_format_pod"],"struct":["PortalScreenCapturer","VideoState"]};
