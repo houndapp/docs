@@ -99,50 +99,65 @@
 <a href=#99 id=99 data-nosnippet>99</a>    }
 <a href=#100 id=100 data-nosnippet>100</a>}
 <a href=#101 id=101 data-nosnippet>101</a>
-<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// A page of results from a paginated list endpoint.
-<a href=#103 id=103 data-nosnippet>103</a>///
-<a href=#104 id=104 data-nosnippet>104</a>/// **Wire note:** the backend's pagination envelope is
-<a href=#105 id=105 data-nosnippet>105</a>/// `{ contents, current, next, prev, total }` (see `services/backend/src/api/data.rs`).
-<a href=#106 id=106 data-nosnippet>106</a>/// This view-model keeps a client-friendly shape; the wire→view mapping lives in
-<a href=#107 id=107 data-nosnippet>107</a>/// [`crate::rest`] (`WirePage&lt;T&gt;`), so the cursor quirk does not leak here.
-<a href=#108 id=108 data-nosnippet>108</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-<a href=#109 id=109 data-nosnippet>109</a></span><span class="kw">pub struct </span>Page&lt;T&gt; {
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">pub </span>items: Vec&lt;T&gt;,
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="doccomment">/// 0-indexed current page number.
-<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="kw">pub </span>page: u32,
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="doccomment">/// Next page number to request (== `page` when on the last page).
-<a href=#114 id=114 data-nosnippet>114</a>    </span><span class="kw">pub </span>next_page: u32,
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="doccomment">/// Previous page number (== `page` when on the first page).
-<a href=#116 id=116 data-nosnippet>116</a>    </span><span class="kw">pub </span>prev_page: u32,
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="doccomment">/// Total number of items across all pages.
-<a href=#118 id=118 data-nosnippet>118</a>    </span><span class="kw">pub </span>total: u64,
-<a href=#119 id=119 data-nosnippet>119</a>}
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a><span class="doccomment">/// What the client must present to the SFU + relay to join a voice channel, plus the
-<a href=#122 id=122 data-nosnippet>122</a>/// roster snapshot at join time. Built from the backend `VoiceJoinResponse`.
+<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// Result of an auth flow that can end more than one way: a Steam sign-in
+<a href=#103 id=103 data-nosnippet>103</a>/// (in-Steam ticket or browser OpenID) or a browser-deferred ceremony wait.
+<a href=#104 id=104 data-nosnippet>104</a></span><span class="attr">#[derive(Clone, Debug, PartialEq)]
+<a href=#105 id=105 data-nosnippet>105</a></span><span class="kw">pub enum </span>AuthFlowOutcome {
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="doccomment">/// A session was established — signed in.
+<a href=#107 id=107 data-nosnippet>107</a>    </span>SignedIn(AuthState),
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// Unknown Steam ID: a link token is parked on the client and the UI must
+<a href=#109 id=109 data-nosnippet>109</a>    /// show the create-or-link screen ("Continue as `persona`" / "I already
+<a href=#110 id=110 data-nosnippet>110</a>    /// have an account").
+<a href=#111 id=111 data-nosnippet>111</a>    </span>SteamUnknown { persona: String },
+<a href=#112 id=112 data-nosnippet>112</a>    <span class="doccomment">/// The browser email-link ceremony completed: an email + passkey were
+<a href=#113 id=113 data-nosnippet>113</a>    /// added to the already-signed-in account. No session change.
+<a href=#114 id=114 data-nosnippet>114</a>    </span>EmailLinked,
+<a href=#115 id=115 data-nosnippet>115</a>}
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a><span class="doccomment">/// A page of results from a paginated list endpoint.
+<a href=#118 id=118 data-nosnippet>118</a>///
+<a href=#119 id=119 data-nosnippet>119</a>/// **Wire note:** the backend's pagination envelope is
+<a href=#120 id=120 data-nosnippet>120</a>/// `{ contents, current, next, prev, total }` (see `services/backend/src/api/data.rs`).
+<a href=#121 id=121 data-nosnippet>121</a>/// This view-model keeps a client-friendly shape; the wire→view mapping lives in
+<a href=#122 id=122 data-nosnippet>122</a>/// [`crate::rest`] (`WirePage&lt;T&gt;`), so the cursor quirk does not leak here.
 <a href=#123 id=123 data-nosnippet>123</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub struct </span>VoiceJoin {
-<a href=#125 id=125 data-nosnippet>125</a>    <span class="doccomment">/// The joining user's own merged community profile (name + avatar).
-<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="kw">pub </span>profile: Member,
-<a href=#127 id=127 data-nosnippet>127</a>    <span class="doccomment">/// iroh relay URL — never hardcoded client-side; always taken from the server.
-<a href=#128 id=128 data-nosnippet>128</a>    </span><span class="kw">pub </span>relay_url: String,
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="doccomment">/// Short-lived (15 min TTL) HMAC token proving this user may connect to the SFU.
-<a href=#130 id=130 data-nosnippet>130</a>    /// Format: `{user_id}:{space_id}:{expiry_unix_secs}:{hex_mac}`.
-<a href=#131 id=131 data-nosnippet>131</a>    </span><span class="kw">pub </span>relay_token: String,
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="doccomment">/// Other participants already in the channel at join time (render before media).
-<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">pub </span>peers: Vec&lt;VoicePeer&gt;,
-<a href=#134 id=134 data-nosnippet>134</a>    <span class="doccomment">/// iroh node id (hex public key) of the SFU. `None` when the backend has no SFU
-<a href=#135 id=135 data-nosnippet>135</a>    /// configured (dev) — clients skip the direct QUIC connection in that case.
-<a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">pub </span>sfu_node_id: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#137 id=137 data-nosnippet>137</a>}
-<a href=#138 id=138 data-nosnippet>138</a>
-<a href=#139 id=139 data-nosnippet>139</a><span class="doccomment">/// A participant already in a voice channel, as reported at join time.
-<a href=#140 id=140 data-nosnippet>140</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-<a href=#141 id=141 data-nosnippet>141</a></span><span class="kw">pub struct </span>VoicePeer {
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">pub </span>user_id: Uuid,
-<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">pub </span>name: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="kw">pub </span>picture: String,
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="doccomment">/// The peer's SFU/control-plane peer id; `None` until they confirm their SFU join.
-<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="kw">pub </span>sfu_peer_id: <span class="prelude-ty">Option</span>&lt;u16&gt;,
-<a href=#147 id=147 data-nosnippet>147</a>}
+<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub struct </span>Page&lt;T&gt; {
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">pub </span>items: Vec&lt;T&gt;,
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="doccomment">/// 0-indexed current page number.
+<a href=#127 id=127 data-nosnippet>127</a>    </span><span class="kw">pub </span>page: u32,
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// Next page number to request (== `page` when on the last page).
+<a href=#129 id=129 data-nosnippet>129</a>    </span><span class="kw">pub </span>next_page: u32,
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="doccomment">/// Previous page number (== `page` when on the first page).
+<a href=#131 id=131 data-nosnippet>131</a>    </span><span class="kw">pub </span>prev_page: u32,
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="doccomment">/// Total number of items across all pages.
+<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">pub </span>total: u64,
+<a href=#134 id=134 data-nosnippet>134</a>}
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a><span class="doccomment">/// What the client must present to the SFU + relay to join a voice channel, plus the
+<a href=#137 id=137 data-nosnippet>137</a>/// roster snapshot at join time. Built from the backend `VoiceJoinResponse`.
+<a href=#138 id=138 data-nosnippet>138</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+<a href=#139 id=139 data-nosnippet>139</a></span><span class="kw">pub struct </span>VoiceJoin {
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="doccomment">/// The joining user's own merged community profile (name + avatar).
+<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">pub </span>profile: Member,
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="doccomment">/// iroh relay URL — never hardcoded client-side; always taken from the server.
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">pub </span>relay_url: String,
+<a href=#144 id=144 data-nosnippet>144</a>    <span class="doccomment">/// Short-lived (15 min TTL) HMAC token proving this user may connect to the SFU.
+<a href=#145 id=145 data-nosnippet>145</a>    /// Format: `{user_id}:{space_id}:{expiry_unix_secs}:{hex_mac}`.
+<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="kw">pub </span>relay_token: String,
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="doccomment">/// Other participants already in the channel at join time (render before media).
+<a href=#148 id=148 data-nosnippet>148</a>    </span><span class="kw">pub </span>peers: Vec&lt;VoicePeer&gt;,
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// iroh node id (hex public key) of the SFU. `None` when the backend has no SFU
+<a href=#150 id=150 data-nosnippet>150</a>    /// configured (dev) — clients skip the direct QUIC connection in that case.
+<a href=#151 id=151 data-nosnippet>151</a>    </span><span class="kw">pub </span>sfu_node_id: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#152 id=152 data-nosnippet>152</a>}
+<a href=#153 id=153 data-nosnippet>153</a>
+<a href=#154 id=154 data-nosnippet>154</a><span class="doccomment">/// A participant already in a voice channel, as reported at join time.
+<a href=#155 id=155 data-nosnippet>155</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+<a href=#156 id=156 data-nosnippet>156</a></span><span class="kw">pub struct </span>VoicePeer {
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">pub </span>user_id: Uuid,
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">pub </span>name: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">pub </span>picture: String,
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="doccomment">/// The peer's SFU/control-plane peer id; `None` until they confirm their SFU join.
+<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="kw">pub </span>sfu_peer_id: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+<a href=#162 id=162 data-nosnippet>162</a>}
 </code></pre></div></section></main></body></html>

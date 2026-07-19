@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["link_ceremony_user","link_email_finish","link_email_start","link_email_token","list_identities","unlink_identity"],"struct":["EmailLinkTokenResponse","IdentitiesResponse","IdentityEntry"]};

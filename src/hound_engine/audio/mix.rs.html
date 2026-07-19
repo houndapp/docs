@@ -401,17 +401,17 @@
 <a href=#401 id=401 data-nosnippet>401</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>st) = <span class="self">self</span>.state.lock() {
 <a href=#402 id=402 data-nosnippet>402</a>            <span class="kw">let </span>due = st.buffer.pop_due(now_us + MIX_PULL_LOOKAHEAD_US);
 <a href=#403 id=403 data-nosnippet>403</a>            drop(st); <span class="comment">// release the jitter lock before touching the carry
-<a href=#404 id=404 data-nosnippet>404</a>            </span><span class="kw">if </span>!due.is_empty() {
-<a href=#405 id=405 data-nosnippet>405</a>                <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>q) = <span class="self">self</span>.carry.lock() {
-<a href=#406 id=406 data-nosnippet>406</a>                    <span class="kw">for </span>frame <span class="kw">in </span>due {
-<a href=#407 id=407 data-nosnippet>407</a>                        <span class="comment">// Bulk-append the frame's samples, then trim the oldest past
-<a href=#408 id=408 data-nosnippet>408</a>                        // capacity in ONE drain (drop-oldest backpressure) — a single
-<a href=#409 id=409 data-nosnippet>409</a>                        // memcpy + bounds check per frame instead of one per sample.
-<a href=#410 id=410 data-nosnippet>410</a>                        </span>q.extend(frame.samples);
-<a href=#411 id=411 data-nosnippet>411</a>                        <span class="kw">if </span>q.len() &gt; SLOT_CAPACITY_SAMPLES {
-<a href=#412 id=412 data-nosnippet>412</a>                            <span class="kw">let </span>excess = q.len() - SLOT_CAPACITY_SAMPLES;
-<a href=#413 id=413 data-nosnippet>413</a>                            q.drain(..excess);
-<a href=#414 id=414 data-nosnippet>414</a>                        }
+<a href=#404 id=404 data-nosnippet>404</a>            </span><span class="kw">if </span>!due.is_empty()
+<a href=#405 id=405 data-nosnippet>405</a>                &amp;&amp; <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>q) = <span class="self">self</span>.carry.lock()
+<a href=#406 id=406 data-nosnippet>406</a>            {
+<a href=#407 id=407 data-nosnippet>407</a>                <span class="kw">for </span>frame <span class="kw">in </span>due {
+<a href=#408 id=408 data-nosnippet>408</a>                    <span class="comment">// Bulk-append the frame's samples, then trim the oldest past
+<a href=#409 id=409 data-nosnippet>409</a>                    // capacity in ONE drain (drop-oldest backpressure) — a single
+<a href=#410 id=410 data-nosnippet>410</a>                    // memcpy + bounds check per frame instead of one per sample.
+<a href=#411 id=411 data-nosnippet>411</a>                    </span>q.extend(frame.samples);
+<a href=#412 id=412 data-nosnippet>412</a>                    <span class="kw">if </span>q.len() &gt; SLOT_CAPACITY_SAMPLES {
+<a href=#413 id=413 data-nosnippet>413</a>                        <span class="kw">let </span>excess = q.len() - SLOT_CAPACITY_SAMPLES;
+<a href=#414 id=414 data-nosnippet>414</a>                        q.drain(..excess);
 <a href=#415 id=415 data-nosnippet>415</a>                    }
 <a href=#416 id=416 data-nosnippet>416</a>                }
 <a href=#417 id=417 data-nosnippet>417</a>            }
@@ -1257,7 +1257,7 @@
 <a href=#1257 id=1257 data-nosnippet>1257</a>        ); <span class="comment">// exact, not a starve
 <a href=#1258 id=1258 data-nosnippet>1258</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
 <a href=#1259 id=1259 data-nosnippet>1259</a>            <span class="kw">let </span><span class="kw-2">mut </span>o = [<span class="number">0i32</span>; MIX_CHUNK_SAMPLES];
-<a href=#1260 id=1260 data-nosnippet>1260</a>            slot.pull_into(FAR_FUTURE_US, <span class="kw-2">&amp;mut </span>o).contributed; <span class="comment">// empty every tick
+<a href=#1260 id=1260 data-nosnippet>1260</a>            slot.pull_into(FAR_FUTURE_US, <span class="kw-2">&amp;mut </span>o); <span class="comment">// empty every tick
 <a href=#1261 id=1261 data-nosnippet>1261</a>        </span>}
 <a href=#1262 id=1262 data-nosnippet>1262</a>        <span class="macro">assert_eq!</span>(
 <a href=#1263 id=1263 data-nosnippet>1263</a>            starves.load(Ordering::Relaxed),
@@ -1319,7 +1319,7 @@
 <a href=#1319 id=1319 data-nosnippet>1319</a>        <span class="kw">let </span>slot = Slot::new(starves.clone(), <span class="number">0</span>, <span class="string">"mic"</span>, NO_PEER_TAG);
 <a href=#1320 id=1320 data-nosnippet>1320</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">20 </span>{
 <a href=#1321 id=1321 data-nosnippet>1321</a>            <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0i32</span>; MIX_CHUNK_SAMPLES];
-<a href=#1322 id=1322 data-nosnippet>1322</a>            slot.pull_into(FAR_FUTURE_US, <span class="kw-2">&amp;mut </span>out).contributed;
+<a href=#1322 id=1322 data-nosnippet>1322</a>            slot.pull_into(FAR_FUTURE_US, <span class="kw-2">&amp;mut </span>out);
 <a href=#1323 id=1323 data-nosnippet>1323</a>        }
 <a href=#1324 id=1324 data-nosnippet>1324</a>        <span class="macro">assert_eq!</span>(
 <a href=#1325 id=1325 data-nosnippet>1325</a>            starves.load(Ordering::Relaxed),

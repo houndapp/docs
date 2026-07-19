@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["finish_login","finish_register","router","start_login","start_register"],"mod":["jwt"],"struct":["Auth","FinishLoginResponse","InFlightRegistration"]};
+window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["finish_login","finish_register","router","start_login","start_register"],"mod":["identity","jwt","steam"],"struct":["Auth","FinishLoginResponse","InFlightRegistration"]};

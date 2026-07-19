@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["authenticator","dto","error","proto","rp"]};
+window.SIDEBAR_ITEMS = {"mod":["authenticator","dto","error","proto","rp","storage"]};

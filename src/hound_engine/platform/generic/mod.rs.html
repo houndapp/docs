@@ -24,18 +24,20 @@
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>mf_format;
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>openh264;
 <a href=#26 id=26 data-nosnippet>26</a><span class="doccomment">/// Sans-io 20 ms PCM framing + timestamp cadence, shared by the screen-share
-<a href=#27 id=27 data-nosnippet>27</a>/// audio backends (macOS SCK, Windows WASAPI loopback).
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>pcm_framer;
-<a href=#29 id=29 data-nosnippet>29</a><span class="doccomment">/// Test-only SW AV1 encoder (rav1e); the AV1 source for the VideoToolbox AV1
-<a href=#30 id=30 data-nosnippet>30</a>/// HW-decode tests. Not built into release — rav1e is a dev-dependency.
-<a href=#31 id=31 data-nosnippet>31</a></span><span class="attr">#[cfg(test)]
-<a href=#32 id=32 data-nosnippet>32</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>rav1e_encoder;
-<a href=#33 id=33 data-nosnippet>33</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>resample;
-<a href=#34 id=34 data-nosnippet>34</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>ring;
-<a href=#35 id=35 data-nosnippet>35</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>screen_filter;
-<a href=#36 id=36 data-nosnippet>36</a><span class="doccomment">/// SW video codec backends (openh264) — the non-Apple `VideoEncoderBackend` /
-<a href=#37 id=37 data-nosnippet>37</a>/// `VideoDecoderBackend`. Only built where they're the selected backend (non-Apple).
-<a href=#38 id=38 data-nosnippet>38</a></span><span class="attr">#[cfg(not(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"ios"</span>)))]
-<a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>sw_codec;
-<a href=#40 id=40 data-nosnippet>40</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>synthetic;
+<a href=#27 id=27 data-nosnippet>27</a>/// audio backends (Linux PipeWire, Windows WASAPI loopback). Also compiled for
+<a href=#28 id=28 data-nosnippet>28</a>/// tests everywhere: it's pure math, so its cadence tests run on any dev box.
+<a href=#29 id=29 data-nosnippet>29</a></span><span class="attr">#[cfg(any(test, target_os = <span class="string">"linux"</span>, target_os = <span class="string">"windows"</span>))]
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>pcm_framer;
+<a href=#31 id=31 data-nosnippet>31</a><span class="doccomment">/// Test-only SW AV1 encoder (rav1e); the AV1 source for the VideoToolbox AV1
+<a href=#32 id=32 data-nosnippet>32</a>/// HW-decode tests. Not built into release — rav1e is a dev-dependency.
+<a href=#33 id=33 data-nosnippet>33</a></span><span class="attr">#[cfg(test)]
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>rav1e_encoder;
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>resample;
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>ring;
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>screen_filter;
+<a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// SW video codec backends (openh264) — the non-Apple `VideoEncoderBackend` /
+<a href=#39 id=39 data-nosnippet>39</a>/// `VideoDecoderBackend`. Only built where they're the selected backend (non-Apple).
+<a href=#40 id=40 data-nosnippet>40</a></span><span class="attr">#[cfg(not(any(target_os = <span class="string">"macos"</span>, target_os = <span class="string">"ios"</span>)))]
+<a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>sw_codec;
+<a href=#42 id=42 data-nosnippet>42</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>synthetic;
 </code></pre></div></section></main></body></html>

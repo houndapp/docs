@@ -15,9 +15,16 @@
 <a href=#15 id=15 data-nosnippet>15</a>    #[error(<span class="string">"webauthn: {0}"</span>)]
 <a href=#16 id=16 data-nosnippet>16</a>    </span>WebAuthn(<span class="attr">#[from] </span>webauthn_rs::prelude::WebauthnError),
 <a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a>    <span class="doccomment">/// Anything else — the authenticator seam, malformed inputs the wrapper
-<a href=#19 id=19 data-nosnippet>19</a>    /// rejects before reaching the state machine, etc.
-<a href=#20 id=20 data-nosnippet>20</a>    </span><span class="attr">#[error(<span class="string">"passkey: {0}"</span>)]
-<a href=#21 id=21 data-nosnippet>21</a>    </span>Other(String),
-<a href=#22 id=22 data-nosnippet>22</a>}
+<a href=#18 id=18 data-nosnippet>18</a>    <span class="doccomment">/// A session-token persistence failure in the platform keyring (only under
+<a href=#19 id=19 data-nosnippet>19</a>    /// the `storage` feature). A host/environment fault — the keychain refused
+<a href=#20 id=20 data-nosnippet>20</a>    /// the read/write — not a ceremony failure.
+<a href=#21 id=21 data-nosnippet>21</a>    </span><span class="attr">#[cfg(feature = <span class="string">"storage"</span>)]
+<a href=#22 id=22 data-nosnippet>22</a>    #[error(<span class="string">"storage: {0}"</span>)]
+<a href=#23 id=23 data-nosnippet>23</a>    </span>Storage(String),
+<a href=#24 id=24 data-nosnippet>24</a>
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="doccomment">/// Anything else — the authenticator seam, malformed inputs the wrapper
+<a href=#26 id=26 data-nosnippet>26</a>    /// rejects before reaching the state machine, etc.
+<a href=#27 id=27 data-nosnippet>27</a>    </span><span class="attr">#[error(<span class="string">"passkey: {0}"</span>)]
+<a href=#28 id=28 data-nosnippet>28</a>    </span>Other(String),
+<a href=#29 id=29 data-nosnippet>29</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DbCommand"],"fn":["run"],"struct":["DbArgs"]};
+window.SIDEBAR_ITEMS = {"enum":["DbCommand"],"fn":["applied_names","confirm_destructive","pending_names","redact","run"],"struct":["DbArgs","DbTarget"]};

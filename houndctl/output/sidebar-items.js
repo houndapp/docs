@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["OutputMode"],"fn":["hint","print_json","print_kv","print_table","success"]};
+window.SIDEBAR_ITEMS = {"enum":["OutputMode"],"fn":["count","hint","kv_stderr","print_json","print_kv","print_table","success"]};

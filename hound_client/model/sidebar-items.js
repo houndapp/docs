@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AuthState","SpaceKind"],"struct":["Attachment","Community","Member","Message","Page","Profile","Space","VoiceJoin","VoicePeer"]};
+window.SIDEBAR_ITEMS = {"enum":["AuthFlowOutcome","AuthState","SpaceKind"],"struct":["Attachment","Community","Member","Message","Page","Profile","Space","VoiceJoin","VoicePeer"]};

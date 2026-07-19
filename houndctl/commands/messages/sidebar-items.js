@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["MessagesCommand"],"fn":["run"],"struct":["MessagesArgs"]};
+window.SIDEBAR_ITEMS = {"enum":["MessagesCommand"],"fn":["preview","run"],"struct":["MessagesArgs"]};

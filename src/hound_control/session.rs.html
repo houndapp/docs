@@ -38,11 +38,11 @@
 <a href=#38 id=38 data-nosnippet>38</a>            } =&gt; {
 <a href=#39 id=39 data-nosnippet>39</a>                <span class="self">self</span>.protocol_version = <span class="prelude-val">Some</span>(<span class="kw-2">*</span>protocol_version);
 <a href=#40 id=40 data-nosnippet>40</a>                <span class="self">self</span>.self_id = <span class="prelude-val">Some</span>(<span class="kw-2">*</span>self_id);
-<a href=#41 id=41 data-nosnippet>41</a>                <span class="self">self</span>.peers = peers.iter().map(|p| (p.id, p.clone())).collect();
+<a href=#41 id=41 data-nosnippet>41</a>                <span class="self">self</span>.peers = peers.iter().map(|p| (p.id, <span class="kw-2">*</span>p)).collect();
 <a href=#42 id=42 data-nosnippet>42</a>                <span class="self">self</span>.tracks = tracks.iter().map(|t| (t.id, t.clone())).collect();
 <a href=#43 id=43 data-nosnippet>43</a>            }
 <a href=#44 id=44 data-nosnippet>44</a>            ServerMessage::PeerJoined { peer } =&gt; {
-<a href=#45 id=45 data-nosnippet>45</a>                <span class="self">self</span>.peers.insert(peer.id, peer.clone());
+<a href=#45 id=45 data-nosnippet>45</a>                <span class="self">self</span>.peers.insert(peer.id, <span class="kw-2">*</span>peer);
 <a href=#46 id=46 data-nosnippet>46</a>            }
 <a href=#47 id=47 data-nosnippet>47</a>            ServerMessage::PeerLeft { peer } =&gt; {
 <a href=#48 id=48 data-nosnippet>48</a>                <span class="self">self</span>.peers.remove(peer);

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SERVICE","SESSION_KEY"],"fn":["keyring_err","platform_store"],"struct":["KeyringSessionStore","PersistedSession"]};
+window.SIDEBAR_ITEMS = {"fn":["storage_err"],"struct":["KeyringSessionStore"]};
