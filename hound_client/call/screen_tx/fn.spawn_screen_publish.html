@@ -3,7 +3,7 @@
     space_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
     self_id: PeerId,
     clock: CaptureClock,
-    source: ScreenSource,
+    source: <a class="enum" href="../../../hound_engine/types/enum.ScreenSource.html" title="enum hound_engine::types::ScreenSource">ScreenSource</a>,
     sink: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="../trait.VideoSink.html" title="trait hound_client::call::VideoSink">VideoSink</a>&gt;,
     control_outbound: UnboundedSender&lt;ClientMessage&gt;,
     rtt_conn: Connection,

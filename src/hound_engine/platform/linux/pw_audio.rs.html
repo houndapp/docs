@@ -427,7 +427,7 @@
 <a href=#427 id=427 data-nosnippet>427</a>                }
 <a href=#428 id=428 data-nosnippet>428</a>            }
 <a href=#429 id=429 data-nosnippet>429</a>            pw::types::ObjectType::Node =&gt; {
-<a href=#430 id=430 data-nosnippet>430</a>                <span class="kw">let </span>identity = NodeIdentity::from_props(<span class="kw-2">*</span>props);
+<a href=#430 id=430 data-nosnippet>430</a>                <span class="kw">let </span>identity = NodeIdentity::from_props(props);
 <a href=#431 id=431 data-nosnippet>431</a>                <span class="kw">if </span>identity.is_output_stream() {
 <a href=#432 id=432 data-nosnippet>432</a>                    <span class="self">self</span>.evaluate(global.id, identity);
 <a href=#433 id=433 data-nosnippet>433</a>                }
@@ -462,14 +462,14 @@
 <a href=#462 id=462 data-nosnippet>462</a>
 <a href=#463 id=463 data-nosnippet>463</a>        <span class="comment">// A candidate pid outside the known tree may be a child spawned after
 <a href=#464 id=464 data-nosnippet>464</a>        // the last scan — re-expand (throttled) before judging it.
-<a href=#465 id=465 data-nosnippet>465</a>        </span><span class="kw">if let </span>(<span class="prelude-val">Some</span>(root), <span class="prelude-val">Some</span>(pid)) = (<span class="self">self</span>.target.root_pid, identity.pid) {
-<a href=#466 id=466 data-nosnippet>466</a>            <span class="kw">if </span>!<span class="self">self</span>.tree.borrow().contains(<span class="kw-2">&amp;</span>pid) {
-<a href=#467 id=467 data-nosnippet>467</a>                <span class="kw">let </span>now = monotonic_us();
-<a href=#468 id=468 data-nosnippet>468</a>                <span class="kw">let </span><span class="kw-2">mut </span>last = <span class="self">self</span>.last_scan_us.borrow_mut();
-<a href=#469 id=469 data-nosnippet>469</a>                <span class="kw">if </span>now - <span class="kw-2">*</span>last &gt;= TREE_RESCAN_US {
-<a href=#470 id=470 data-nosnippet>470</a>                    <span class="kw-2">*</span>last = now;
-<a href=#471 id=471 data-nosnippet>471</a>                    <span class="kw-2">*</span><span class="self">self</span>.tree.borrow_mut() = descendants(root, <span class="kw-2">&amp;</span>proc_parent_pairs());
-<a href=#472 id=472 data-nosnippet>472</a>                }
+<a href=#465 id=465 data-nosnippet>465</a>        </span><span class="kw">if let </span>(<span class="prelude-val">Some</span>(root), <span class="prelude-val">Some</span>(pid)) = (<span class="self">self</span>.target.root_pid, identity.pid)
+<a href=#466 id=466 data-nosnippet>466</a>            &amp;&amp; !<span class="self">self</span>.tree.borrow().contains(<span class="kw-2">&amp;</span>pid)
+<a href=#467 id=467 data-nosnippet>467</a>        {
+<a href=#468 id=468 data-nosnippet>468</a>            <span class="kw">let </span>now = monotonic_us();
+<a href=#469 id=469 data-nosnippet>469</a>            <span class="kw">let </span><span class="kw-2">mut </span>last = <span class="self">self</span>.last_scan_us.borrow_mut();
+<a href=#470 id=470 data-nosnippet>470</a>            <span class="kw">if </span>now - <span class="kw-2">*</span>last &gt;= TREE_RESCAN_US {
+<a href=#471 id=471 data-nosnippet>471</a>                <span class="kw-2">*</span>last = now;
+<a href=#472 id=472 data-nosnippet>472</a>                <span class="kw-2">*</span><span class="self">self</span>.tree.borrow_mut() = descendants(root, <span class="kw-2">&amp;</span>proc_parent_pairs());
 <a href=#473 id=473 data-nosnippet>473</a>            }
 <a href=#474 id=474 data-nosnippet>474</a>        }
 <a href=#475 id=475 data-nosnippet>475</a>
