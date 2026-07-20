@@ -3,7 +3,7 @@
     space_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
     self_id: PeerId,
     clock: CaptureClock,
-    device_rx: Receiver&lt;DeviceChoice&lt;CameraId&gt;&gt;,
+    device_rx: Receiver&lt;<a class="enum" href="../../../hound_engine/types/enum.DeviceChoice.html" title="enum hound_engine::types::DeviceChoice">DeviceChoice</a>&lt;<a class="struct" href="../../../hound_engine/types/struct.CameraId.html" title="struct hound_engine::types::CameraId">CameraId</a>&gt;&gt;,
     enabled: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.0/core/sync/atomic/struct.AtomicBool.html" title="struct core::sync::atomic::AtomicBool">AtomicBool</a>&gt;,
     sink: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="../trait.VideoSink.html" title="trait hound_client::call::VideoSink">VideoSink</a>&gt;,
     stop: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.0/core/sync/atomic/struct.AtomicBool.html" title="struct core::sync::atomic::AtomicBool">AtomicBool</a>&gt;,

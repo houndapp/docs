@@ -2,7 +2,7 @@
     relay: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;MoqRelaySession&gt;,
     path: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>,
     sender: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.u16.html">u16</a>,
-    pcm_rx: Receiver&lt;PcmFrame&gt;,
+    pcm_rx: Receiver&lt;<a class="struct" href="../../../hound_engine/types/struct.PcmFrame.html" title="struct hound_engine::types::PcmFrame">PcmFrame</a>&gt;,
     stats: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../../stats/struct.CallStats.html" title="struct hound_client::stats::CallStats">CallStats</a>&gt;,
     mute: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../session/struct.MuteFlags.html" title="struct hound_client::call::session::MuteFlags">MuteFlags</a>&gt;,
 ) -&gt; JoinHandle&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.unit.html">()</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The async screen AUDIO publish task: the mic publish path MINUS APM / levels /
