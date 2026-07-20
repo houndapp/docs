@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_FRAG_PAYLOAD"],"enum":["FragmentError"],"fn":["fragment"],"struct":["FrameKey","PendingFrame","Reassembler"]};

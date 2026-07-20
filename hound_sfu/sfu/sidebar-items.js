@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["HANDSHAKE_TIMEOUT","HOUND_ALPN","NACK_DRAIN_TIMEOUT"],"fn":["handle_connection","new_room_registry","read_datagrams","read_reliable_streams","reject"],"struct":["Sfu","SfuSink"],"type":["RoomRegistry"]};
+window.SIDEBAR_ITEMS = {"struct":["Sfu"]};

@@ -16,32 +16,25 @@
 <a href=#16 id=16 data-nosnippet>16</a>//! ## Transport
 <a href=#17 id=17 data-nosnippet>17</a>//!
 <a href=#18 id=18 data-nosnippet>18</a>//! We use [iroh](https://docs.rs/iroh), a QUIC-based P2P library. Clients
-<a href=#19 id=19 data-nosnippet>19</a>//! connect to the SFU's iroh node ID over QUIC. Within that single connection:
-<a href=#20 id=20 data-nosnippet>20</a>//!
-<a href=#21 id=21 data-nosnippet>21</a>//! * **QUIC datagrams** carry delta video frames and audio — unreliable delivery
-<a href=#22 id=22 data-nosnippet>22</a>//!   is fine here because a dropped frame is just a momentary quality blip, and
-<a href=#23 id=23 data-nosnippet>23</a>//!   real-time media can't afford head-of-line blocking.
-<a href=#24 id=24 data-nosnippet>24</a>//! * **QUIC streams** carry keyframes — these *must* arrive because a video
-<a href=#25 id=25 data-nosnippet>25</a>//!   decoder cannot start without them.
-<a href=#26 id=26 data-nosnippet>26</a>//!
-<a href=#27 id=27 data-nosnippet>27</a>//! ## Module layout
-<a href=#28 id=28 data-nosnippet>28</a>//!
-<a href=#29 id=29 data-nosnippet>29</a>//! ```text
-<a href=#30 id=30 data-nosnippet>30</a>//! wire/   — byte-level encoding: frame headers, fragmentation, codec negotiation
-<a href=#31 id=31 data-nosnippet>31</a>//! room/   — pure state machine: who is in the room, how frames are forwarded
-<a href=#32 id=32 data-nosnippet>32</a>//! auth/   — relay token verification (HMAC-SHA256)
-<a href=#33 id=33 data-nosnippet>33</a>//! sfu/    — glue: iroh connections → room state machine
-<a href=#34 id=34 data-nosnippet>34</a>//! ```
-<a href=#35 id=35 data-nosnippet>35</a>//!
-<a href=#36 id=36 data-nosnippet>36</a>//! Each module is designed to be testable on its own without network I/O (the
-<a href=#37 id=37 data-nosnippet>37</a>//! "sans-IO" pattern). See `room::state` for an example with `FrameSink`.
-<a href=#38 id=38 data-nosnippet>38</a>
-<a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">pub mod </span>auth;
-<a href=#40 id=40 data-nosnippet>40</a><span class="kw">pub mod </span>moq_relay;
-<a href=#41 id=41 data-nosnippet>41</a><span class="kw">pub mod </span>room;
-<a href=#42 id=42 data-nosnippet>42</a><span class="kw">pub mod </span>sfu;
-<a href=#43 id=43 data-nosnippet>43</a><span class="kw">pub mod </span>wire;
-<a href=#44 id=44 data-nosnippet>44</a>
-<a href=#45 id=45 data-nosnippet>45</a><span class="comment">// Re-export `eyre` so the binary entry point can use `eyre::Result`.
-<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">pub use </span>eyre;
+<a href=#19 id=19 data-nosnippet>19</a>//! connect to the SFU's iroh node ID over QUIC and speak the MoQ protocol
+<a href=#20 id=20 data-nosnippet>20</a>//! (ALPN `moql`) on that connection. [`moq_relay`] forwards every publisher's
+<a href=#21 id=21 data-nosnippet>21</a>//! encoded media to the other subscribers in the same space — moq-net's
+<a href=#22 id=22 data-nosnippet>22</a>//! group/object model (one QUIC uni-stream per GOP, stale-group priority-drop)
+<a href=#23 id=23 data-nosnippet>23</a>//! gives us keyframe-reliable / delta-unreliable delivery without hand-rolled
+<a href=#24 id=24 data-nosnippet>24</a>//! framing or NACK caches.
+<a href=#25 id=25 data-nosnippet>25</a>//!
+<a href=#26 id=26 data-nosnippet>26</a>//! ## Module layout
+<a href=#27 id=27 data-nosnippet>27</a>//!
+<a href=#28 id=28 data-nosnippet>28</a>//! ```text
+<a href=#29 id=29 data-nosnippet>29</a>//! auth/      — relay token verification (HMAC-SHA256)
+<a href=#30 id=30 data-nosnippet>30</a>//! moq_relay/ — the MoQ forward plane: auth gate + namespace scoping over moq-net
+<a href=#31 id=31 data-nosnippet>31</a>//! sfu/       — glue: binds the iroh endpoint and drives the accept loop
+<a href=#32 id=32 data-nosnippet>32</a>//! ```
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">pub mod </span>auth;
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">pub mod </span>moq_relay;
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">pub mod </span>sfu;
+<a href=#37 id=37 data-nosnippet>37</a>
+<a href=#38 id=38 data-nosnippet>38</a><span class="comment">// Re-export `eyre` so the binary entry point can use `eyre::Result`.
+<a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">pub use </span>eyre;
 </code></pre></div></section></main></body></html>

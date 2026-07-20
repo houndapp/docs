@@ -35,8 +35,8 @@
 <p>WARNING: Changing will break existing passkeys.</p>
 </div><span id="structfield.rp_origin" class="structfield section-header"><a href="#structfield.rp_origin" class="anchor field">§</a><code>rp_origin: <a class="struct" href="https://docs.rs/url/2.5.7/url/struct.Url.html" title="struct url::Url">Url</a></code></span><div class="docblock"><p>The “Relying Party” origin</p>
 </div><span id="structfield.rp_extra_origins" class="structfield section-header"><a href="#structfield.rp_extra_origins" class="anchor field">§</a><code>rp_extra_origins: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="https://docs.rs/url/2.5.7/url/struct.Url.html" title="struct url::Url">Url</a>&gt;</code></span><div class="docblock"><p>Additional allowed “Relying Party” origins (comma-separated).</p>
-<p>Use this to allow extra origins such as <code>tauri://localhost</code> for desktop
-app builds alongside the primary <code>--rp-origin</code>.</p>
+<p>Use this to allow extra origins such as <code>https://auth.hound.chat</code> (the
+browser-deferred passkey ceremony) alongside the primary <code>--rp-origin</code>.</p>
 </div><span id="structfield.webcredentials_apps" class="structfield section-header"><a href="#structfield.webcredentials_apps" class="anchor field">§</a><code>webcredentials_apps: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;</code></span><div class="docblock"><p><code>&lt;TeamID&gt;.&lt;BundleID&gt;</code> app identifiers authorized to use passkeys scoped to
 <code>--rp-id</code>, served in the <code>webcredentials</code> section of
 <code>/.well-known/apple-app-site-association</code> (comma-separated).</p>

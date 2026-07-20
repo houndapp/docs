@@ -54,8 +54,8 @@
 <a href=#54 id=54 data-nosnippet>54</a>
 <a href=#55 id=55 data-nosnippet>55</a>    <span class="doccomment">/// Additional allowed "Relying Party" origins (comma-separated).
 <a href=#56 id=56 data-nosnippet>56</a>    ///
-<a href=#57 id=57 data-nosnippet>57</a>    /// Use this to allow extra origins such as `tauri://localhost` for desktop
-<a href=#58 id=58 data-nosnippet>58</a>    /// app builds alongside the primary `--rp-origin`.
+<a href=#57 id=57 data-nosnippet>57</a>    /// Use this to allow extra origins such as `https://auth.hound.chat` (the
+<a href=#58 id=58 data-nosnippet>58</a>    /// browser-deferred passkey ceremony) alongside the primary `--rp-origin`.
 <a href=#59 id=59 data-nosnippet>59</a>    </span><span class="attr">#[clap(long, env, value_delimiter = <span class="string">','</span>, default_values_t = Vec::&lt;url::Url&gt;::new())]
 <a href=#60 id=60 data-nosnippet>60</a>    </span><span class="kw">pub </span>rp_extra_origins: Vec&lt;url::Url&gt;,
 <a href=#61 id=61 data-nosnippet>61</a>
@@ -124,7 +124,7 @@
 <a href=#124 id=124 data-nosnippet>124</a>    </span><span class="kw">pub </span>sfu_node_id: <span class="prelude-ty">Option</span>&lt;String&gt;,
 <a href=#125 id=125 data-nosnippet>125</a>
 <a href=#126 id=126 data-nosnippet>126</a>    <span class="doccomment">/// Allowed CORS origins (e.g. https://app.hound.chat). Multiple values can be specified.
-<a href=#127 id=127 data-nosnippet>127</a>    </span><span class="attr">#[clap(long, env, value_delimiter = <span class="string">','</span>, default_values_t = <span class="macro">vec!</span>[<span class="string">"https://app.hound.chat"</span>.to_string(), <span class="string">"tauri://localhost"</span>.to_string()]</span>)]
+<a href=#127 id=127 data-nosnippet>127</a>    </span><span class="attr">#[clap(long, env, value_delimiter = <span class="string">','</span>, default_values_t = <span class="macro">vec!</span>[<span class="string">"https://app.hound.chat"</span>.to_string()]</span>)]
 <a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">pub </span>cors_origins: Vec&lt;String&gt;,
 <a href=#129 id=129 data-nosnippet>129</a>
 <a href=#130 id=130 data-nosnippet>130</a>    <span class="doccomment">/// Database migration mode to run before starting the API server.

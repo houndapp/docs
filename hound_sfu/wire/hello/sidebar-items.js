@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["DecodeError","HelloNackReason","ServerHandshake"],"fn":["decode_message","encode_message","negotiate_codecs"],"struct":["ClientCodecs","Hello","HelloAck","HelloNack","PeerSummary"]};
