@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CAP_CHATTER_DEN","CAP_CHATTER_NUM","MAX_FRAME_GAP","MIN_CAP_BPS"],"fn":["seq_newer"],"struct":["DownlinkConfig","DownlinkDemand","FrameSeqWindow"]};

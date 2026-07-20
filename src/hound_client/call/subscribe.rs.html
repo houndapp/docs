@@ -8,510 +8,594 @@
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use super</span>::<span class="kw-2">*</span>;
 <a href=#10 id=10 data-nosnippet>10</a>
-<a href=#11 id=11 data-nosnippet>11</a><span class="doccomment">/// One active remote subscription: the decode task + a stop flag.
-<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">struct </span>Subscription {
-<a href=#13 id=13 data-nosnippet>13</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#14 id=14 data-nosnippet>14</a>    task: JoinHandle&lt;()&gt;,
-<a href=#15 id=15 data-nosnippet>15</a>    <span class="doccomment">/// Generation stamp: a reap signal carries the epoch of the pipeline that died,
-<a href=#16 id=16 data-nosnippet>16</a>    /// so a LATE signal (a stopped pipeline's guard firing after the loop already
-<a href=#17 id=17 data-nosnippet>17</a>    /// re-subscribed the same track id) can never remove the healthy replacement.
-<a href=#18 id=18 data-nosnippet>18</a>    </span>epoch: u64,
-<a href=#19 id=19 data-nosnippet>19</a>    <span class="doccomment">/// When this pipeline started — a death soon after start is paced (see
-<a href=#20 id=20 data-nosnippet>20</a>    /// [`RestartPacer`]) so a track the relay instantly rejects can't hot-loop.
-<a href=#21 id=21 data-nosnippet>21</a>    </span>started: Instant,
-<a href=#22 id=22 data-nosnippet>22</a>    <span class="doccomment">/// Whether the pipeline delivered anything downstream (a decoded audio frame /
-<a href=#23 id=23 data-nosnippet>23</a>    /// a keyframe past the video gate). A death without delivery climbs the
-<a href=#24 id=24 data-nosnippet>24</a>    /// restart ladder — the subscription itself is suspect, not just the moment.
-<a href=#25 id=25 data-nosnippet>25</a>    </span>delivered: Arc&lt;AtomicBool&gt;,
-<a href=#26 id=26 data-nosnippet>26</a>}
-<a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a><span class="kw">impl </span>Subscription {
-<a href=#29 id=29 data-nosnippet>29</a>    <span class="kw">fn </span>stop(<span class="self">self</span>) {
-<a href=#30 id=30 data-nosnippet>30</a>        <span class="self">self</span>.stop.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#31 id=31 data-nosnippet>31</a>        <span class="self">self</span>.task.abort();
-<a href=#32 id=32 data-nosnippet>32</a>    }
-<a href=#33 id=33 data-nosnippet>33</a>}
-<a href=#34 id=34 data-nosnippet>34</a>
-<a href=#35 id=35 data-nosnippet>35</a><span class="doccomment">/// Fires `(track_id, epoch)` on the reap channel when the owning pipeline task ends
-<a href=#36 id=36 data-nosnippet>36</a>/// — by ANY path: clean end-of-track, a transport error, a panic unwind, or an
-<a href=#37 id=37 data-nosnippet>37</a>/// abort (tokio drops the future at an await point, running destructors). This is
-<a href=#38 id=38 data-nosnippet>38</a>/// what lets the subscribe loop REAP a self-terminated pipeline: without it, a
-<a href=#39 id=39 data-nosnippet>39</a>/// dead track would stay in `active` forever, every reconcile would skip it as
-<a href=#40 id=40 data-nosnippet>40</a>/// "already subscribed", and its tile would freeze permanently.
-<a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">struct </span>PipelineEndGuard {
-<a href=#42 id=42 data-nosnippet>42</a>    track_id: u32,
-<a href=#43 id=43 data-nosnippet>43</a>    epoch: u64,
-<a href=#44 id=44 data-nosnippet>44</a>    tx: tokio::sync::mpsc::UnboundedSender&lt;(u32, u64)&gt;,
-<a href=#45 id=45 data-nosnippet>45</a>}
-<a href=#46 id=46 data-nosnippet>46</a>
-<a href=#47 id=47 data-nosnippet>47</a><span class="kw">impl </span>Drop <span class="kw">for </span>PipelineEndGuard {
-<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#49 id=49 data-nosnippet>49</a>        <span class="kw">let _ </span>= <span class="self">self</span>.tx.send((<span class="self">self</span>.track_id, <span class="self">self</span>.epoch));
-<a href=#50 id=50 data-nosnippet>50</a>    }
-<a href=#51 id=51 data-nosnippet>51</a>}
-<a href=#52 id=52 data-nosnippet>52</a>
-<a href=#53 id=53 data-nosnippet>53</a><span class="doccomment">/// Spawn the subscribe loop: watch the `SessionView`, and for every remote track
-<a href=#54 id=54 data-nosnippet>54</a>/// start a per-track pipeline (subscribe → decode → sink for video, mix bus for
-<a href=#55 id=55 data-nosnippet>55</a>/// audio); stop pipelines for tracks that vanish. Sends `Subscribe`/keyframe
-<a href=#56 id=56 data-nosnippet>56</a>/// intent on the control plane as tracks appear.
-<a href=#57 id=57 data-nosnippet>57</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#58 id=58 data-nosnippet>58</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_subscribe_loop(
-<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw-2">mut </span>view_rx: watch::Receiver&lt;SessionView&gt;,
-<a href=#60 id=60 data-nosnippet>60</a>    self_id: PeerId,
-<a href=#61 id=61 data-nosnippet>61</a>    space_id: Uuid,
-<a href=#62 id=62 data-nosnippet>62</a>    relay: Arc&lt;MoqRelaySession&gt;,
-<a href=#63 id=63 data-nosnippet>63</a>    control_outbound: tokio::sync::mpsc::UnboundedSender&lt;ClientMessage&gt;,
-<a href=#64 id=64 data-nosnippet>64</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
-<a href=#65 id=65 data-nosnippet>65</a>    playout_bus: Arc&lt;PlayoutBus&gt;,
-<a href=#66 id=66 data-nosnippet>66</a>    levels: watch::Sender&lt;LevelsView&gt;,
-<a href=#67 id=67 data-nosnippet>67</a>    clock: CaptureClock,
-<a href=#68 id=68 data-nosnippet>68</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw-2">mut </span>video_paused: watch::Receiver&lt;bool&gt;,
-<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw-2">mut </span>tile_quality: watch::Receiver&lt;HashMap&lt;(PeerId, Source), hound_media::QualityRequest&gt;&gt;,
-<a href=#71 id=71 data-nosnippet>71</a>    volumes: Arc&lt;StreamVolumes&gt;,
-<a href=#72 id=72 data-nosnippet>72</a>) -&gt; JoinHandle&lt;()&gt; {
-<a href=#73 id=73 data-nosnippet>73</a>    call_runtime().spawn(<span class="kw">async move </span>{
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="comment">// Keyed by TrackId.0 so we can diff against the view on each change.
-<a href=#75 id=75 data-nosnippet>75</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>active: HashMap&lt;u32, Subscription&gt; = HashMap::new();
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="comment">// The cap we last reported per (peer, source), so a RequestQuality is sent
-<a href=#77 id=77 data-nosnippet>77</a>        // only when our demand for that peer's video actually changes.
-<a href=#78 id=78 data-nosnippet>78</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>last_sent: HashMap&lt;(PeerId, Source), <span class="prelude-ty">Option</span>&lt;u64&gt;&gt; = HashMap::new();
-<a href=#79 id=79 data-nosnippet>79</a>        <span class="comment">// Per-(peer, source) hysteresis so a transient tile-resize flap (notably a
-<a href=#80 id=80 data-nosnippet>80</a>        // rejoin relayout) can't thrash the source⇄low subscription on the shared
-<a href=#81 id=81 data-nosnippet>81</a>        // audio+video connection. Holds a demanded layer switch until it is durable.
-<a href=#82 id=82 data-nosnippet>82</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>hysteresis: HashMap&lt;(PeerId, Source), LayerHysteresis&gt; = HashMap::new();
-<a href=#83 id=83 data-nosnippet>83</a>        <span class="comment">// Self-healing: every pipeline task carries a PipelineEndGuard that reports
-<a href=#84 id=84 data-nosnippet>84</a>        // its (track_id, epoch) here on ANY exit, so a self-terminated pipeline is
-<a href=#85 id=85 data-nosnippet>85</a>        // reaped from `active` and the reconcile re-subscribes it (paced).
-<a href=#86 id=86 data-nosnippet>86</a>        </span><span class="kw">let </span>(ended_tx, <span class="kw-2">mut </span>ended_rx) = tokio::sync::mpsc::unbounded_channel::&lt;(u32, u64)&gt;();
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span><span class="kw-2">mut </span>next_epoch: u64 = <span class="number">0</span>;
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span><span class="kw-2">mut </span>pacer = RestartPacer::default();
-<a href=#89 id=89 data-nosnippet>89</a>
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">loop </span>{
-<a href=#91 id=91 data-nosnippet>91</a>            <span class="comment">// Soonest pending debounced layer switch — the loop wakes to actuate it
-<a href=#92 id=92 data-nosnippet>92</a>            // even if no input changes in the meantime.
-<a href=#93 id=93 data-nosnippet>93</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>next_switch_deadline: <span class="prelude-ty">Option</span>&lt;Instant&gt; = <span class="prelude-val">None</span>;
-<a href=#94 id=94 data-nosnippet>94</a>            <span class="comment">// When video is paused (app backgrounded / call surface hidden) drop
-<a href=#95 id=95 data-nosnippet>95</a>            // every inbound video sub — receiving a high-bitrate screenshare nobody
-<a href=#96 id=96 data-nosnippet>96</a>            // is watching is wasted CPU + bandwidth. Audio always flows.
-<a href=#97 id=97 data-nosnippet>97</a>            </span><span class="kw">let </span>drop_video = <span class="kw-2">*</span>video_paused.borrow();
-<a href=#98 id=98 data-nosnippet>98</a>            <span class="kw">let </span>demand = tile_quality.borrow().clone();
-<a href=#99 id=99 data-nosnippet>99</a>            <span class="comment">// Snapshot the remote tracks we should be subscribed to. Audio is taken
-<a href=#100 id=100 data-nosnippet>100</a>            // as-is; for each (peer, video source) we pick EITHER the source or the
-<a href=#101 id=101 data-nosnippet>101</a>            // low track by our demand, and report that demand upstream so the producer
-<a href=#102 id=102 data-nosnippet>102</a>            // spins up the low layer.
-<a href=#103 id=103 data-nosnippet>103</a>            </span><span class="kw">let </span>desired: Vec&lt;(u32, PeerId, MediaKind, Source, bool)&gt; = {
-<a href=#104 id=104 data-nosnippet>104</a>                <span class="kw">let </span>view = view_rx.borrow();
-<a href=#105 id=105 data-nosnippet>105</a>                <span class="kw">let </span><span class="kw-2">mut </span>out: Vec&lt;(u32, PeerId, MediaKind, Source, bool)&gt; = Vec::new();
-<a href=#106 id=106 data-nosnippet>106</a>                <span class="kw">for </span>t <span class="kw">in </span>view.tracks().filter(|t| {
-<a href=#107 id=107 data-nosnippet>107</a>                    t.<span class="macro">peer !</span>= self_id
-<a href=#108 id=108 data-nosnippet>108</a>                        &amp;&amp; t.kind == MediaKind::Audio
-<a href=#109 id=109 data-nosnippet>109</a>                        &amp;&amp; <span class="macro">matches!</span>(t.source, Source::Microphone | Source::Screen)
-<a href=#110 id=110 data-nosnippet>110</a>                }) {
-<a href=#111 id=111 data-nosnippet>111</a>                    out.push((t.id.<span class="number">0</span>, t.peer, t.kind, t.source, <span class="bool-val">false</span>));
-<a href=#112 id=112 data-nosnippet>112</a>                }
-<a href=#113 id=113 data-nosnippet>113</a>                <span class="kw">if </span>!drop_video {
-<a href=#114 id=114 data-nosnippet>114</a>                    <span class="comment">// Group each peer's video into (source track, low track).
-<a href=#115 id=115 data-nosnippet>115</a>                    </span><span class="kw">let </span><span class="kw-2">mut </span>groups: HashMap&lt;(PeerId, Source), (<span class="prelude-ty">Option</span>&lt;u32&gt;, <span class="prelude-ty">Option</span>&lt;u32&gt;)&gt; =
-<a href=#116 id=116 data-nosnippet>116</a>                        HashMap::new();
-<a href=#117 id=117 data-nosnippet>117</a>                    <span class="kw">for </span>t <span class="kw">in </span>view.tracks().filter(|t| {
-<a href=#118 id=118 data-nosnippet>118</a>                        t.<span class="macro">peer !</span>= self_id
-<a href=#119 id=119 data-nosnippet>119</a>                            &amp;&amp; t.kind == MediaKind::Video
-<a href=#120 id=120 data-nosnippet>120</a>                            &amp;&amp; <span class="macro">matches!</span>(t.source, Source::Camera | Source::Screen)
-<a href=#121 id=121 data-nosnippet>121</a>                    }) {
-<a href=#122 id=122 data-nosnippet>122</a>                        <span class="kw">let </span>e = groups.entry((t.peer, t.source)).or_insert((<span class="prelude-val">None</span>, <span class="prelude-val">None</span>));
-<a href=#123 id=123 data-nosnippet>123</a>                        <span class="kw">if </span>t.low {
-<a href=#124 id=124 data-nosnippet>124</a>                            e.<span class="number">1 </span>= <span class="prelude-val">Some</span>(t.id.<span class="number">0</span>);
-<a href=#125 id=125 data-nosnippet>125</a>                        } <span class="kw">else </span>{
-<a href=#126 id=126 data-nosnippet>126</a>                            e.<span class="number">0 </span>= <span class="prelude-val">Some</span>(t.id.<span class="number">0</span>);
-<a href=#127 id=127 data-nosnippet>127</a>                        }
-<a href=#128 id=128 data-nosnippet>128</a>                    }
-<a href=#129 id=129 data-nosnippet>129</a>                    <span class="kw">for </span>(<span class="kw-2">&amp;</span>(peer, source), <span class="kw-2">&amp;</span>(src_id, low_id)) <span class="kw">in </span><span class="kw-2">&amp;</span>groups {
-<a href=#130 id=130 data-nosnippet>130</a>                        <span class="kw">let </span>raw_req = demand
-<a href=#131 id=131 data-nosnippet>131</a>                            .get(<span class="kw-2">&amp;</span>(peer, source))
-<a href=#132 id=132 data-nosnippet>132</a>                            .copied()
-<a href=#133 id=133 data-nosnippet>133</a>                            .unwrap_or(hound_media::QualityRequest::Source);
-<a href=#134 id=134 data-nosnippet>134</a>                        <span class="comment">// Debounce the source⇄low decision so a transient tile-resize
-<a href=#135 id=135 data-nosnippet>135</a>                        // flap (a rejoin relayout) can't thrash the subscription on the
-<a href=#136 id=136 data-nosnippet>136</a>                        // shared audio+video connection — only a DURABLE layer change
-<a href=#137 id=137 data-nosnippet>137</a>                        // actuates. A cap-value change on the same layer passes through.
-<a href=#138 id=138 data-nosnippet>138</a>                        </span><span class="kw">let </span>now = Instant::now();
-<a href=#139 id=139 data-nosnippet>139</a>                        <span class="kw">let </span>req = hysteresis
-<a href=#140 id=140 data-nosnippet>140</a>                            .entry((peer, source))
-<a href=#141 id=141 data-nosnippet>141</a>                            .or_insert_with(LayerHysteresis::new)
-<a href=#142 id=142 data-nosnippet>142</a>                            .observe(raw_req, now, LAYER_SWITCH_DEBOUNCE, LAYER_SWITCH_DWELL);
-<a href=#143 id=143 data-nosnippet>143</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(deadline) = hysteresis.get(<span class="kw-2">&amp;</span>(peer, source)).and_then(|h| {
-<a href=#144 id=144 data-nosnippet>144</a>                            h.pending_deadline(LAYER_SWITCH_DEBOUNCE, LAYER_SWITCH_DWELL)
-<a href=#145 id=145 data-nosnippet>145</a>                        }) {
-<a href=#146 id=146 data-nosnippet>146</a>                            next_switch_deadline = <span class="prelude-val">Some</span>(
-<a href=#147 id=147 data-nosnippet>147</a>                                next_switch_deadline.map_or(deadline, |d: Instant| d.min(deadline)),
-<a href=#148 id=148 data-nosnippet>148</a>                            );
-<a href=#149 id=149 data-nosnippet>149</a>                        }
-<a href=#150 id=150 data-nosnippet>150</a>                        <span class="comment">// Report our cap upstream (against the SOURCE track) on change,
-<a href=#151 id=151 data-nosnippet>151</a>                        // so the producer activates / tears down the shared low layer.
-<a href=#152 id=152 data-nosnippet>152</a>                        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sid) = src_id {
-<a href=#153 id=153 data-nosnippet>153</a>                            <span class="kw">let </span>cap_bps = <span class="kw">match </span>req {
-<a href=#154 id=154 data-nosnippet>154</a>                                hound_media::QualityRequest::Capped(b) =&gt; <span class="prelude-val">Some</span>(b),
-<a href=#155 id=155 data-nosnippet>155</a>                                hound_media::QualityRequest::Source =&gt; <span class="prelude-val">None</span>,
-<a href=#156 id=156 data-nosnippet>156</a>                            };
-<a href=#157 id=157 data-nosnippet>157</a>                            <span class="kw">if </span>last_sent.get(<span class="kw-2">&amp;</span>(peer, source)).copied() != <span class="prelude-val">Some</span>(cap_bps) {
-<a href=#158 id=158 data-nosnippet>158</a>                                last_sent.insert((peer, source), cap_bps);
-<a href=#159 id=159 data-nosnippet>159</a>                                <span class="macro">tracing::info!</span>(
-<a href=#160 id=160 data-nosnippet>160</a>                                    peer = peer.<span class="number">0</span>,
-<a href=#161 id=161 data-nosnippet>161</a>                                    <span class="question-mark">?</span>source,
-<a href=#162 id=162 data-nosnippet>162</a>                                    <span class="question-mark">?</span>cap_bps,
-<a href=#163 id=163 data-nosnippet>163</a>                                    src_track = sid,
-<a href=#164 id=164 data-nosnippet>164</a>                                    low_present = low_id.is_some(),
-<a href=#165 id=165 data-nosnippet>165</a>                                    <span class="string">"simulcast[recv]: RequestQuality → producer"
-<a href=#166 id=166 data-nosnippet>166</a>                                </span>);
-<a href=#167 id=167 data-nosnippet>167</a>                                <span class="kw">let _ </span>= control_outbound.send(ClientMessage::RequestQuality {
-<a href=#168 id=168 data-nosnippet>168</a>                                    track: hound_control::TrackId(sid),
-<a href=#169 id=169 data-nosnippet>169</a>                                    cap_bps,
-<a href=#170 id=170 data-nosnippet>170</a>                                });
-<a href=#171 id=171 data-nosnippet>171</a>                            }
-<a href=#172 id=172 data-nosnippet>172</a>                        }
-<a href=#173 id=173 data-nosnippet>173</a>                        <span class="comment">// Subscribe the low track when we want it AND it exists (so a
-<a href=#174 id=174 data-nosnippet>174</a>                        // demand for low before the producer publishes it falls back to
-<a href=#175 id=175 data-nosnippet>175</a>                        // source until the low track appears, then switches).
-<a href=#176 id=176 data-nosnippet>176</a>                        </span><span class="kw">let </span>pick = <span class="kw">match </span>req {
-<a href=#177 id=177 data-nosnippet>177</a>                            hound_media::QualityRequest::Capped(<span class="kw">_</span>) =&gt; low_id.or(src_id),
-<a href=#178 id=178 data-nosnippet>178</a>                            hound_media::QualityRequest::Source =&gt; src_id.or(low_id),
-<a href=#179 id=179 data-nosnippet>179</a>                        };
-<a href=#180 id=180 data-nosnippet>180</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = pick {
-<a href=#181 id=181 data-nosnippet>181</a>                            out.push((id, peer, MediaKind::Video, source, <span class="prelude-val">Some</span>(id) == low_id));
-<a href=#182 id=182 data-nosnippet>182</a>                        }
-<a href=#183 id=183 data-nosnippet>183</a>                    }
-<a href=#184 id=184 data-nosnippet>184</a>                }
-<a href=#185 id=185 data-nosnippet>185</a>                out
-<a href=#186 id=186 data-nosnippet>186</a>            };
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a>            <span class="comment">// Stop pipelines for tracks no longer present (or video we just paused).
-<a href=#189 id=189 data-nosnippet>189</a>            </span><span class="kw">let </span>desired_ids: std::collections::HashSet&lt;u32&gt; =
-<a href=#190 id=190 data-nosnippet>190</a>                desired.iter().map(|(id, ..)| <span class="kw-2">*</span>id).collect();
-<a href=#191 id=191 data-nosnippet>191</a>            <span class="kw">let </span>gone: Vec&lt;u32&gt; = active
-<a href=#192 id=192 data-nosnippet>192</a>                .keys()
-<a href=#193 id=193 data-nosnippet>193</a>                .copied()
-<a href=#194 id=194 data-nosnippet>194</a>                .filter(|id| !desired_ids.contains(id))
-<a href=#195 id=195 data-nosnippet>195</a>                .collect();
-<a href=#196 id=196 data-nosnippet>196</a>            <span class="kw">for </span>id <span class="kw">in </span>gone {
-<a href=#197 id=197 data-nosnippet>197</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(sub) = active.remove(<span class="kw-2">&amp;</span>id) {
-<a href=#198 id=198 data-nosnippet>198</a>                    sub.stop();
-<a href=#199 id=199 data-nosnippet>199</a>                    <span class="comment">// Tell the relay to stop forwarding this track to us (dropping the
-<a href=#200 id=200 data-nosnippet>200</a>                    // subscriber closes the moq sub; this also clears server routing).
-<a href=#201 id=201 data-nosnippet>201</a>                    </span><span class="kw">let _ </span>= control_outbound.send(ClientMessage::Unsubscribe {
-<a href=#202 id=202 data-nosnippet>202</a>                        track: hound_control::TrackId(id),
-<a href=#203 id=203 data-nosnippet>203</a>                    });
-<a href=#204 id=204 data-nosnippet>204</a>                }
-<a href=#205 id=205 data-nosnippet>205</a>            }
-<a href=#206 id=206 data-nosnippet>206</a>
-<a href=#207 id=207 data-nosnippet>207</a>            <span class="comment">// Start pipelines for new tracks.
-<a href=#208 id=208 data-nosnippet>208</a>            </span><span class="kw">for </span>(track_id, peer, kind, source, low) <span class="kw">in </span>desired {
-<a href=#209 id=209 data-nosnippet>209</a>                <span class="kw">if </span>active.contains_key(<span class="kw-2">&amp;</span>track_id) {
-<a href=#210 id=210 data-nosnippet>210</a>                    <span class="kw">continue</span>;
-<a href=#211 id=211 data-nosnippet>211</a>                }
-<a href=#212 id=212 data-nosnippet>212</a>                <span class="comment">// A recently-died pipeline restarts PACED (bounded retry): defer this
-<a href=#213 id=213 data-nosnippet>213</a>                // track and wake when its pace elapses.
-<a href=#214 id=214 data-nosnippet>214</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(at) = pacer.ready_at(track_id, Instant::now()) {
-<a href=#215 id=215 data-nosnippet>215</a>                    next_switch_deadline =
-<a href=#216 id=216 data-nosnippet>216</a>                        <span class="prelude-val">Some</span>(next_switch_deadline.map_or(at, |d: Instant| d.min(at)));
-<a href=#217 id=217 data-nosnippet>217</a>                    <span class="kw">continue</span>;
-<a href=#218 id=218 data-nosnippet>218</a>                }
-<a href=#219 id=219 data-nosnippet>219</a>                <span class="comment">// Tell the server we want this track (+ a keyframe to bootstrap video).
-<a href=#220 id=220 data-nosnippet>220</a>                </span><span class="kw">let _ </span>= control_outbound.send(ClientMessage::Subscribe {
-<a href=#221 id=221 data-nosnippet>221</a>                    track: hound_control::TrackId(track_id),
-<a href=#222 id=222 data-nosnippet>222</a>                });
-<a href=#223 id=223 data-nosnippet>223</a>                <span class="kw">if </span>kind == MediaKind::Video {
-<a href=#224 id=224 data-nosnippet>224</a>                    <span class="macro">tracing::info!</span>(
-<a href=#225 id=225 data-nosnippet>225</a>                        peer = peer.<span class="number">0</span>,
-<a href=#226 id=226 data-nosnippet>226</a>                        <span class="question-mark">?</span>source,
-<a href=#227 id=227 data-nosnippet>227</a>                        low,
-<a href=#228 id=228 data-nosnippet>228</a>                        track = track_id,
-<a href=#229 id=229 data-nosnippet>229</a>                        <span class="string">"simulcast[recv]: subscribing video track ({})"</span>,
-<a href=#230 id=230 data-nosnippet>230</a>                        <span class="kw">if </span>low { <span class="string">"LOW" </span>} <span class="kw">else </span>{ <span class="string">"source" </span>}
-<a href=#231 id=231 data-nosnippet>231</a>                    );
-<a href=#232 id=232 data-nosnippet>232</a>                    <span class="kw">let _ </span>= control_outbound.send(ClientMessage::RequestKeyframe {
-<a href=#233 id=233 data-nosnippet>233</a>                        track: hound_control::TrackId(track_id),
-<a href=#234 id=234 data-nosnippet>234</a>                    });
-<a href=#235 id=235 data-nosnippet>235</a>                    <span class="comment">// RTC-debug: a PLI we sent for this peer's camera vs screen track.
-<a href=#236 id=236 data-nosnippet>236</a>                    </span>stats
-<a href=#237 id=237 data-nosnippet>237</a>                        .peer(peer.<span class="number">0</span>)
-<a href=#238 id=238 data-nosnippet>238</a>                        .video_keyframe_requested(inbound_video_kind(source));
-<a href=#239 id=239 data-nosnippet>239</a>                }
-<a href=#240 id=240 data-nosnippet>240</a>                <span class="kw">let </span>epoch = next_epoch;
-<a href=#241 id=241 data-nosnippet>241</a>                next_epoch += <span class="number">1</span>;
-<a href=#242 id=242 data-nosnippet>242</a>                <span class="kw">let </span>sub = start_pipeline(
-<a href=#243 id=243 data-nosnippet>243</a>                    peer,
-<a href=#244 id=244 data-nosnippet>244</a>                    kind,
-<a href=#245 id=245 data-nosnippet>245</a>                    source,
-<a href=#246 id=246 data-nosnippet>246</a>                    low,
-<a href=#247 id=247 data-nosnippet>247</a>                    space_id,
-<a href=#248 id=248 data-nosnippet>248</a>                    relay.clone(),
-<a href=#249 id=249 data-nosnippet>249</a>                    sink.clone(),
-<a href=#250 id=250 data-nosnippet>250</a>                    playout_bus.clone(),
-<a href=#251 id=251 data-nosnippet>251</a>                    levels.clone(),
-<a href=#252 id=252 data-nosnippet>252</a>                    clock,
-<a href=#253 id=253 data-nosnippet>253</a>                    stats.clone(),
-<a href=#254 id=254 data-nosnippet>254</a>                    control_outbound.clone(),
-<a href=#255 id=255 data-nosnippet>255</a>                    track_id,
-<a href=#256 id=256 data-nosnippet>256</a>                    volumes.clone(),
-<a href=#257 id=257 data-nosnippet>257</a>                    PipelineEndGuard {
-<a href=#258 id=258 data-nosnippet>258</a>                        track_id,
-<a href=#259 id=259 data-nosnippet>259</a>                        epoch,
-<a href=#260 id=260 data-nosnippet>260</a>                        tx: ended_tx.clone(),
-<a href=#261 id=261 data-nosnippet>261</a>                    },
-<a href=#262 id=262 data-nosnippet>262</a>                );
-<a href=#263 id=263 data-nosnippet>263</a>                active.insert(track_id, sub);
-<a href=#264 id=264 data-nosnippet>264</a>            }
-<a href=#265 id=265 data-nosnippet>265</a>
-<a href=#266 id=266 data-nosnippet>266</a>            <span class="comment">// Re-reconcile when the roster changes, the pause flag flips, the tile
-<a href=#267 id=267 data-nosnippet>267</a>            // demand changes, OR a debounced layer switch comes due (so a held switch
-<a href=#268 id=268 data-nosnippet>268</a>            // actuates even if nothing else moves).
-<a href=#269 id=269 data-nosnippet>269</a>            </span><span class="kw">let </span>switch_wait =
-<a href=#270 id=270 data-nosnippet>270</a>                next_switch_deadline.map(|d| d.saturating_duration_since(Instant::now()));
-<a href=#271 id=271 data-nosnippet>271</a>            <span class="macro">tokio::select!</span> {
-<a href=#272 id=272 data-nosnippet>272</a>                r = view_rx.changed() =&gt; {
-<a href=#273 id=273 data-nosnippet>273</a>                    <span class="kw">if </span>r.is_err() { <span class="kw">break</span>; }
-<a href=#274 id=274 data-nosnippet>274</a>                }
-<a href=#275 id=275 data-nosnippet>275</a>                r = video_paused.changed() =&gt; {
-<a href=#276 id=276 data-nosnippet>276</a>                    <span class="kw">if </span>r.is_err() { <span class="kw">break</span>; }
-<a href=#277 id=277 data-nosnippet>277</a>                }
-<a href=#278 id=278 data-nosnippet>278</a>                r = tile_quality.changed() =&gt; {
-<a href=#279 id=279 data-nosnippet>279</a>                    <span class="kw">if </span>r.is_err() { <span class="kw">break</span>; }
-<a href=#280 id=280 data-nosnippet>280</a>                }
-<a href=#281 id=281 data-nosnippet>281</a>                <span class="comment">// A pipeline ended on its own (end-of-track / transport error): REAP
-<a href=#282 id=282 data-nosnippet>282</a>                // it so the reconcile re-subscribes — leaving it in `active` would
-<a href=#283 id=283 data-nosnippet>283</a>                // freeze that tile permanently (every reconcile would skip it as
-<a href=#284 id=284 data-nosnippet>284</a>                // "already subscribed"). Epoch-guarded: a stale signal from a
-<a href=#285 id=285 data-nosnippet>285</a>                // pipeline the loop itself stopped (and maybe already replaced)
-<a href=#286 id=286 data-nosnippet>286</a>                // must not touch the healthy replacement.
-<a href=#287 id=287 data-nosnippet>287</a>                </span><span class="prelude-val">Some</span>((track_id, epoch)) = ended_rx.recv() =&gt; {
-<a href=#288 id=288 data-nosnippet>288</a>                    <span class="kw">if </span>active.get(<span class="kw-2">&amp;</span>track_id).is_some_and(|s| s.epoch == epoch) {
-<a href=#289 id=289 data-nosnippet>289</a>                        <span class="kw">let </span>sub = active.remove(<span class="kw-2">&amp;</span>track_id).expect(<span class="string">"checked present"</span>);
-<a href=#290 id=290 data-nosnippet>290</a>                        <span class="kw">let </span>delivered = sub.delivered.load(Ordering::Relaxed);
-<a href=#291 id=291 data-nosnippet>291</a>                        pacer.on_death(track_id, delivered, sub.started.elapsed(), Instant::now());
-<a href=#292 id=292 data-nosnippet>292</a>                        <span class="macro">tracing::warn!</span>(
-<a href=#293 id=293 data-nosnippet>293</a>                            track = track_id,
-<a href=#294 id=294 data-nosnippet>294</a>                            lived_ms = sub.started.elapsed().as_millis() <span class="kw">as </span>u64,
-<a href=#295 id=295 data-nosnippet>295</a>                            delivered,
-<a href=#296 id=296 data-nosnippet>296</a>                            <span class="string">"call: pipeline ended on its own — reaping + re-subscribing"
-<a href=#297 id=297 data-nosnippet>297</a>                        </span>);
-<a href=#298 id=298 data-nosnippet>298</a>                    }
+<a href=#11 id=11 data-nosnippet>11</a><span class="doccomment">/// Lock-free single-slot handle for one video pipeline's downlink-driven demand:
+<a href=#12 id=12 data-nosnippet>12</a>/// the video pull loop ([`video_pipeline`]) writes its latest
+<a href=#13 id=13 data-nosnippet>13</a>/// [`hound_media::QualityRequest`] here as frames arrive (via
+<a href=#14 id=14 data-nosnippet>14</a>/// [`hound_media::DownlinkDemand`]); the reconcile loop below reads it every tick
+<a href=#15 id=15 data-nosnippet>15</a>/// and folds it with the tile demand via [`hound_media::most_constrained`]. A
+<a href=#16 id=16 data-nosnippet>16</a>/// plain atomic (not a lock) so the per-frame write on the pull loop never
+<a href=#17 id=17 data-nosnippet>17</a>/// blocks. `None` (audio, or a pipeline that hasn't decided yet) reads as
+<a href=#18 id=18 data-nosnippet>18</a>/// [`hound_media::QualityRequest::Source`] — the optimistic default, matching
+<a href=#19 id=19 data-nosnippet>19</a>/// [`hound_media::DownlinkDemand::new`].
+<a href=#20 id=20 data-nosnippet>20</a></span><span class="attr">#[derive(Debug)]
+<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>DownlinkCell(AtomicU64);
+<a href=#22 id=22 data-nosnippet>22</a>
+<a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// Sentinel encoding `QualityRequest::Source` in the packed atomic — a `Capped`
+<a href=#24 id=24 data-nosnippet>24</a>/// bitrate this large never occurs (an encode rung tops out in the low millions).
+<a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">const </span>SOURCE_SENTINEL: u64 = u64::MAX;
+<a href=#26 id=26 data-nosnippet>26</a>
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">impl </span>DownlinkCell {
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#29 id=29 data-nosnippet>29</a>        <span class="self">Self</span>(AtomicU64::new(SOURCE_SENTINEL))
+<a href=#30 id=30 data-nosnippet>30</a>    }
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>store(<span class="kw-2">&amp;</span><span class="self">self</span>, req: hound_media::QualityRequest) {
+<a href=#33 id=33 data-nosnippet>33</a>        <span class="kw">let </span>v = <span class="kw">match </span>req {
+<a href=#34 id=34 data-nosnippet>34</a>            hound_media::QualityRequest::Source =&gt; SOURCE_SENTINEL,
+<a href=#35 id=35 data-nosnippet>35</a>            hound_media::QualityRequest::Capped(bps) =&gt; bps.min(SOURCE_SENTINEL - <span class="number">1</span>),
+<a href=#36 id=36 data-nosnippet>36</a>        };
+<a href=#37 id=37 data-nosnippet>37</a>        <span class="self">self</span>.<span class="number">0</span>.store(v, Ordering::Relaxed);
+<a href=#38 id=38 data-nosnippet>38</a>    }
+<a href=#39 id=39 data-nosnippet>39</a>
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">fn </span>load(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; hound_media::QualityRequest {
+<a href=#41 id=41 data-nosnippet>41</a>        <span class="kw">match </span><span class="self">self</span>.<span class="number">0</span>.load(Ordering::Relaxed) {
+<a href=#42 id=42 data-nosnippet>42</a>            SOURCE_SENTINEL =&gt; hound_media::QualityRequest::Source,
+<a href=#43 id=43 data-nosnippet>43</a>            bps =&gt; hound_media::QualityRequest::Capped(bps),
+<a href=#44 id=44 data-nosnippet>44</a>        }
+<a href=#45 id=45 data-nosnippet>45</a>    }
+<a href=#46 id=46 data-nosnippet>46</a>}
+<a href=#47 id=47 data-nosnippet>47</a>
+<a href=#48 id=48 data-nosnippet>48</a><span class="doccomment">/// One active remote subscription: the decode task + a stop flag.
+<a href=#49 id=49 data-nosnippet>49</a></span><span class="kw">struct </span>Subscription {
+<a href=#50 id=50 data-nosnippet>50</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#51 id=51 data-nosnippet>51</a>    task: JoinHandle&lt;()&gt;,
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="doccomment">/// Generation stamp: a reap signal carries the epoch of the pipeline that died,
+<a href=#53 id=53 data-nosnippet>53</a>    /// so a LATE signal (a stopped pipeline's guard firing after the loop already
+<a href=#54 id=54 data-nosnippet>54</a>    /// re-subscribed the same track id) can never remove the healthy replacement.
+<a href=#55 id=55 data-nosnippet>55</a>    </span>epoch: u64,
+<a href=#56 id=56 data-nosnippet>56</a>    <span class="doccomment">/// When this pipeline started — a death soon after start is paced (see
+<a href=#57 id=57 data-nosnippet>57</a>    /// [`RestartPacer`]) so a track the relay instantly rejects can't hot-loop.
+<a href=#58 id=58 data-nosnippet>58</a>    </span>started: Instant,
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="doccomment">/// Whether the pipeline delivered anything downstream (a decoded audio frame /
+<a href=#60 id=60 data-nosnippet>60</a>    /// a keyframe past the video gate). A death without delivery climbs the
+<a href=#61 id=61 data-nosnippet>61</a>    /// restart ladder — the subscription itself is suspect, not just the moment.
+<a href=#62 id=62 data-nosnippet>62</a>    </span>delivered: Arc&lt;AtomicBool&gt;,
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="doccomment">/// This pipeline's downlink-driven demand (video only — `None` for audio). A
+<a href=#64 id=64 data-nosnippet>64</a>    /// FRESH cell per pipeline start, so a resubscribe / layer switch / reap
+<a href=#65 id=65 data-nosnippet>65</a>    /// naturally resets the demand to `Source` (see [`DownlinkCell`]'s docs).
+<a href=#66 id=66 data-nosnippet>66</a>    </span>downlink: <span class="prelude-ty">Option</span>&lt;Arc&lt;DownlinkCell&gt;&gt;,
+<a href=#67 id=67 data-nosnippet>67</a>}
+<a href=#68 id=68 data-nosnippet>68</a>
+<a href=#69 id=69 data-nosnippet>69</a><span class="kw">impl </span>Subscription {
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">fn </span>stop(<span class="self">self</span>) {
+<a href=#71 id=71 data-nosnippet>71</a>        <span class="self">self</span>.stop.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#72 id=72 data-nosnippet>72</a>        <span class="self">self</span>.task.abort();
+<a href=#73 id=73 data-nosnippet>73</a>    }
+<a href=#74 id=74 data-nosnippet>74</a>}
+<a href=#75 id=75 data-nosnippet>75</a>
+<a href=#76 id=76 data-nosnippet>76</a><span class="doccomment">/// Fires `(track_id, epoch)` on the reap channel when the owning pipeline task ends
+<a href=#77 id=77 data-nosnippet>77</a>/// — by ANY path: clean end-of-track, a transport error, a panic unwind, or an
+<a href=#78 id=78 data-nosnippet>78</a>/// abort (tokio drops the future at an await point, running destructors). This is
+<a href=#79 id=79 data-nosnippet>79</a>/// what lets the subscribe loop REAP a self-terminated pipeline: without it, a
+<a href=#80 id=80 data-nosnippet>80</a>/// dead track would stay in `active` forever, every reconcile would skip it as
+<a href=#81 id=81 data-nosnippet>81</a>/// "already subscribed", and its tile would freeze permanently.
+<a href=#82 id=82 data-nosnippet>82</a></span><span class="kw">struct </span>PipelineEndGuard {
+<a href=#83 id=83 data-nosnippet>83</a>    track_id: u32,
+<a href=#84 id=84 data-nosnippet>84</a>    epoch: u64,
+<a href=#85 id=85 data-nosnippet>85</a>    tx: tokio::sync::mpsc::UnboundedSender&lt;(u32, u64)&gt;,
+<a href=#86 id=86 data-nosnippet>86</a>}
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a><span class="kw">impl </span>Drop <span class="kw">for </span>PipelineEndGuard {
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">let _ </span>= <span class="self">self</span>.tx.send((<span class="self">self</span>.track_id, <span class="self">self</span>.epoch));
+<a href=#91 id=91 data-nosnippet>91</a>    }
+<a href=#92 id=92 data-nosnippet>92</a>}
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a><span class="doccomment">/// Spawn the subscribe loop: watch the `SessionView`, and for every remote track
+<a href=#95 id=95 data-nosnippet>95</a>/// start a per-track pipeline (subscribe → decode → sink for video, mix bus for
+<a href=#96 id=96 data-nosnippet>96</a>/// audio); stop pipelines for tracks that vanish. Sends `Subscribe`/keyframe
+<a href=#97 id=97 data-nosnippet>97</a>/// intent on the control plane as tracks appear.
+<a href=#98 id=98 data-nosnippet>98</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_subscribe_loop(
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw-2">mut </span>view_rx: watch::Receiver&lt;SessionView&gt;,
+<a href=#101 id=101 data-nosnippet>101</a>    self_id: PeerId,
+<a href=#102 id=102 data-nosnippet>102</a>    space_id: Uuid,
+<a href=#103 id=103 data-nosnippet>103</a>    relay: Arc&lt;MoqRelaySession&gt;,
+<a href=#104 id=104 data-nosnippet>104</a>    control_outbound: tokio::sync::mpsc::UnboundedSender&lt;ClientMessage&gt;,
+<a href=#105 id=105 data-nosnippet>105</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
+<a href=#106 id=106 data-nosnippet>106</a>    playout_bus: Arc&lt;PlayoutBus&gt;,
+<a href=#107 id=107 data-nosnippet>107</a>    levels: watch::Sender&lt;LevelsView&gt;,
+<a href=#108 id=108 data-nosnippet>108</a>    clock: CaptureClock,
+<a href=#109 id=109 data-nosnippet>109</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw-2">mut </span>video_paused: watch::Receiver&lt;bool&gt;,
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw-2">mut </span>tile_quality: watch::Receiver&lt;HashMap&lt;(PeerId, Source), hound_media::QualityRequest&gt;&gt;,
+<a href=#112 id=112 data-nosnippet>112</a>    volumes: Arc&lt;StreamVolumes&gt;,
+<a href=#113 id=113 data-nosnippet>113</a>) -&gt; JoinHandle&lt;()&gt; {
+<a href=#114 id=114 data-nosnippet>114</a>    call_runtime().spawn(<span class="kw">async move </span>{
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="comment">// Keyed by TrackId.0 so we can diff against the view on each change.
+<a href=#116 id=116 data-nosnippet>116</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>active: HashMap&lt;u32, Subscription&gt; = HashMap::new();
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="comment">// The cap we last reported per (peer, source), so a RequestQuality is sent
+<a href=#118 id=118 data-nosnippet>118</a>        // only when our demand for that peer's video actually changes.
+<a href=#119 id=119 data-nosnippet>119</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>last_sent: HashMap&lt;(PeerId, Source), <span class="prelude-ty">Option</span>&lt;u64&gt;&gt; = HashMap::new();
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="comment">// Per-(peer, source) hysteresis so a transient tile-resize flap (notably a
+<a href=#121 id=121 data-nosnippet>121</a>        // rejoin relayout) can't thrash the source⇄low subscription on the shared
+<a href=#122 id=122 data-nosnippet>122</a>        // audio+video connection. Holds a demanded layer switch until it is durable.
+<a href=#123 id=123 data-nosnippet>123</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>hysteresis: HashMap&lt;(PeerId, Source), LayerHysteresis&gt; = HashMap::new();
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="comment">// Self-healing: every pipeline task carries a PipelineEndGuard that reports
+<a href=#125 id=125 data-nosnippet>125</a>        // its (track_id, epoch) here on ANY exit, so a self-terminated pipeline is
+<a href=#126 id=126 data-nosnippet>126</a>        // reaped from `active` and the reconcile re-subscribes it (paced).
+<a href=#127 id=127 data-nosnippet>127</a>        </span><span class="kw">let </span>(ended_tx, <span class="kw-2">mut </span>ended_rx) = tokio::sync::mpsc::unbounded_channel::&lt;(u32, u64)&gt;();
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let </span><span class="kw-2">mut </span>next_epoch: u64 = <span class="number">0</span>;
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">let </span><span class="kw-2">mut </span>pacer = RestartPacer::default();
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">loop </span>{
+<a href=#132 id=132 data-nosnippet>132</a>            <span class="comment">// Soonest pending debounced layer switch — the loop wakes to actuate it
+<a href=#133 id=133 data-nosnippet>133</a>            // even if no input changes in the meantime.
+<a href=#134 id=134 data-nosnippet>134</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>next_switch_deadline: <span class="prelude-ty">Option</span>&lt;Instant&gt; = <span class="prelude-val">None</span>;
+<a href=#135 id=135 data-nosnippet>135</a>            <span class="comment">// When video is paused (app backgrounded / call surface hidden) drop
+<a href=#136 id=136 data-nosnippet>136</a>            // every inbound video sub — receiving a high-bitrate screenshare nobody
+<a href=#137 id=137 data-nosnippet>137</a>            // is watching is wasted CPU + bandwidth. Audio always flows.
+<a href=#138 id=138 data-nosnippet>138</a>            </span><span class="kw">let </span>drop_video = <span class="kw-2">*</span>video_paused.borrow();
+<a href=#139 id=139 data-nosnippet>139</a>            <span class="kw">let </span>demand = tile_quality.borrow().clone();
+<a href=#140 id=140 data-nosnippet>140</a>            <span class="comment">// Snapshot the remote tracks we should be subscribed to. Audio is taken
+<a href=#141 id=141 data-nosnippet>141</a>            // as-is; for each (peer, video source) we pick EITHER the source or the
+<a href=#142 id=142 data-nosnippet>142</a>            // low track by our demand, and report that demand upstream so the producer
+<a href=#143 id=143 data-nosnippet>143</a>            // spins up the low layer.
+<a href=#144 id=144 data-nosnippet>144</a>            </span><span class="kw">let </span>desired: Vec&lt;(u32, PeerId, MediaKind, Source, bool)&gt; = {
+<a href=#145 id=145 data-nosnippet>145</a>                <span class="kw">let </span>view = view_rx.borrow();
+<a href=#146 id=146 data-nosnippet>146</a>                <span class="kw">let </span><span class="kw-2">mut </span>out: Vec&lt;(u32, PeerId, MediaKind, Source, bool)&gt; = Vec::new();
+<a href=#147 id=147 data-nosnippet>147</a>                <span class="kw">for </span>t <span class="kw">in </span>view.tracks().filter(|t| {
+<a href=#148 id=148 data-nosnippet>148</a>                    t.<span class="macro">peer !</span>= self_id
+<a href=#149 id=149 data-nosnippet>149</a>                        &amp;&amp; t.kind == MediaKind::Audio
+<a href=#150 id=150 data-nosnippet>150</a>                        &amp;&amp; <span class="macro">matches!</span>(t.source, Source::Microphone | Source::Screen)
+<a href=#151 id=151 data-nosnippet>151</a>                }) {
+<a href=#152 id=152 data-nosnippet>152</a>                    out.push((t.id.<span class="number">0</span>, t.peer, t.kind, t.source, <span class="bool-val">false</span>));
+<a href=#153 id=153 data-nosnippet>153</a>                }
+<a href=#154 id=154 data-nosnippet>154</a>                <span class="kw">if </span>!drop_video {
+<a href=#155 id=155 data-nosnippet>155</a>                    <span class="comment">// Group each peer's video into (source track, low track).
+<a href=#156 id=156 data-nosnippet>156</a>                    </span><span class="kw">let </span><span class="kw-2">mut </span>groups: HashMap&lt;(PeerId, Source), (<span class="prelude-ty">Option</span>&lt;u32&gt;, <span class="prelude-ty">Option</span>&lt;u32&gt;)&gt; =
+<a href=#157 id=157 data-nosnippet>157</a>                        HashMap::new();
+<a href=#158 id=158 data-nosnippet>158</a>                    <span class="kw">for </span>t <span class="kw">in </span>view.tracks().filter(|t| {
+<a href=#159 id=159 data-nosnippet>159</a>                        t.<span class="macro">peer !</span>= self_id
+<a href=#160 id=160 data-nosnippet>160</a>                            &amp;&amp; t.kind == MediaKind::Video
+<a href=#161 id=161 data-nosnippet>161</a>                            &amp;&amp; <span class="macro">matches!</span>(t.source, Source::Camera | Source::Screen)
+<a href=#162 id=162 data-nosnippet>162</a>                    }) {
+<a href=#163 id=163 data-nosnippet>163</a>                        <span class="kw">let </span>e = groups.entry((t.peer, t.source)).or_insert((<span class="prelude-val">None</span>, <span class="prelude-val">None</span>));
+<a href=#164 id=164 data-nosnippet>164</a>                        <span class="kw">if </span>t.low {
+<a href=#165 id=165 data-nosnippet>165</a>                            e.<span class="number">1 </span>= <span class="prelude-val">Some</span>(t.id.<span class="number">0</span>);
+<a href=#166 id=166 data-nosnippet>166</a>                        } <span class="kw">else </span>{
+<a href=#167 id=167 data-nosnippet>167</a>                            e.<span class="number">0 </span>= <span class="prelude-val">Some</span>(t.id.<span class="number">0</span>);
+<a href=#168 id=168 data-nosnippet>168</a>                        }
+<a href=#169 id=169 data-nosnippet>169</a>                    }
+<a href=#170 id=170 data-nosnippet>170</a>                    <span class="kw">for </span>(<span class="kw-2">&amp;</span>(peer, source), <span class="kw-2">&amp;</span>(src_id, low_id)) <span class="kw">in </span><span class="kw-2">&amp;</span>groups {
+<a href=#171 id=171 data-nosnippet>171</a>                        <span class="kw">let </span>tile_req = demand
+<a href=#172 id=172 data-nosnippet>172</a>                            .get(<span class="kw-2">&amp;</span>(peer, source))
+<a href=#173 id=173 data-nosnippet>173</a>                            .copied()
+<a href=#174 id=174 data-nosnippet>174</a>                            .unwrap_or(hound_media::QualityRequest::Source);
+<a href=#175 id=175 data-nosnippet>175</a>                        <span class="comment">// This receiver's OWN downlink-driven demand for this video,
+<a href=#176 id=176 data-nosnippet>176</a>                        // read from whichever track (source or low) is CURRENTLY
+<a href=#177 id=177 data-nosnippet>177</a>                        // subscribed — the pull loop for that pipeline folds each
+<a href=#178 id=178 data-nosnippet>178</a>                        // arriving frame's `frame_seq` into a `DownlinkDemand` and
+<a href=#179 id=179 data-nosnippet>179</a>                        // writes the result here (see `DownlinkCell`). Not yet
+<a href=#180 id=180 data-nosnippet>180</a>                        // subscribed / audio-only / no data yet all read as `Source`
+<a href=#181 id=181 data-nosnippet>181</a>                        // (optimistic default), so a fresh pipeline never spuriously
+<a href=#182 id=182 data-nosnippet>182</a>                        // caps.
+<a href=#183 id=183 data-nosnippet>183</a>                        </span><span class="kw">let </span>bwe_req = [src_id, low_id]
+<a href=#184 id=184 data-nosnippet>184</a>                            .into_iter()
+<a href=#185 id=185 data-nosnippet>185</a>                            .flatten()
+<a href=#186 id=186 data-nosnippet>186</a>                            .find_map(|id| active.get(<span class="kw-2">&amp;</span>id))
+<a href=#187 id=187 data-nosnippet>187</a>                            .and_then(|s| s.downlink.as_ref())
+<a href=#188 id=188 data-nosnippet>188</a>                            .map(|c| c.load())
+<a href=#189 id=189 data-nosnippet>189</a>                            .unwrap_or(hound_media::QualityRequest::Source);
+<a href=#190 id=190 data-nosnippet>190</a>                        <span class="comment">// The EFFECTIVE demand is the more constrained of the tile-size
+<a href=#191 id=191 data-nosnippet>191</a>                        // demand and this receiver's own bandwidth demand — neither
+<a href=#192 id=192 data-nosnippet>192</a>                        // signal alone should ever request MORE than the other allows.
+<a href=#193 id=193 data-nosnippet>193</a>                        </span><span class="kw">let </span>raw_req = hound_media::most_constrained(tile_req, bwe_req);
+<a href=#194 id=194 data-nosnippet>194</a>                        <span class="comment">// Debounce the source⇄low decision so a transient tile-resize
+<a href=#195 id=195 data-nosnippet>195</a>                        // flap (a rejoin relayout) can't thrash the subscription on the
+<a href=#196 id=196 data-nosnippet>196</a>                        // shared audio+video connection — only a DURABLE layer change
+<a href=#197 id=197 data-nosnippet>197</a>                        // actuates. A cap-value change on the same layer passes through.
+<a href=#198 id=198 data-nosnippet>198</a>                        </span><span class="kw">let </span>now = Instant::now();
+<a href=#199 id=199 data-nosnippet>199</a>                        <span class="kw">let </span>req = hysteresis
+<a href=#200 id=200 data-nosnippet>200</a>                            .entry((peer, source))
+<a href=#201 id=201 data-nosnippet>201</a>                            .or_insert_with(LayerHysteresis::new)
+<a href=#202 id=202 data-nosnippet>202</a>                            .observe(raw_req, now, LAYER_SWITCH_DEBOUNCE, LAYER_SWITCH_DWELL);
+<a href=#203 id=203 data-nosnippet>203</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(deadline) = hysteresis.get(<span class="kw-2">&amp;</span>(peer, source)).and_then(|h| {
+<a href=#204 id=204 data-nosnippet>204</a>                            h.pending_deadline(LAYER_SWITCH_DEBOUNCE, LAYER_SWITCH_DWELL)
+<a href=#205 id=205 data-nosnippet>205</a>                        }) {
+<a href=#206 id=206 data-nosnippet>206</a>                            next_switch_deadline = <span class="prelude-val">Some</span>(
+<a href=#207 id=207 data-nosnippet>207</a>                                next_switch_deadline.map_or(deadline, |d: Instant| d.min(deadline)),
+<a href=#208 id=208 data-nosnippet>208</a>                            );
+<a href=#209 id=209 data-nosnippet>209</a>                        }
+<a href=#210 id=210 data-nosnippet>210</a>                        <span class="comment">// Report our cap upstream (against the SOURCE track) on change,
+<a href=#211 id=211 data-nosnippet>211</a>                        // so the producer activates / tears down the shared low layer.
+<a href=#212 id=212 data-nosnippet>212</a>                        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sid) = src_id {
+<a href=#213 id=213 data-nosnippet>213</a>                            <span class="kw">let </span>cap_bps = <span class="kw">match </span>req {
+<a href=#214 id=214 data-nosnippet>214</a>                                hound_media::QualityRequest::Capped(b) =&gt; <span class="prelude-val">Some</span>(b),
+<a href=#215 id=215 data-nosnippet>215</a>                                hound_media::QualityRequest::Source =&gt; <span class="prelude-val">None</span>,
+<a href=#216 id=216 data-nosnippet>216</a>                            };
+<a href=#217 id=217 data-nosnippet>217</a>                            <span class="kw">if </span>last_sent.get(<span class="kw-2">&amp;</span>(peer, source)).copied() != <span class="prelude-val">Some</span>(cap_bps) {
+<a href=#218 id=218 data-nosnippet>218</a>                                last_sent.insert((peer, source), cap_bps);
+<a href=#219 id=219 data-nosnippet>219</a>                                <span class="macro">tracing::info!</span>(
+<a href=#220 id=220 data-nosnippet>220</a>                                    peer = peer.<span class="number">0</span>,
+<a href=#221 id=221 data-nosnippet>221</a>                                    <span class="question-mark">?</span>source,
+<a href=#222 id=222 data-nosnippet>222</a>                                    <span class="question-mark">?</span>cap_bps,
+<a href=#223 id=223 data-nosnippet>223</a>                                    src_track = sid,
+<a href=#224 id=224 data-nosnippet>224</a>                                    low_present = low_id.is_some(),
+<a href=#225 id=225 data-nosnippet>225</a>                                    <span class="string">"simulcast[recv]: RequestQuality → producer"
+<a href=#226 id=226 data-nosnippet>226</a>                                </span>);
+<a href=#227 id=227 data-nosnippet>227</a>                                <span class="kw">let _ </span>= control_outbound.send(ClientMessage::RequestQuality {
+<a href=#228 id=228 data-nosnippet>228</a>                                    track: hound_control::TrackId(sid),
+<a href=#229 id=229 data-nosnippet>229</a>                                    cap_bps,
+<a href=#230 id=230 data-nosnippet>230</a>                                });
+<a href=#231 id=231 data-nosnippet>231</a>                            }
+<a href=#232 id=232 data-nosnippet>232</a>                        }
+<a href=#233 id=233 data-nosnippet>233</a>                        <span class="comment">// Subscribe the low track when we want it AND it exists (so a
+<a href=#234 id=234 data-nosnippet>234</a>                        // demand for low before the producer publishes it falls back to
+<a href=#235 id=235 data-nosnippet>235</a>                        // source until the low track appears, then switches).
+<a href=#236 id=236 data-nosnippet>236</a>                        </span><span class="kw">let </span>pick = <span class="kw">match </span>req {
+<a href=#237 id=237 data-nosnippet>237</a>                            hound_media::QualityRequest::Capped(<span class="kw">_</span>) =&gt; low_id.or(src_id),
+<a href=#238 id=238 data-nosnippet>238</a>                            hound_media::QualityRequest::Source =&gt; src_id.or(low_id),
+<a href=#239 id=239 data-nosnippet>239</a>                        };
+<a href=#240 id=240 data-nosnippet>240</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = pick {
+<a href=#241 id=241 data-nosnippet>241</a>                            out.push((id, peer, MediaKind::Video, source, <span class="prelude-val">Some</span>(id) == low_id));
+<a href=#242 id=242 data-nosnippet>242</a>                        }
+<a href=#243 id=243 data-nosnippet>243</a>                    }
+<a href=#244 id=244 data-nosnippet>244</a>                }
+<a href=#245 id=245 data-nosnippet>245</a>                out
+<a href=#246 id=246 data-nosnippet>246</a>            };
+<a href=#247 id=247 data-nosnippet>247</a>
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="comment">// Stop pipelines for tracks no longer present (or video we just paused).
+<a href=#249 id=249 data-nosnippet>249</a>            </span><span class="kw">let </span>desired_ids: std::collections::HashSet&lt;u32&gt; =
+<a href=#250 id=250 data-nosnippet>250</a>                desired.iter().map(|(id, ..)| <span class="kw-2">*</span>id).collect();
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="kw">let </span>gone: Vec&lt;u32&gt; = active
+<a href=#252 id=252 data-nosnippet>252</a>                .keys()
+<a href=#253 id=253 data-nosnippet>253</a>                .copied()
+<a href=#254 id=254 data-nosnippet>254</a>                .filter(|id| !desired_ids.contains(id))
+<a href=#255 id=255 data-nosnippet>255</a>                .collect();
+<a href=#256 id=256 data-nosnippet>256</a>            <span class="kw">for </span>id <span class="kw">in </span>gone {
+<a href=#257 id=257 data-nosnippet>257</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(sub) = active.remove(<span class="kw-2">&amp;</span>id) {
+<a href=#258 id=258 data-nosnippet>258</a>                    sub.stop();
+<a href=#259 id=259 data-nosnippet>259</a>                    <span class="comment">// Tell the relay to stop forwarding this track to us (dropping the
+<a href=#260 id=260 data-nosnippet>260</a>                    // subscriber closes the moq sub; this also clears server routing).
+<a href=#261 id=261 data-nosnippet>261</a>                    </span><span class="kw">let _ </span>= control_outbound.send(ClientMessage::Unsubscribe {
+<a href=#262 id=262 data-nosnippet>262</a>                        track: hound_control::TrackId(id),
+<a href=#263 id=263 data-nosnippet>263</a>                    });
+<a href=#264 id=264 data-nosnippet>264</a>                }
+<a href=#265 id=265 data-nosnippet>265</a>            }
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a>            <span class="comment">// Start pipelines for new tracks.
+<a href=#268 id=268 data-nosnippet>268</a>            </span><span class="kw">for </span>(track_id, peer, kind, source, low) <span class="kw">in </span>desired {
+<a href=#269 id=269 data-nosnippet>269</a>                <span class="kw">if </span>active.contains_key(<span class="kw-2">&amp;</span>track_id) {
+<a href=#270 id=270 data-nosnippet>270</a>                    <span class="kw">continue</span>;
+<a href=#271 id=271 data-nosnippet>271</a>                }
+<a href=#272 id=272 data-nosnippet>272</a>                <span class="comment">// A recently-died pipeline restarts PACED (bounded retry): defer this
+<a href=#273 id=273 data-nosnippet>273</a>                // track and wake when its pace elapses.
+<a href=#274 id=274 data-nosnippet>274</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(at) = pacer.ready_at(track_id, Instant::now()) {
+<a href=#275 id=275 data-nosnippet>275</a>                    next_switch_deadline =
+<a href=#276 id=276 data-nosnippet>276</a>                        <span class="prelude-val">Some</span>(next_switch_deadline.map_or(at, |d: Instant| d.min(at)));
+<a href=#277 id=277 data-nosnippet>277</a>                    <span class="kw">continue</span>;
+<a href=#278 id=278 data-nosnippet>278</a>                }
+<a href=#279 id=279 data-nosnippet>279</a>                <span class="comment">// Tell the server we want this track (+ a keyframe to bootstrap video).
+<a href=#280 id=280 data-nosnippet>280</a>                </span><span class="kw">let _ </span>= control_outbound.send(ClientMessage::Subscribe {
+<a href=#281 id=281 data-nosnippet>281</a>                    track: hound_control::TrackId(track_id),
+<a href=#282 id=282 data-nosnippet>282</a>                });
+<a href=#283 id=283 data-nosnippet>283</a>                <span class="kw">if </span>kind == MediaKind::Video {
+<a href=#284 id=284 data-nosnippet>284</a>                    <span class="macro">tracing::info!</span>(
+<a href=#285 id=285 data-nosnippet>285</a>                        peer = peer.<span class="number">0</span>,
+<a href=#286 id=286 data-nosnippet>286</a>                        <span class="question-mark">?</span>source,
+<a href=#287 id=287 data-nosnippet>287</a>                        low,
+<a href=#288 id=288 data-nosnippet>288</a>                        track = track_id,
+<a href=#289 id=289 data-nosnippet>289</a>                        <span class="string">"simulcast[recv]: subscribing video track ({})"</span>,
+<a href=#290 id=290 data-nosnippet>290</a>                        <span class="kw">if </span>low { <span class="string">"LOW" </span>} <span class="kw">else </span>{ <span class="string">"source" </span>}
+<a href=#291 id=291 data-nosnippet>291</a>                    );
+<a href=#292 id=292 data-nosnippet>292</a>                    <span class="kw">let _ </span>= control_outbound.send(ClientMessage::RequestKeyframe {
+<a href=#293 id=293 data-nosnippet>293</a>                        track: hound_control::TrackId(track_id),
+<a href=#294 id=294 data-nosnippet>294</a>                    });
+<a href=#295 id=295 data-nosnippet>295</a>                    <span class="comment">// RTC-debug: a PLI we sent for this peer's camera vs screen track.
+<a href=#296 id=296 data-nosnippet>296</a>                    </span>stats
+<a href=#297 id=297 data-nosnippet>297</a>                        .peer(peer.<span class="number">0</span>)
+<a href=#298 id=298 data-nosnippet>298</a>                        .video_keyframe_requested(inbound_video_kind(source));
 <a href=#299 id=299 data-nosnippet>299</a>                }
-<a href=#300 id=300 data-nosnippet>300</a>                <span class="kw">_ </span>= <span class="kw">async </span>{
-<a href=#301 id=301 data-nosnippet>301</a>                    <span class="kw">match </span>switch_wait {
-<a href=#302 id=302 data-nosnippet>302</a>                        <span class="prelude-val">Some</span>(d) =&gt; tokio::time::sleep(d).<span class="kw">await</span>,
-<a href=#303 id=303 data-nosnippet>303</a>                        <span class="prelude-val">None </span>=&gt; std::future::pending::&lt;()&gt;().<span class="kw">await</span>,
-<a href=#304 id=304 data-nosnippet>304</a>                    }
-<a href=#305 id=305 data-nosnippet>305</a>                } =&gt; {}
-<a href=#306 id=306 data-nosnippet>306</a>            }
-<a href=#307 id=307 data-nosnippet>307</a>        }
-<a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">for </span>(<span class="kw">_</span>, sub) <span class="kw">in </span>active.drain() {
-<a href=#310 id=310 data-nosnippet>310</a>            sub.stop();
-<a href=#311 id=311 data-nosnippet>311</a>        }
-<a href=#312 id=312 data-nosnippet>312</a>    })
-<a href=#313 id=313 data-nosnippet>313</a>}
-<a href=#314 id=314 data-nosnippet>314</a>
-<a href=#315 id=315 data-nosnippet>315</a><span class="doccomment">/// How often the receiver re-sends `RequestKeyframe` while a fresh video
-<a href=#316 id=316 data-nosnippet>316</a>/// subscription is still awaiting its first keyframe, and how many times. The
-<a href=#317 id=317 data-nosnippet>317</a>/// subscribe-time request can RACE the producer's PLI-forced IDR (the IDR lands in
-<a href=#318 id=318 data-nosnippet>318</a>/// a group the moq live-join skips), leaving the receiver black indefinitely on a
-<a href=#319 id=319 data-nosnippet>319</a>/// keyframe that never comes. With the screen encoder
-<a href=#320 id=320 data-nosnippet>320</a>/// on an on-demand cadence (no frequent periodic IDR to paper over the race), this
-<a href=#321 id=321 data-nosnippet>321</a>/// bounded re-request is the fast recovery: producer-side the keyframe throttle
-<a href=#322 id=322 data-nosnippet>322</a>/// coalesces duplicates, so nagging is cheap. Once the attempts are exhausted the
-<a href=#323 id=323 data-nosnippet>323</a>/// pipeline's [`FIRST_KEYFRAME_DEADLINE`] ends it — a fresh, ladder-paced
-<a href=#324 id=324 data-nosnippet>324</a>/// resubscribe replaces a black tile that would otherwise wait on the safety-net IDR.
-<a href=#325 id=325 data-nosnippet>325</a></span><span class="kw">const </span>KEYFRAME_NAG_INTERVAL: Duration = Duration::from_secs(<span class="number">2</span>);
-<a href=#326 id=326 data-nosnippet>326</a><span class="kw">const </span>KEYFRAME_NAG_ATTEMPTS: u32 = <span class="number">5</span>;
-<a href=#327 id=327 data-nosnippet>327</a>
-<a href=#328 id=328 data-nosnippet>328</a><span class="doccomment">/// Start one per-track decode pipeline. Audio → Opus decode → mix bus; video →
-<a href=#329 id=329 data-nosnippet>329</a>/// H.264/etc decode → sink keyed `cam:{peer}` / `screen:{peer}`. For video,
-<a href=#330 id=330 data-nosnippet>330</a>/// `control_outbound` + `track_id` drive the awaiting-keyframe re-request nag.
-<a href=#331 id=331 data-nosnippet>331</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#332 id=332 data-nosnippet>332</a></span><span class="kw">fn </span>start_pipeline(
-<a href=#333 id=333 data-nosnippet>333</a>    peer: PeerId,
-<a href=#334 id=334 data-nosnippet>334</a>    kind: MediaKind,
-<a href=#335 id=335 data-nosnippet>335</a>    source: Source,
-<a href=#336 id=336 data-nosnippet>336</a>    low: bool,
-<a href=#337 id=337 data-nosnippet>337</a>    space_id: Uuid,
-<a href=#338 id=338 data-nosnippet>338</a>    relay: Arc&lt;MoqRelaySession&gt;,
-<a href=#339 id=339 data-nosnippet>339</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
-<a href=#340 id=340 data-nosnippet>340</a>    playout_bus: Arc&lt;PlayoutBus&gt;,
-<a href=#341 id=341 data-nosnippet>341</a>    levels: watch::Sender&lt;LevelsView&gt;,
-<a href=#342 id=342 data-nosnippet>342</a>    clock: CaptureClock,
-<a href=#343 id=343 data-nosnippet>343</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#344 id=344 data-nosnippet>344</a>    control_outbound: tokio::sync::mpsc::UnboundedSender&lt;ClientMessage&gt;,
-<a href=#345 id=345 data-nosnippet>345</a>    track_id: u32,
-<a href=#346 id=346 data-nosnippet>346</a>    volumes: Arc&lt;StreamVolumes&gt;,
-<a href=#347 id=347 data-nosnippet>347</a>    end_guard: PipelineEndGuard,
-<a href=#348 id=348 data-nosnippet>348</a>) -&gt; Subscription {
-<a href=#349 id=349 data-nosnippet>349</a>    <span class="kw">let </span>epoch = end_guard.epoch;
-<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw">let </span>stop = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
-<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">let </span>task_stop = stop.clone();
-<a href=#352 id=352 data-nosnippet>352</a>    <span class="comment">// First-delivery latch: audio sets it on the first decoded frame, video when
-<a href=#353 id=353 data-nosnippet>353</a>    // the first keyframe passes the gate. Read at reap time to pick the restart
-<a href=#354 id=354 data-nosnippet>354</a>    // pace (an undelivered death climbs the ladder).
-<a href=#355 id=355 data-nosnippet>355</a>    </span><span class="kw">let </span>delivered = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
-<a href=#356 id=356 data-nosnippet>356</a>    <span class="kw">let </span>task_delivered = delivered.clone();
-<a href=#357 id=357 data-nosnippet>357</a>    <span class="comment">// The per-peer inbound stats handle (cloned once; the pipeline increments on it
-<a href=#358 id=358 data-nosnippet>358</a>    // lock-free per frame).
-<a href=#359 id=359 data-nosnippet>359</a>    </span><span class="kw">let </span>peer_stats = stats.peer(peer.<span class="number">0</span>);
-<a href=#360 id=360 data-nosnippet>360</a>    <span class="comment">// The moq track name carries the spatial layer: a constrained receiver subscribes
-<a href=#361 id=361 data-nosnippet>361</a>    // to the `_l0` low track instead of the source.
-<a href=#362 id=362 data-nosnippet>362</a>    </span><span class="kw">let </span>track_name = <span class="kw">match </span>(kind, source, low) {
-<a href=#363 id=363 data-nosnippet>363</a>        (MediaKind::Audio, Source::Screen, <span class="kw">_</span>) =&gt; SCREEN_AUDIO_TRACK,
-<a href=#364 id=364 data-nosnippet>364</a>        (MediaKind::Audio, <span class="kw">_</span>, <span class="kw">_</span>) =&gt; MIC_TRACK,
-<a href=#365 id=365 data-nosnippet>365</a>        (MediaKind::Video, Source::Screen, <span class="bool-val">false</span>) =&gt; SCREEN_TRACK,
-<a href=#366 id=366 data-nosnippet>366</a>        (MediaKind::Video, Source::Screen, <span class="bool-val">true</span>) =&gt; <span class="string">"screen_l0"</span>,
-<a href=#367 id=367 data-nosnippet>367</a>        (MediaKind::Video, <span class="kw">_</span>, <span class="bool-val">false</span>) =&gt; CAM_TRACK,
-<a href=#368 id=368 data-nosnippet>368</a>        (MediaKind::Video, <span class="kw">_</span>, <span class="bool-val">true</span>) =&gt; <span class="string">"cam_l0"</span>,
-<a href=#369 id=369 data-nosnippet>369</a>    };
-<a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">let </span>path = broadcast_path(space_id, peer, track_name);
-<a href=#371 id=371 data-nosnippet>371</a>
-<a href=#372 id=372 data-nosnippet>372</a>    <span class="comment">// Audio decode + fill runs on the RT-promoted audio runtime so video CPU can't
-<a href=#373 id=373 data-nosnippet>373</a>    // starve it; video stays on the general call runtime.
-<a href=#374 id=374 data-nosnippet>374</a>    </span><span class="kw">let </span>runtime = <span class="kw">match </span>kind {
-<a href=#375 id=375 data-nosnippet>375</a>        MediaKind::Audio =&gt; audio_runtime(),
-<a href=#376 id=376 data-nosnippet>376</a>        MediaKind::Video =&gt; call_runtime(),
-<a href=#377 id=377 data-nosnippet>377</a>    };
-<a href=#378 id=378 data-nosnippet>378</a>    <span class="kw">let </span>task = runtime.spawn(<span class="kw">async move </span>{
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="comment">// Owned by the task so its Drop reports this pipeline's end to the reap
-<a href=#380 id=380 data-nosnippet>380</a>        // channel on ANY exit path (clean end, error, panic, abort).
-<a href=#381 id=381 data-nosnippet>381</a>        </span><span class="kw">let </span>_end_guard = end_guard;
-<a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">let </span>subscriber = <span class="kw">match </span>relay
-<a href=#383 id=383 data-nosnippet>383</a>            .subscribe_track(
-<a href=#384 id=384 data-nosnippet>384</a>                <span class="kw-2">&amp;</span>path,
-<a href=#385 id=385 data-nosnippet>385</a>                track_name,
-<a href=#386 id=386 data-nosnippet>386</a>                peer.<span class="number">0 </span><span class="kw">as </span>u16,
-<a href=#387 id=387 data-nosnippet>387</a>                priority_for(kind),
-<a href=#388 id=388 data-nosnippet>388</a>                <span class="comment">// Audio drains in arrival order (a reordered Opus frame is still playable);
-<a href=#389 id=389 data-nosnippet>389</a>                // video priority-drops stale GOPs. This is what stops a screenshare from
-<a href=#390 id=390 data-nosnippet>390</a>                // silently dropping reordered mic/app-audio frames on the shared connection.
-<a href=#391 id=391 data-nosnippet>391</a>                </span>kind == MediaKind::Audio,
-<a href=#392 id=392 data-nosnippet>392</a>            )
-<a href=#393 id=393 data-nosnippet>393</a>            .<span class="kw">await
-<a href=#394 id=394 data-nosnippet>394</a>        </span>{
-<a href=#395 id=395 data-nosnippet>395</a>            <span class="prelude-val">Ok</span>(s) =&gt; s,
-<a href=#396 id=396 data-nosnippet>396</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#397 id=397 data-nosnippet>397</a>                <span class="macro">tracing::warn!</span>(%e, peer = peer.<span class="number">0</span>, <span class="string">"subscribe failed"</span>);
-<a href=#398 id=398 data-nosnippet>398</a>                <span class="kw">return</span>;
-<a href=#399 id=399 data-nosnippet>399</a>            }
-<a href=#400 id=400 data-nosnippet>400</a>        };
-<a href=#401 id=401 data-nosnippet>401</a>
-<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">match </span>kind {
-<a href=#403 id=403 data-nosnippet>403</a>            MediaKind::Audio =&gt; {
-<a href=#404 id=404 data-nosnippet>404</a>                <span class="comment">// This stream's playback-gain cell (the tile volume/mute control),
-<a href=#405 id=405 data-nosnippet>405</a>                // looked up by key so a set volume survives resubscribes.
-<a href=#406 id=406 data-nosnippet>406</a>                </span><span class="kw">let </span>gain = volumes.cell(peer.<span class="number">0</span>, source);
-<a href=#407 id=407 data-nosnippet>407</a>                audio_pipeline(
-<a href=#408 id=408 data-nosnippet>408</a>                    subscriber,
-<a href=#409 id=409 data-nosnippet>409</a>                    peer,
-<a href=#410 id=410 data-nosnippet>410</a>                    source,
-<a href=#411 id=411 data-nosnippet>411</a>                    playout_bus,
-<a href=#412 id=412 data-nosnippet>412</a>                    levels,
-<a href=#413 id=413 data-nosnippet>413</a>                    clock,
-<a href=#414 id=414 data-nosnippet>414</a>                    task_stop,
-<a href=#415 id=415 data-nosnippet>415</a>                    peer_stats,
-<a href=#416 id=416 data-nosnippet>416</a>                    gain,
-<a href=#417 id=417 data-nosnippet>417</a>                    task_delivered,
-<a href=#418 id=418 data-nosnippet>418</a>                )
-<a href=#419 id=419 data-nosnippet>419</a>                .<span class="kw">await
-<a href=#420 id=420 data-nosnippet>420</a>            </span>}
-<a href=#421 id=421 data-nosnippet>421</a>            MediaKind::Video =&gt; {
-<a href=#422 id=422 data-nosnippet>422</a>                <span class="comment">// Awaiting-keyframe re-request nag: a separate small task so the
-<a href=#423 id=423 data-nosnippet>423</a>                // fast re-requests don't race the pipeline's own pull. Ends on
-<a href=#424 id=424 data-nosnippet>424</a>                // first keyframe or pipeline stop; after the bounded attempts the
-<a href=#425 id=425 data-nosnippet>425</a>                // pipeline's first-keyframe deadline takes over (it ends itself,
-<a href=#426 id=426 data-nosnippet>426</a>                // and the reconcile re-subscribes on the restart ladder).
-<a href=#427 id=427 data-nosnippet>427</a>                </span><span class="kw">let </span>nag = {
-<a href=#428 id=428 data-nosnippet>428</a>                    <span class="kw">let </span>got = task_delivered.clone();
-<a href=#429 id=429 data-nosnippet>429</a>                    <span class="kw">let </span>stop = task_stop.clone();
-<a href=#430 id=430 data-nosnippet>430</a>                    <span class="kw">let </span>outbound = control_outbound.clone();
-<a href=#431 id=431 data-nosnippet>431</a>                    call_runtime().spawn(<span class="kw">async move </span>{
-<a href=#432 id=432 data-nosnippet>432</a>                        <span class="kw">for _ in </span><span class="number">0</span>..KEYFRAME_NAG_ATTEMPTS {
-<a href=#433 id=433 data-nosnippet>433</a>                            tokio::time::sleep(KEYFRAME_NAG_INTERVAL).<span class="kw">await</span>;
-<a href=#434 id=434 data-nosnippet>434</a>                            <span class="kw">if </span>got.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
-<a href=#435 id=435 data-nosnippet>435</a>                                <span class="kw">return</span>;
-<a href=#436 id=436 data-nosnippet>436</a>                            }
-<a href=#437 id=437 data-nosnippet>437</a>                            <span class="macro">tracing::info!</span>(
-<a href=#438 id=438 data-nosnippet>438</a>                                peer = peer.<span class="number">0</span>,
-<a href=#439 id=439 data-nosnippet>439</a>                                track = track_id,
-<a href=#440 id=440 data-nosnippet>440</a>                                <span class="string">"video: still awaiting first keyframe — re-requesting"
-<a href=#441 id=441 data-nosnippet>441</a>                            </span>);
-<a href=#442 id=442 data-nosnippet>442</a>                            <span class="kw">let _ </span>= outbound.send(ClientMessage::RequestKeyframe {
-<a href=#443 id=443 data-nosnippet>443</a>                                track: hound_control::TrackId(track_id),
-<a href=#444 id=444 data-nosnippet>444</a>                            });
-<a href=#445 id=445 data-nosnippet>445</a>                        }
-<a href=#446 id=446 data-nosnippet>446</a>                    })
-<a href=#447 id=447 data-nosnippet>447</a>                };
-<a href=#448 id=448 data-nosnippet>448</a>                video_pipeline(
-<a href=#449 id=449 data-nosnippet>449</a>                    subscriber,
-<a href=#450 id=450 data-nosnippet>450</a>                    peer,
-<a href=#451 id=451 data-nosnippet>451</a>                    source,
-<a href=#452 id=452 data-nosnippet>452</a>                    sink,
-<a href=#453 id=453 data-nosnippet>453</a>                    task_stop,
-<a href=#454 id=454 data-nosnippet>454</a>                    peer_stats,
-<a href=#455 id=455 data-nosnippet>455</a>                    task_delivered,
-<a href=#456 id=456 data-nosnippet>456</a>                    control_outbound,
-<a href=#457 id=457 data-nosnippet>457</a>                    track_id,
-<a href=#458 id=458 data-nosnippet>458</a>                )
-<a href=#459 id=459 data-nosnippet>459</a>                .<span class="kw">await</span>;
-<a href=#460 id=460 data-nosnippet>460</a>                nag.abort();
-<a href=#461 id=461 data-nosnippet>461</a>            }
-<a href=#462 id=462 data-nosnippet>462</a>        }
-<a href=#463 id=463 data-nosnippet>463</a>    });
-<a href=#464 id=464 data-nosnippet>464</a>
-<a href=#465 id=465 data-nosnippet>465</a>    Subscription {
-<a href=#466 id=466 data-nosnippet>466</a>        stop,
-<a href=#467 id=467 data-nosnippet>467</a>        task,
-<a href=#468 id=468 data-nosnippet>468</a>        epoch,
-<a href=#469 id=469 data-nosnippet>469</a>        started: Instant::now(),
-<a href=#470 id=470 data-nosnippet>470</a>        delivered,
-<a href=#471 id=471 data-nosnippet>471</a>    }
-<a href=#472 id=472 data-nosnippet>472</a>}
-<a href=#473 id=473 data-nosnippet>473</a>
-<a href=#474 id=474 data-nosnippet>474</a><span class="kw">fn </span>priority_for(kind: MediaKind) -&gt; u8 {
-<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">match </span>kind {
-<a href=#476 id=476 data-nosnippet>476</a>        MediaKind::Audio =&gt; AUDIO_PRIORITY,
-<a href=#477 id=477 data-nosnippet>477</a>        MediaKind::Video =&gt; VIDEO_PRIORITY,
-<a href=#478 id=478 data-nosnippet>478</a>    }
-<a href=#479 id=479 data-nosnippet>479</a>}
-<a href=#480 id=480 data-nosnippet>480</a>
-<a href=#481 id=481 data-nosnippet>481</a><span class="attr">#[cfg(test)]
-<a href=#482 id=482 data-nosnippet>482</a></span><span class="kw">mod </span>tests {
-<a href=#483 id=483 data-nosnippet>483</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#484 id=484 data-nosnippet>484</a>
-<a href=#485 id=485 data-nosnippet>485</a>    <span class="attr">#[test]
-<a href=#486 id=486 data-nosnippet>486</a>    </span><span class="kw">fn </span>pipeline_end_guard_reports_on_drop_with_epoch() {
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="comment">// The guard must fire on ANY exit path — modelled here by a plain drop —
-<a href=#488 id=488 data-nosnippet>488</a>        // carrying the (track, epoch) identity the reaper matches against.
-<a href=#489 id=489 data-nosnippet>489</a>        </span><span class="kw">let </span>(tx, <span class="kw-2">mut </span>rx) = tokio::sync::mpsc::unbounded_channel();
-<a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">let </span>g = PipelineEndGuard {
-<a href=#491 id=491 data-nosnippet>491</a>            track_id: <span class="number">42</span>,
-<a href=#492 id=492 data-nosnippet>492</a>            epoch: <span class="number">9</span>,
-<a href=#493 id=493 data-nosnippet>493</a>            tx,
-<a href=#494 id=494 data-nosnippet>494</a>        };
-<a href=#495 id=495 data-nosnippet>495</a>        drop(g);
-<a href=#496 id=496 data-nosnippet>496</a>        <span class="macro">assert_eq!</span>(rx.try_recv().ok(), <span class="prelude-val">Some</span>((<span class="number">42</span>, <span class="number">9</span>)));
-<a href=#497 id=497 data-nosnippet>497</a>    }
-<a href=#498 id=498 data-nosnippet>498</a>
-<a href=#499 id=499 data-nosnippet>499</a>    <span class="comment">// ─── Wire priority (audio is sacred) ────────────────────────────────────────
-<a href=#500 id=500 data-nosnippet>500</a>
-<a href=#501 id=501 data-nosnippet>501</a>    </span><span class="doccomment">/// Audio MUST map to a strictly smaller moq-net `track` value than video so the
-<a href=#502 id=502 data-nosnippet>502</a>    /// (inverted) moq-net 0.1.9 priority mapping sorts it to a HIGHER quinn QUIC
-<a href=#503 id=503 data-nosnippet>503</a>    /// priority — i.e. audio preempts video on the shared connection. This guards the
-<a href=#504 id=504 data-nosnippet>504</a>    /// `AUDIO_PRIORITY`/`VIDEO_PRIORITY` inversion compensation: if someone "corrects"
-<a href=#505 id=505 data-nosnippet>505</a>    /// the constants so audio is numerically larger (the intuitive but wrong fix),
-<a href=#506 id=506 data-nosnippet>506</a>    /// audio silently drops to the LOWEST wire priority and a high-bitrate share can
-<a href=#507 id=507 data-nosnippet>507</a>    /// burst-stall it. See the `AUDIO_PRIORITY` doc comment.
-<a href=#508 id=508 data-nosnippet>508</a>    </span><span class="attr">#[test]
-<a href=#509 id=509 data-nosnippet>509</a>    </span><span class="kw">fn </span>audio_strictly_outranks_video_on_the_wire() {
-<a href=#510 id=510 data-nosnippet>510</a>        <span class="macro">assert!</span>(
-<a href=#511 id=511 data-nosnippet>511</a>            priority_for(MediaKind::Audio) &lt; priority_for(MediaKind::Video),
-<a href=#512 id=512 data-nosnippet>512</a>            <span class="string">"audio must take a SMALLER moq track value than video (moq-net inverts: \
-<a href=#513 id=513 data-nosnippet>513</a>             smaller value -&gt; higher quinn priority -&gt; served first)"
-<a href=#514 id=514 data-nosnippet>514</a>        </span>);
-<a href=#515 id=515 data-nosnippet>515</a>    }
-<a href=#516 id=516 data-nosnippet>516</a>}
+<a href=#300 id=300 data-nosnippet>300</a>                <span class="kw">let </span>epoch = next_epoch;
+<a href=#301 id=301 data-nosnippet>301</a>                next_epoch += <span class="number">1</span>;
+<a href=#302 id=302 data-nosnippet>302</a>                <span class="kw">let </span>sub = start_pipeline(
+<a href=#303 id=303 data-nosnippet>303</a>                    peer,
+<a href=#304 id=304 data-nosnippet>304</a>                    kind,
+<a href=#305 id=305 data-nosnippet>305</a>                    source,
+<a href=#306 id=306 data-nosnippet>306</a>                    low,
+<a href=#307 id=307 data-nosnippet>307</a>                    space_id,
+<a href=#308 id=308 data-nosnippet>308</a>                    relay.clone(),
+<a href=#309 id=309 data-nosnippet>309</a>                    sink.clone(),
+<a href=#310 id=310 data-nosnippet>310</a>                    playout_bus.clone(),
+<a href=#311 id=311 data-nosnippet>311</a>                    levels.clone(),
+<a href=#312 id=312 data-nosnippet>312</a>                    clock,
+<a href=#313 id=313 data-nosnippet>313</a>                    stats.clone(),
+<a href=#314 id=314 data-nosnippet>314</a>                    control_outbound.clone(),
+<a href=#315 id=315 data-nosnippet>315</a>                    track_id,
+<a href=#316 id=316 data-nosnippet>316</a>                    volumes.clone(),
+<a href=#317 id=317 data-nosnippet>317</a>                    PipelineEndGuard {
+<a href=#318 id=318 data-nosnippet>318</a>                        track_id,
+<a href=#319 id=319 data-nosnippet>319</a>                        epoch,
+<a href=#320 id=320 data-nosnippet>320</a>                        tx: ended_tx.clone(),
+<a href=#321 id=321 data-nosnippet>321</a>                    },
+<a href=#322 id=322 data-nosnippet>322</a>                );
+<a href=#323 id=323 data-nosnippet>323</a>                active.insert(track_id, sub);
+<a href=#324 id=324 data-nosnippet>324</a>            }
+<a href=#325 id=325 data-nosnippet>325</a>
+<a href=#326 id=326 data-nosnippet>326</a>            <span class="comment">// Re-reconcile when the roster changes, the pause flag flips, the tile
+<a href=#327 id=327 data-nosnippet>327</a>            // demand changes, OR a debounced layer switch comes due (so a held switch
+<a href=#328 id=328 data-nosnippet>328</a>            // actuates even if nothing else moves).
+<a href=#329 id=329 data-nosnippet>329</a>            </span><span class="kw">let </span>switch_wait =
+<a href=#330 id=330 data-nosnippet>330</a>                next_switch_deadline.map(|d| d.saturating_duration_since(Instant::now()));
+<a href=#331 id=331 data-nosnippet>331</a>            <span class="macro">tokio::select!</span> {
+<a href=#332 id=332 data-nosnippet>332</a>                r = view_rx.changed() =&gt; {
+<a href=#333 id=333 data-nosnippet>333</a>                    <span class="kw">if </span>r.is_err() { <span class="kw">break</span>; }
+<a href=#334 id=334 data-nosnippet>334</a>                }
+<a href=#335 id=335 data-nosnippet>335</a>                r = video_paused.changed() =&gt; {
+<a href=#336 id=336 data-nosnippet>336</a>                    <span class="kw">if </span>r.is_err() { <span class="kw">break</span>; }
+<a href=#337 id=337 data-nosnippet>337</a>                }
+<a href=#338 id=338 data-nosnippet>338</a>                r = tile_quality.changed() =&gt; {
+<a href=#339 id=339 data-nosnippet>339</a>                    <span class="kw">if </span>r.is_err() { <span class="kw">break</span>; }
+<a href=#340 id=340 data-nosnippet>340</a>                }
+<a href=#341 id=341 data-nosnippet>341</a>                <span class="comment">// A pipeline ended on its own (end-of-track / transport error): REAP
+<a href=#342 id=342 data-nosnippet>342</a>                // it so the reconcile re-subscribes — leaving it in `active` would
+<a href=#343 id=343 data-nosnippet>343</a>                // freeze that tile permanently (every reconcile would skip it as
+<a href=#344 id=344 data-nosnippet>344</a>                // "already subscribed"). Epoch-guarded: a stale signal from a
+<a href=#345 id=345 data-nosnippet>345</a>                // pipeline the loop itself stopped (and maybe already replaced)
+<a href=#346 id=346 data-nosnippet>346</a>                // must not touch the healthy replacement.
+<a href=#347 id=347 data-nosnippet>347</a>                </span><span class="prelude-val">Some</span>((track_id, epoch)) = ended_rx.recv() =&gt; {
+<a href=#348 id=348 data-nosnippet>348</a>                    <span class="kw">if </span>active.get(<span class="kw-2">&amp;</span>track_id).is_some_and(|s| s.epoch == epoch) {
+<a href=#349 id=349 data-nosnippet>349</a>                        <span class="kw">let </span>sub = active.remove(<span class="kw-2">&amp;</span>track_id).expect(<span class="string">"checked present"</span>);
+<a href=#350 id=350 data-nosnippet>350</a>                        <span class="kw">let </span>delivered = sub.delivered.load(Ordering::Relaxed);
+<a href=#351 id=351 data-nosnippet>351</a>                        pacer.on_death(track_id, delivered, sub.started.elapsed(), Instant::now());
+<a href=#352 id=352 data-nosnippet>352</a>                        <span class="macro">tracing::warn!</span>(
+<a href=#353 id=353 data-nosnippet>353</a>                            track = track_id,
+<a href=#354 id=354 data-nosnippet>354</a>                            lived_ms = sub.started.elapsed().as_millis() <span class="kw">as </span>u64,
+<a href=#355 id=355 data-nosnippet>355</a>                            delivered,
+<a href=#356 id=356 data-nosnippet>356</a>                            <span class="string">"call: pipeline ended on its own — reaping + re-subscribing"
+<a href=#357 id=357 data-nosnippet>357</a>                        </span>);
+<a href=#358 id=358 data-nosnippet>358</a>                    }
+<a href=#359 id=359 data-nosnippet>359</a>                }
+<a href=#360 id=360 data-nosnippet>360</a>                <span class="kw">_ </span>= <span class="kw">async </span>{
+<a href=#361 id=361 data-nosnippet>361</a>                    <span class="kw">match </span>switch_wait {
+<a href=#362 id=362 data-nosnippet>362</a>                        <span class="prelude-val">Some</span>(d) =&gt; tokio::time::sleep(d).<span class="kw">await</span>,
+<a href=#363 id=363 data-nosnippet>363</a>                        <span class="prelude-val">None </span>=&gt; std::future::pending::&lt;()&gt;().<span class="kw">await</span>,
+<a href=#364 id=364 data-nosnippet>364</a>                    }
+<a href=#365 id=365 data-nosnippet>365</a>                } =&gt; {}
+<a href=#366 id=366 data-nosnippet>366</a>            }
+<a href=#367 id=367 data-nosnippet>367</a>        }
+<a href=#368 id=368 data-nosnippet>368</a>
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">for </span>(<span class="kw">_</span>, sub) <span class="kw">in </span>active.drain() {
+<a href=#370 id=370 data-nosnippet>370</a>            sub.stop();
+<a href=#371 id=371 data-nosnippet>371</a>        }
+<a href=#372 id=372 data-nosnippet>372</a>    })
+<a href=#373 id=373 data-nosnippet>373</a>}
+<a href=#374 id=374 data-nosnippet>374</a>
+<a href=#375 id=375 data-nosnippet>375</a><span class="doccomment">/// How often the receiver re-sends `RequestKeyframe` while a fresh video
+<a href=#376 id=376 data-nosnippet>376</a>/// subscription is still awaiting its first keyframe, and how many times. The
+<a href=#377 id=377 data-nosnippet>377</a>/// subscribe-time request can RACE the producer's PLI-forced IDR (the IDR lands in
+<a href=#378 id=378 data-nosnippet>378</a>/// a group the moq live-join skips), leaving the receiver black indefinitely on a
+<a href=#379 id=379 data-nosnippet>379</a>/// keyframe that never comes. With the screen encoder
+<a href=#380 id=380 data-nosnippet>380</a>/// on an on-demand cadence (no frequent periodic IDR to paper over the race), this
+<a href=#381 id=381 data-nosnippet>381</a>/// bounded re-request is the fast recovery: producer-side the keyframe throttle
+<a href=#382 id=382 data-nosnippet>382</a>/// coalesces duplicates, so nagging is cheap. Once the attempts are exhausted the
+<a href=#383 id=383 data-nosnippet>383</a>/// pipeline's [`FIRST_KEYFRAME_DEADLINE`] ends it — a fresh, ladder-paced
+<a href=#384 id=384 data-nosnippet>384</a>/// resubscribe replaces a black tile that would otherwise wait on the safety-net IDR.
+<a href=#385 id=385 data-nosnippet>385</a></span><span class="kw">const </span>KEYFRAME_NAG_INTERVAL: Duration = Duration::from_secs(<span class="number">2</span>);
+<a href=#386 id=386 data-nosnippet>386</a><span class="kw">const </span>KEYFRAME_NAG_ATTEMPTS: u32 = <span class="number">5</span>;
+<a href=#387 id=387 data-nosnippet>387</a>
+<a href=#388 id=388 data-nosnippet>388</a><span class="doccomment">/// Start one per-track decode pipeline. Audio → Opus decode → mix bus; video →
+<a href=#389 id=389 data-nosnippet>389</a>/// H.264/etc decode → sink keyed `cam:{peer}` / `screen:{peer}`. For video,
+<a href=#390 id=390 data-nosnippet>390</a>/// `control_outbound` + `track_id` drive the awaiting-keyframe re-request nag.
+<a href=#391 id=391 data-nosnippet>391</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#392 id=392 data-nosnippet>392</a></span><span class="kw">fn </span>start_pipeline(
+<a href=#393 id=393 data-nosnippet>393</a>    peer: PeerId,
+<a href=#394 id=394 data-nosnippet>394</a>    kind: MediaKind,
+<a href=#395 id=395 data-nosnippet>395</a>    source: Source,
+<a href=#396 id=396 data-nosnippet>396</a>    low: bool,
+<a href=#397 id=397 data-nosnippet>397</a>    space_id: Uuid,
+<a href=#398 id=398 data-nosnippet>398</a>    relay: Arc&lt;MoqRelaySession&gt;,
+<a href=#399 id=399 data-nosnippet>399</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
+<a href=#400 id=400 data-nosnippet>400</a>    playout_bus: Arc&lt;PlayoutBus&gt;,
+<a href=#401 id=401 data-nosnippet>401</a>    levels: watch::Sender&lt;LevelsView&gt;,
+<a href=#402 id=402 data-nosnippet>402</a>    clock: CaptureClock,
+<a href=#403 id=403 data-nosnippet>403</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#404 id=404 data-nosnippet>404</a>    control_outbound: tokio::sync::mpsc::UnboundedSender&lt;ClientMessage&gt;,
+<a href=#405 id=405 data-nosnippet>405</a>    track_id: u32,
+<a href=#406 id=406 data-nosnippet>406</a>    volumes: Arc&lt;StreamVolumes&gt;,
+<a href=#407 id=407 data-nosnippet>407</a>    end_guard: PipelineEndGuard,
+<a href=#408 id=408 data-nosnippet>408</a>) -&gt; Subscription {
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">let </span>epoch = end_guard.epoch;
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span>stop = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">let </span>task_stop = stop.clone();
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="comment">// First-delivery latch: audio sets it on the first decoded frame, video when
+<a href=#413 id=413 data-nosnippet>413</a>    // the first keyframe passes the gate. Read at reap time to pick the restart
+<a href=#414 id=414 data-nosnippet>414</a>    // pace (an undelivered death climbs the ladder).
+<a href=#415 id=415 data-nosnippet>415</a>    </span><span class="kw">let </span>delivered = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
+<a href=#416 id=416 data-nosnippet>416</a>    <span class="kw">let </span>task_delivered = delivered.clone();
+<a href=#417 id=417 data-nosnippet>417</a>    <span class="comment">// This pipeline's downlink-driven demand (video only). A FRESH cell every
+<a href=#418 id=418 data-nosnippet>418</a>    // call — the whole reset-on-restart contract for `DownlinkDemand` is "a new
+<a href=#419 id=419 data-nosnippet>419</a>    // pipeline gets a new cell", so a resubscribe / layer switch / reap can never
+<a href=#420 id=420 data-nosnippet>420</a>    // carry a stale capped demand forward.
+<a href=#421 id=421 data-nosnippet>421</a>    </span><span class="kw">let </span>downlink = (kind == MediaKind::Video).then(|| Arc::new(DownlinkCell::new()));
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">let </span>task_downlink = downlink.clone();
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="comment">// The per-peer inbound stats handle (cloned once; the pipeline increments on it
+<a href=#424 id=424 data-nosnippet>424</a>    // lock-free per frame).
+<a href=#425 id=425 data-nosnippet>425</a>    </span><span class="kw">let </span>peer_stats = stats.peer(peer.<span class="number">0</span>);
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="comment">// The moq track name carries the spatial layer: a constrained receiver subscribes
+<a href=#427 id=427 data-nosnippet>427</a>    // to the `_l0` low track instead of the source.
+<a href=#428 id=428 data-nosnippet>428</a>    </span><span class="kw">let </span>track_name = <span class="kw">match </span>(kind, source, low) {
+<a href=#429 id=429 data-nosnippet>429</a>        (MediaKind::Audio, Source::Screen, <span class="kw">_</span>) =&gt; SCREEN_AUDIO_TRACK,
+<a href=#430 id=430 data-nosnippet>430</a>        (MediaKind::Audio, <span class="kw">_</span>, <span class="kw">_</span>) =&gt; MIC_TRACK,
+<a href=#431 id=431 data-nosnippet>431</a>        (MediaKind::Video, Source::Screen, <span class="bool-val">false</span>) =&gt; SCREEN_TRACK,
+<a href=#432 id=432 data-nosnippet>432</a>        (MediaKind::Video, Source::Screen, <span class="bool-val">true</span>) =&gt; <span class="string">"screen_l0"</span>,
+<a href=#433 id=433 data-nosnippet>433</a>        (MediaKind::Video, <span class="kw">_</span>, <span class="bool-val">false</span>) =&gt; CAM_TRACK,
+<a href=#434 id=434 data-nosnippet>434</a>        (MediaKind::Video, <span class="kw">_</span>, <span class="bool-val">true</span>) =&gt; <span class="string">"cam_l0"</span>,
+<a href=#435 id=435 data-nosnippet>435</a>    };
+<a href=#436 id=436 data-nosnippet>436</a>    <span class="kw">let </span>path = broadcast_path(space_id, peer, track_name);
+<a href=#437 id=437 data-nosnippet>437</a>
+<a href=#438 id=438 data-nosnippet>438</a>    <span class="comment">// Audio decode + fill runs on the RT-promoted audio runtime so video CPU can't
+<a href=#439 id=439 data-nosnippet>439</a>    // starve it; video stays on the general call runtime.
+<a href=#440 id=440 data-nosnippet>440</a>    </span><span class="kw">let </span>runtime = <span class="kw">match </span>kind {
+<a href=#441 id=441 data-nosnippet>441</a>        MediaKind::Audio =&gt; audio_runtime(),
+<a href=#442 id=442 data-nosnippet>442</a>        MediaKind::Video =&gt; call_runtime(),
+<a href=#443 id=443 data-nosnippet>443</a>    };
+<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">let </span>task = runtime.spawn(<span class="kw">async move </span>{
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="comment">// Owned by the task so its Drop reports this pipeline's end to the reap
+<a href=#446 id=446 data-nosnippet>446</a>        // channel on ANY exit path (clean end, error, panic, abort).
+<a href=#447 id=447 data-nosnippet>447</a>        </span><span class="kw">let </span>_end_guard = end_guard;
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">let </span>subscriber = <span class="kw">match </span>relay
+<a href=#449 id=449 data-nosnippet>449</a>            .subscribe_track(
+<a href=#450 id=450 data-nosnippet>450</a>                <span class="kw-2">&amp;</span>path,
+<a href=#451 id=451 data-nosnippet>451</a>                track_name,
+<a href=#452 id=452 data-nosnippet>452</a>                peer.<span class="number">0 </span><span class="kw">as </span>u16,
+<a href=#453 id=453 data-nosnippet>453</a>                priority_for(kind),
+<a href=#454 id=454 data-nosnippet>454</a>                <span class="comment">// Audio drains in arrival order (a reordered Opus frame is still playable);
+<a href=#455 id=455 data-nosnippet>455</a>                // video priority-drops stale GOPs. This is what stops a screenshare from
+<a href=#456 id=456 data-nosnippet>456</a>                // silently dropping reordered mic/app-audio frames on the shared connection.
+<a href=#457 id=457 data-nosnippet>457</a>                </span>kind == MediaKind::Audio,
+<a href=#458 id=458 data-nosnippet>458</a>            )
+<a href=#459 id=459 data-nosnippet>459</a>            .<span class="kw">await
+<a href=#460 id=460 data-nosnippet>460</a>        </span>{
+<a href=#461 id=461 data-nosnippet>461</a>            <span class="prelude-val">Ok</span>(s) =&gt; s,
+<a href=#462 id=462 data-nosnippet>462</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#463 id=463 data-nosnippet>463</a>                <span class="macro">tracing::warn!</span>(%e, peer = peer.<span class="number">0</span>, <span class="string">"subscribe failed"</span>);
+<a href=#464 id=464 data-nosnippet>464</a>                <span class="kw">return</span>;
+<a href=#465 id=465 data-nosnippet>465</a>            }
+<a href=#466 id=466 data-nosnippet>466</a>        };
+<a href=#467 id=467 data-nosnippet>467</a>
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">match </span>kind {
+<a href=#469 id=469 data-nosnippet>469</a>            MediaKind::Audio =&gt; {
+<a href=#470 id=470 data-nosnippet>470</a>                <span class="comment">// This stream's playback-gain cell (the tile volume/mute control),
+<a href=#471 id=471 data-nosnippet>471</a>                // looked up by key so a set volume survives resubscribes.
+<a href=#472 id=472 data-nosnippet>472</a>                </span><span class="kw">let </span>gain = volumes.cell(peer.<span class="number">0</span>, source);
+<a href=#473 id=473 data-nosnippet>473</a>                audio_pipeline(
+<a href=#474 id=474 data-nosnippet>474</a>                    subscriber,
+<a href=#475 id=475 data-nosnippet>475</a>                    peer,
+<a href=#476 id=476 data-nosnippet>476</a>                    source,
+<a href=#477 id=477 data-nosnippet>477</a>                    playout_bus,
+<a href=#478 id=478 data-nosnippet>478</a>                    levels,
+<a href=#479 id=479 data-nosnippet>479</a>                    clock,
+<a href=#480 id=480 data-nosnippet>480</a>                    task_stop,
+<a href=#481 id=481 data-nosnippet>481</a>                    peer_stats,
+<a href=#482 id=482 data-nosnippet>482</a>                    gain,
+<a href=#483 id=483 data-nosnippet>483</a>                    task_delivered,
+<a href=#484 id=484 data-nosnippet>484</a>                )
+<a href=#485 id=485 data-nosnippet>485</a>                .<span class="kw">await
+<a href=#486 id=486 data-nosnippet>486</a>            </span>}
+<a href=#487 id=487 data-nosnippet>487</a>            MediaKind::Video =&gt; {
+<a href=#488 id=488 data-nosnippet>488</a>                <span class="comment">// Awaiting-keyframe re-request nag: a separate small task so the
+<a href=#489 id=489 data-nosnippet>489</a>                // fast re-requests don't race the pipeline's own pull. Ends on
+<a href=#490 id=490 data-nosnippet>490</a>                // first keyframe or pipeline stop; after the bounded attempts the
+<a href=#491 id=491 data-nosnippet>491</a>                // pipeline's first-keyframe deadline takes over (it ends itself,
+<a href=#492 id=492 data-nosnippet>492</a>                // and the reconcile re-subscribes on the restart ladder).
+<a href=#493 id=493 data-nosnippet>493</a>                </span><span class="kw">let </span>nag = {
+<a href=#494 id=494 data-nosnippet>494</a>                    <span class="kw">let </span>got = task_delivered.clone();
+<a href=#495 id=495 data-nosnippet>495</a>                    <span class="kw">let </span>stop = task_stop.clone();
+<a href=#496 id=496 data-nosnippet>496</a>                    <span class="kw">let </span>outbound = control_outbound.clone();
+<a href=#497 id=497 data-nosnippet>497</a>                    call_runtime().spawn(<span class="kw">async move </span>{
+<a href=#498 id=498 data-nosnippet>498</a>                        <span class="kw">for _ in </span><span class="number">0</span>..KEYFRAME_NAG_ATTEMPTS {
+<a href=#499 id=499 data-nosnippet>499</a>                            tokio::time::sleep(KEYFRAME_NAG_INTERVAL).<span class="kw">await</span>;
+<a href=#500 id=500 data-nosnippet>500</a>                            <span class="kw">if </span>got.load(Ordering::Relaxed) || stop.load(Ordering::Relaxed) {
+<a href=#501 id=501 data-nosnippet>501</a>                                <span class="kw">return</span>;
+<a href=#502 id=502 data-nosnippet>502</a>                            }
+<a href=#503 id=503 data-nosnippet>503</a>                            <span class="macro">tracing::info!</span>(
+<a href=#504 id=504 data-nosnippet>504</a>                                peer = peer.<span class="number">0</span>,
+<a href=#505 id=505 data-nosnippet>505</a>                                track = track_id,
+<a href=#506 id=506 data-nosnippet>506</a>                                <span class="string">"video: still awaiting first keyframe — re-requesting"
+<a href=#507 id=507 data-nosnippet>507</a>                            </span>);
+<a href=#508 id=508 data-nosnippet>508</a>                            <span class="kw">let _ </span>= outbound.send(ClientMessage::RequestKeyframe {
+<a href=#509 id=509 data-nosnippet>509</a>                                track: hound_control::TrackId(track_id),
+<a href=#510 id=510 data-nosnippet>510</a>                            });
+<a href=#511 id=511 data-nosnippet>511</a>                        }
+<a href=#512 id=512 data-nosnippet>512</a>                    })
+<a href=#513 id=513 data-nosnippet>513</a>                };
+<a href=#514 id=514 data-nosnippet>514</a>                video_pipeline(
+<a href=#515 id=515 data-nosnippet>515</a>                    subscriber,
+<a href=#516 id=516 data-nosnippet>516</a>                    peer,
+<a href=#517 id=517 data-nosnippet>517</a>                    source,
+<a href=#518 id=518 data-nosnippet>518</a>                    sink,
+<a href=#519 id=519 data-nosnippet>519</a>                    task_stop,
+<a href=#520 id=520 data-nosnippet>520</a>                    peer_stats,
+<a href=#521 id=521 data-nosnippet>521</a>                    task_delivered,
+<a href=#522 id=522 data-nosnippet>522</a>                    control_outbound,
+<a href=#523 id=523 data-nosnippet>523</a>                    track_id,
+<a href=#524 id=524 data-nosnippet>524</a>                    <span class="comment">// `.expect`: this arm is MediaKind::Video, where `downlink` is
+<a href=#525 id=525 data-nosnippet>525</a>                    // always `Some` (see its construction above).
+<a href=#526 id=526 data-nosnippet>526</a>                    </span>task_downlink.expect(<span class="string">"video pipeline always has a downlink cell"</span>),
+<a href=#527 id=527 data-nosnippet>527</a>                    source_top_bps(source),
+<a href=#528 id=528 data-nosnippet>528</a>                )
+<a href=#529 id=529 data-nosnippet>529</a>                .<span class="kw">await</span>;
+<a href=#530 id=530 data-nosnippet>530</a>                nag.abort();
+<a href=#531 id=531 data-nosnippet>531</a>            }
+<a href=#532 id=532 data-nosnippet>532</a>        }
+<a href=#533 id=533 data-nosnippet>533</a>    });
+<a href=#534 id=534 data-nosnippet>534</a>
+<a href=#535 id=535 data-nosnippet>535</a>    Subscription {
+<a href=#536 id=536 data-nosnippet>536</a>        stop,
+<a href=#537 id=537 data-nosnippet>537</a>        task,
+<a href=#538 id=538 data-nosnippet>538</a>        epoch,
+<a href=#539 id=539 data-nosnippet>539</a>        started: Instant::now(),
+<a href=#540 id=540 data-nosnippet>540</a>        delivered,
+<a href=#541 id=541 data-nosnippet>541</a>        downlink,
+<a href=#542 id=542 data-nosnippet>542</a>    }
+<a href=#543 id=543 data-nosnippet>543</a>}
+<a href=#544 id=544 data-nosnippet>544</a>
+<a href=#545 id=545 data-nosnippet>545</a><span class="kw">fn </span>priority_for(kind: MediaKind) -&gt; u8 {
+<a href=#546 id=546 data-nosnippet>546</a>    <span class="kw">match </span>kind {
+<a href=#547 id=547 data-nosnippet>547</a>        MediaKind::Audio =&gt; AUDIO_PRIORITY,
+<a href=#548 id=548 data-nosnippet>548</a>        MediaKind::Video =&gt; VIDEO_PRIORITY,
+<a href=#549 id=549 data-nosnippet>549</a>    }
+<a href=#550 id=550 data-nosnippet>550</a>}
+<a href=#551 id=551 data-nosnippet>551</a>
+<a href=#552 id=552 data-nosnippet>552</a><span class="doccomment">/// The top-rung bitrate a video `source` is encoded at — the same per-source
+<a href=#553 id=553 data-nosnippet>553</a>/// constant the producer's own [`hound_media::SimulcastPlanner`] assumes (see the
+<a href=#554 id=554 data-nosnippet>554</a>/// `camera_tx`/`screen_tx` publish loops), so the receiver's downlink-demand
+<a href=#555 id=555 data-nosnippet>555</a>/// thresholds (source/4, source/2) are computed against the SAME notion of
+<a href=#556 id=556 data-nosnippet>556</a>/// "source" the producer is coalescing low-layer requests against.
+<a href=#557 id=557 data-nosnippet>557</a></span><span class="kw">fn </span>source_top_bps(source: Source) -&gt; u64 {
+<a href=#558 id=558 data-nosnippet>558</a>    <span class="kw">match </span>source {
+<a href=#559 id=559 data-nosnippet>559</a>        Source::Camera =&gt; CAM_BITRATE.bps() <span class="kw">as </span>u64,
+<a href=#560 id=560 data-nosnippet>560</a>        Source::Screen =&gt; SCREEN_BITRATE.bps() <span class="kw">as </span>u64,
+<a href=#561 id=561 data-nosnippet>561</a>        Source::Microphone =&gt; <span class="macro">unreachable!</span>(<span class="string">"video pipelines never carry Source::Microphone"</span>),
+<a href=#562 id=562 data-nosnippet>562</a>    }
+<a href=#563 id=563 data-nosnippet>563</a>}
+<a href=#564 id=564 data-nosnippet>564</a>
+<a href=#565 id=565 data-nosnippet>565</a><span class="attr">#[cfg(test)]
+<a href=#566 id=566 data-nosnippet>566</a></span><span class="kw">mod </span>tests {
+<a href=#567 id=567 data-nosnippet>567</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#568 id=568 data-nosnippet>568</a>
+<a href=#569 id=569 data-nosnippet>569</a>    <span class="attr">#[test]
+<a href=#570 id=570 data-nosnippet>570</a>    </span><span class="kw">fn </span>pipeline_end_guard_reports_on_drop_with_epoch() {
+<a href=#571 id=571 data-nosnippet>571</a>        <span class="comment">// The guard must fire on ANY exit path — modelled here by a plain drop —
+<a href=#572 id=572 data-nosnippet>572</a>        // carrying the (track, epoch) identity the reaper matches against.
+<a href=#573 id=573 data-nosnippet>573</a>        </span><span class="kw">let </span>(tx, <span class="kw-2">mut </span>rx) = tokio::sync::mpsc::unbounded_channel();
+<a href=#574 id=574 data-nosnippet>574</a>        <span class="kw">let </span>g = PipelineEndGuard {
+<a href=#575 id=575 data-nosnippet>575</a>            track_id: <span class="number">42</span>,
+<a href=#576 id=576 data-nosnippet>576</a>            epoch: <span class="number">9</span>,
+<a href=#577 id=577 data-nosnippet>577</a>            tx,
+<a href=#578 id=578 data-nosnippet>578</a>        };
+<a href=#579 id=579 data-nosnippet>579</a>        drop(g);
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="macro">assert_eq!</span>(rx.try_recv().ok(), <span class="prelude-val">Some</span>((<span class="number">42</span>, <span class="number">9</span>)));
+<a href=#581 id=581 data-nosnippet>581</a>    }
+<a href=#582 id=582 data-nosnippet>582</a>
+<a href=#583 id=583 data-nosnippet>583</a>    <span class="comment">// ─── Wire priority (audio is sacred) ────────────────────────────────────────
+<a href=#584 id=584 data-nosnippet>584</a>
+<a href=#585 id=585 data-nosnippet>585</a>    </span><span class="doccomment">/// Audio MUST map to a strictly smaller moq-net `track` value than video so the
+<a href=#586 id=586 data-nosnippet>586</a>    /// (inverted) moq-net 0.1.9 priority mapping sorts it to a HIGHER quinn QUIC
+<a href=#587 id=587 data-nosnippet>587</a>    /// priority — i.e. audio preempts video on the shared connection. This guards the
+<a href=#588 id=588 data-nosnippet>588</a>    /// `AUDIO_PRIORITY`/`VIDEO_PRIORITY` inversion compensation: if someone "corrects"
+<a href=#589 id=589 data-nosnippet>589</a>    /// the constants so audio is numerically larger (the intuitive but wrong fix),
+<a href=#590 id=590 data-nosnippet>590</a>    /// audio silently drops to the LOWEST wire priority and a high-bitrate share can
+<a href=#591 id=591 data-nosnippet>591</a>    /// burst-stall it. See the `AUDIO_PRIORITY` doc comment.
+<a href=#592 id=592 data-nosnippet>592</a>    </span><span class="attr">#[test]
+<a href=#593 id=593 data-nosnippet>593</a>    </span><span class="kw">fn </span>audio_strictly_outranks_video_on_the_wire() {
+<a href=#594 id=594 data-nosnippet>594</a>        <span class="macro">assert!</span>(
+<a href=#595 id=595 data-nosnippet>595</a>            priority_for(MediaKind::Audio) &lt; priority_for(MediaKind::Video),
+<a href=#596 id=596 data-nosnippet>596</a>            <span class="string">"audio must take a SMALLER moq track value than video (moq-net inverts: \
+<a href=#597 id=597 data-nosnippet>597</a>             smaller value -&gt; higher quinn priority -&gt; served first)"
+<a href=#598 id=598 data-nosnippet>598</a>        </span>);
+<a href=#599 id=599 data-nosnippet>599</a>    }
+<a href=#600 id=600 data-nosnippet>600</a>}
 </code></pre></div></section></main></body></html>

@@ -10,29 +10,31 @@
 <a href=#10 id=10 data-nosnippet>10</a>//!   - [`rp`] — a sans-IO [`RelyingParty`](rp::RelyingParty) wrapping
 <a href=#11 id=11 data-nosnippet>11</a>//!     `webauthn_rs::Webauthn`: the four ceremony calls plus the RP-config
 <a href=#12 id=12 data-nosnippet>12</a>//!     accessors the `.well-known` endpoints need.
-<a href=#13 id=13 data-nosnippet>13</a>//!   - [`authenticator`] — the CTAP2 trait seam for client-side implementations.
-<a href=#14 id=14 data-nosnippet>14</a>//!   - [`storage`] — the platform-keyring session-token store (the `storage`
-<a href=#15 id=15 data-nosnippet>15</a>//!     feature; app hosts only).
-<a href=#16 id=16 data-nosnippet>16</a>//!   - [`error`] — [`PasskeyError`](error::PasskeyError), wrapping `WebauthnError`.
-<a href=#17 id=17 data-nosnippet>17</a>//!
-<a href=#18 id=18 data-nosnippet>18</a>//! The protocol core performs NO IO — the DB + HTTP transport stay in the
-<a href=#19 id=19 data-nosnippet>19</a>//! callers. The ONE deliberate exception is the feature-gated [`storage`]
-<a href=#20 id=20 data-nosnippet>20</a>//! module, which owns the OS-keyring IO so hosts don't each re-implement it.
-<a href=#21 id=21 data-nosnippet>21</a>
-<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub mod </span>authenticator;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">pub mod </span>dto;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub mod </span>error;
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub mod </span>proto;
-<a href=#26 id=26 data-nosnippet>26</a><span class="doccomment">/// The relying-party ceremony wrapper. Behind the `rp` feature because it links
-<a href=#27 id=27 data-nosnippet>27</a>/// `webauthn-rs` (and transitively `openssl`) — enabled by the relying party (the
-<a href=#28 id=28 data-nosnippet>28</a>/// backend), not the client.
-<a href=#29 id=29 data-nosnippet>29</a></span><span class="attr">#[cfg(feature = <span class="string">"rp"</span>)]
-<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub mod </span>rp;
-<a href=#31 id=31 data-nosnippet>31</a><span class="doccomment">/// The platform-keyring session-token store. Behind the `storage` feature because
-<a href=#32 id=32 data-nosnippet>32</a>/// it links the OS credential stores (Keychain / Secret Service) — enabled by app
-<a href=#33 id=33 data-nosnippet>33</a>/// hosts (the FRB layer), not the backend.
-<a href=#34 id=34 data-nosnippet>34</a></span><span class="attr">#[cfg(feature = <span class="string">"storage"</span>)]
-<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub mod </span>storage;
-<a href=#36 id=36 data-nosnippet>36</a>
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">pub use </span>error::PasskeyError;
+<a href=#13 id=13 data-nosnippet>13</a>//!   - [`authenticator`] — the CTAP2 trait seam for client-side implementations,
+<a href=#14 id=14 data-nosnippet>14</a>//!     plus [`authenticator::ctap2`] (feature `ctap2`), the Phase 2 USB-security-key
+<a href=#15 id=15 data-nosnippet>15</a>//!     implementation.
+<a href=#16 id=16 data-nosnippet>16</a>//!   - [`storage`] — the platform-keyring session-token store (the `storage`
+<a href=#17 id=17 data-nosnippet>17</a>//!     feature; app hosts only).
+<a href=#18 id=18 data-nosnippet>18</a>//!   - [`error`] — [`PasskeyError`](error::PasskeyError), wrapping `WebauthnError`.
+<a href=#19 id=19 data-nosnippet>19</a>//!
+<a href=#20 id=20 data-nosnippet>20</a>//! The protocol core performs NO IO — the DB + HTTP transport stay in the
+<a href=#21 id=21 data-nosnippet>21</a>//! callers. The ONE deliberate exception is the feature-gated [`storage`]
+<a href=#22 id=22 data-nosnippet>22</a>//! module, which owns the OS-keyring IO so hosts don't each re-implement it.
+<a href=#23 id=23 data-nosnippet>23</a>
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub mod </span>authenticator;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub mod </span>dto;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">pub mod </span>error;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">pub mod </span>proto;
+<a href=#28 id=28 data-nosnippet>28</a><span class="doccomment">/// The relying-party ceremony wrapper. Behind the `rp` feature because it links
+<a href=#29 id=29 data-nosnippet>29</a>/// `webauthn-rs` (and transitively `openssl`) — enabled by the relying party (the
+<a href=#30 id=30 data-nosnippet>30</a>/// backend), not the client.
+<a href=#31 id=31 data-nosnippet>31</a></span><span class="attr">#[cfg(feature = <span class="string">"rp"</span>)]
+<a href=#32 id=32 data-nosnippet>32</a></span><span class="kw">pub mod </span>rp;
+<a href=#33 id=33 data-nosnippet>33</a><span class="doccomment">/// The platform-keyring session-token store. Behind the `storage` feature because
+<a href=#34 id=34 data-nosnippet>34</a>/// it links the OS credential stores (Keychain / Secret Service) — enabled by app
+<a href=#35 id=35 data-nosnippet>35</a>/// hosts (the FRB layer), not the backend.
+<a href=#36 id=36 data-nosnippet>36</a></span><span class="attr">#[cfg(feature = <span class="string">"storage"</span>)]
+<a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">pub mod </span>storage;
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">pub use </span>error::PasskeyError;
 </code></pre></div></section></main></body></html>

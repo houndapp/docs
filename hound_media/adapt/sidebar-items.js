@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["AdaptConfig","AdaptDecision","AdaptSignals","VideoAdaptation"]};
+window.SIDEBAR_ITEMS = {"constant":["GEOMETRY_REBUILD_DWELL_US"],"fn":["even_min2","fit_encode_dims"],"struct":["AdaptConfig","AdaptDecision","AdaptSignals","GeometryDwell","VideoAdaptation"]};
