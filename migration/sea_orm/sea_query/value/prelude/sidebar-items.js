@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Json"],"mod":["chrono","rust_decimal","serde_json","time","uuid"],"struct":["DateTime","Decimal","FixedOffset","Local","NaiveDate","NaiveDateTime","NaiveTime","OffsetDateTime","PrimitiveDateTime","Utc","Uuid"]};
+window.SIDEBAR_ITEMS = {"enum":["Json"],"mod":["chrono","rust_decimal","serde_json","time","uuid"],"struct":["DateTime","Decimal","FixedOffset","Local","NaiveDate","NaiveDateTime","NaiveTime","OffsetDateTime","Utc","Uuid"],"type":["PrimitiveDateTime"]};

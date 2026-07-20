@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"macro":["date","datetime","format_description","offset","time","utc_datetime"]};
+window.SIDEBAR_ITEMS = {"macro":["date","datetime","format_description","offset","time","timestamp","utc_datetime"]};
