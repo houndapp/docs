@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CODE_ALPHABET","CODE_LEN","CODE_TTL","MAX_PENDING_CODES","RATE_LIMIT_MAX","RATE_LIMIT_WINDOW"],"enum":["MagicVerifyResponse"],"fn":["generate_code","magic_link","magic_register","magic_start","magic_verify"],"struct":["EmailConfig","MagicCallback","MagicRegisterRequest","MagicStartRequest","MagicVerifyRequest","PendingCode"]};
