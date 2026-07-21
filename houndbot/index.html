@@ -6,16 +6,16 @@ stats for a fixed window, leaves, and prints a pass/fail verdict as JSON
 to stdout. Exit code: <code>0</code> pass, <code>1</code> fail (ran to completion under the
 bar), <code>2</code> setup error (never got far enough to run the actual test).</p>
 <h3 id="auth-flow-choice"><a class="doc-anchor" href="#auth-flow-choice">§</a>Auth-flow choice</h3>
-<p><a href="../hound_client/app/struct.HoundClient.html#method.magic_login_begin" title="method hound_client::app::HoundClient::magic_login_begin"><code>HoundClient::magic_login_begin</code></a> binds a loopback callback listener
+<p>[<code>HoundClient::magic_login_begin</code>] binds a loopback callback listener
 (<code>hound_browser_auth::MagicLogin::begin</code>, <code>127.0.0.1:0</code> — OS-ephemeral, so
 it’s not actually a fixed-port concurrency hazard) and then blocks on that
 listener for a link click. A headless bot never clicks the emailed link —
 it reads the code straight out of Mailpit — so that whole listener is dead
 weight: this bot bypasses it entirely. It builds its own throwaway
-<a href="../hound_client/rest/struct.RestClient.html" title="struct hound_client::rest::RestClient"><code>RestClient</code></a> and calls <code>magic_start</code> directly (dummy <code>port</code>/<code>state</code> —
+[<code>RestClient</code>] and calls <code>magic_start</code> directly (dummy <code>port</code>/<code>state</code> —
 the link the email carries is never opened, only the code line is read),
 then feeds the polled code into the real <code>HoundClient</code> via
-<a href="../hound_client/app/struct.HoundClient.html#method.magic_login_code" title="method hound_client::app::HoundClient::magic_login_code"><code>HoundClient::magic_login_code</code></a>. Net effect: zero loopback listeners
+[<code>HoundClient::magic_login_code</code>]. Net effect: zero loopback listeners
 anywhere in this binary, which also makes “run two bots concurrently on
 one machine” trivially safe (no shared port of any kind, ephemeral or not).</p>
 </div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="mailpit/index.html" title="mod houndbot::mailpit">mailpit</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Mailpit polling: find the magic-link email the backend sent and pull out its
