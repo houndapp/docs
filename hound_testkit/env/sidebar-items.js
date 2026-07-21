@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PROVISION_POLL_TIMEOUT"],"fn":["admin_sign_up","bootstrap","fetch_voice_and_text_spaces","get_instance","init_test_tracing","resolve_as_member","settled_default_community","try_create_community","try_provision"],"static":["BOOTSTRAP"],"struct":["Bootstrap","Env","Inner","InstanceModel"]};

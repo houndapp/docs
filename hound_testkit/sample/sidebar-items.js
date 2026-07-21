@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["WARMUP"],"fn":["sample_call"],"struct":["Sample"]};

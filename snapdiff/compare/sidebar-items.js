@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Status"],"fn":["accept_current","apply_mask","compare_all","compare_existing","compare_pair","discover_names","encode_png","is_snapshot_png","list_snapshot_names","mask_path","severity_rank","tracing_ignore_mismatch"],"struct":["PairOutcome","PairSummary"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAIL_WAIT_TIMEOUT"],"fn":["fresh_client","request_code","sign_in_magic_link","wait_for_code"]};

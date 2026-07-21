@@ -163,154 +163,157 @@
 <a href=#163 id=163 data-nosnippet>163</a>                        <span class="kw">let _ </span>= view_tx.send_replace(view.clone());
 <a href=#164 id=164 data-nosnippet>164</a>                        <span class="comment">// Join the control-plane peers against the latest identity
 <a href=#165 id=165 data-nosnippet>165</a>                        // snapshot so the published view carries display identities.
-<a href=#166 id=166 data-nosnippet>166</a>                        </span><span class="kw">let _ </span>= view_out.send(CallView::from_view_with(<span class="kw-2">&amp;</span>view, <span class="kw-2">&amp;</span>identities.load()));
-<a href=#167 id=167 data-nosnippet>167</a>                    }
-<a href=#168 id=168 data-nosnippet>168</a>                    <span class="comment">// Distinguish the two ways the control WS ends, so a recurring
-<a href=#169 id=169 data-nosnippet>169</a>                    // drop is diagnosable: a server-sent Close (with its reason) vs a
-<a href=#170 id=170 data-nosnippet>170</a>                    // read/transport error (network blip, reset). Either way the
-<a href=#171 id=171 data-nosnippet>171</a>                    // supervisor heals; this is purely for visibility.
-<a href=#172 id=172 data-nosnippet>172</a>                    </span><span class="prelude-val">Ok</span>(Message::Close(frame)) =&gt; {
-<a href=#173 id=173 data-nosnippet>173</a>                        <span class="macro">tracing::warn!</span>(<span class="question-mark">?</span>frame, <span class="string">"call: control WS closed by server"</span>);
-<a href=#174 id=174 data-nosnippet>174</a>                        <span class="kw">break</span>;
-<a href=#175 id=175 data-nosnippet>175</a>                    }
-<a href=#176 id=176 data-nosnippet>176</a>                    <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#177 id=177 data-nosnippet>177</a>                        <span class="macro">tracing::warn!</span>(error = %e, <span class="string">"call: control WS read error"</span>);
-<a href=#178 id=178 data-nosnippet>178</a>                        <span class="kw">break</span>;
-<a href=#179 id=179 data-nosnippet>179</a>                    }
-<a href=#180 id=180 data-nosnippet>180</a>                    <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {}
-<a href=#181 id=181 data-nosnippet>181</a>                }
-<a href=#182 id=182 data-nosnippet>182</a>            }
-<a href=#183 id=183 data-nosnippet>183</a>            <span class="comment">// The control plane dropped — wake the supervisor's monitor so it heals
-<a href=#184 id=184 data-nosnippet>184</a>            // the whole session (a fresh PeerId; the roster fully resyncs).
-<a href=#185 id=185 data-nosnippet>185</a>            </span><span class="kw">let _ </span>= closed_tx.send(());
-<a href=#186 id=186 data-nosnippet>186</a>        });
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-<a href=#189 id=189 data-nosnippet>189</a>            outbound: tx,
-<a href=#190 id=190 data-nosnippet>190</a>            view_rx,
-<a href=#191 id=191 data-nosnippet>191</a>            keyframe_tx,
-<a href=#192 id=192 data-nosnippet>192</a>            feedback_tx,
-<a href=#193 id=193 data-nosnippet>193</a>            quality_tx,
-<a href=#194 id=194 data-nosnippet>194</a>            closed: closed_rx,
-<a href=#195 id=195 data-nosnippet>195</a>        })
-<a href=#196 id=196 data-nosnippet>196</a>    }
-<a href=#197 id=197 data-nosnippet>197</a>}
-<a href=#198 id=198 data-nosnippet>198</a>
-<a href=#199 id=199 data-nosnippet>199</a><span class="doccomment">/// This device's video decode capabilities, advertised at `Hello`. The engine
-<a href=#200 id=200 data-nosnippet>200</a>/// reports HW/SW support; H.264 is always present (the universal floor).
-<a href=#201 id=201 data-nosnippet>201</a></span><span class="kw">fn </span>local_decode_caps() -&gt; hound_control::DecodeCaps {
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">let </span>caps = Engine::new().decode_caps();
-<a href=#203 id=203 data-nosnippet>203</a>    hound_control::DecodeCaps {
-<a href=#204 id=204 data-nosnippet>204</a>        av1: caps.av1,
-<a href=#205 id=205 data-nosnippet>205</a>        h265: caps.h265,
-<a href=#206 id=206 data-nosnippet>206</a>        h264: caps.h264,
-<a href=#207 id=207 data-nosnippet>207</a>    }
-<a href=#208 id=208 data-nosnippet>208</a>}
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a><span class="doccomment">/// Build the `ws(s)://.../space/{id}/control?token=...` URL from the HTTP base.
-<a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">fn </span>control_ws_url(base_url: <span class="kw-2">&amp;</span>str, space_id: Uuid, token: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;String&gt; {
-<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let </span>base = base_url.trim_end_matches(<span class="string">'/'</span>);
-<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">let </span>ws_base = <span class="kw">if let </span><span class="prelude-val">Some</span>(rest) = base.strip_prefix(<span class="string">"https://"</span>) {
-<a href=#214 id=214 data-nosnippet>214</a>        <span class="macro">format!</span>(<span class="string">"wss://{rest}"</span>)
-<a href=#215 id=215 data-nosnippet>215</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(rest) = base.strip_prefix(<span class="string">"http://"</span>) {
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="macro">format!</span>(<span class="string">"ws://{rest}"</span>)
-<a href=#217 id=217 data-nosnippet>217</a>    } <span class="kw">else if </span>base.starts_with(<span class="string">"ws://"</span>) || base.starts_with(<span class="string">"wss://"</span>) {
-<a href=#218 id=218 data-nosnippet>218</a>        base.to_owned()
-<a href=#219 id=219 data-nosnippet>219</a>    } <span class="kw">else </span>{
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(HoundError::Media(<span class="macro">format!</span>(
-<a href=#221 id=221 data-nosnippet>221</a>            <span class="string">"api_base has no http(s) scheme: {base_url}"
-<a href=#222 id=222 data-nosnippet>222</a>        </span>)));
-<a href=#223 id=223 data-nosnippet>223</a>    };
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="prelude-val">Ok</span>(<span class="macro">format!</span>(
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="string">"{ws_base}/space/{space_id}/control?token={}"</span>,
-<a href=#226 id=226 data-nosnippet>226</a>        url_token(token)
-<a href=#227 id=227 data-nosnippet>227</a>    ))
-<a href=#228 id=228 data-nosnippet>228</a>}
-<a href=#229 id=229 data-nosnippet>229</a>
-<a href=#230 id=230 data-nosnippet>230</a><span class="doccomment">/// Minimal percent-encoding for the query-string token (JWTs are URL-safe already).
-<a href=#231 id=231 data-nosnippet>231</a></span><span class="kw">fn </span>url_token(s: <span class="kw-2">&amp;</span>str) -&gt; String {
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = String::with_capacity(s.len());
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">for </span>b <span class="kw">in </span>s.bytes() {
-<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">match </span>b {
-<a href=#235 id=235 data-nosnippet>235</a>            <span class="string">b'A'</span>..=<span class="string">b'Z' </span>| <span class="string">b'a'</span>..=<span class="string">b'z' </span>| <span class="string">b'0'</span>..=<span class="string">b'9' </span>| <span class="string">b'-' </span>| <span class="string">b'_' </span>| <span class="string">b'.' </span>| <span class="string">b'~' </span>=&gt; {
-<a href=#236 id=236 data-nosnippet>236</a>                out.push(b <span class="kw">as </span>char);
-<a href=#237 id=237 data-nosnippet>237</a>            }
-<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">_ </span>=&gt; out.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"%{b:02X}"</span>)),
-<a href=#239 id=239 data-nosnippet>239</a>        }
-<a href=#240 id=240 data-nosnippet>240</a>    }
-<a href=#241 id=241 data-nosnippet>241</a>    out
-<a href=#242 id=242 data-nosnippet>242</a>}
-<a href=#243 id=243 data-nosnippet>243</a>
-<a href=#244 id=244 data-nosnippet>244</a><span class="doccomment">/// Wait until the control reducer has a `self_id` (the server's `Welcome`).
-<a href=#245 id=245 data-nosnippet>245</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>wait_for_self_id(view_rx: <span class="kw-2">&amp;mut </span>watch::Receiver&lt;SessionView&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;PeerId&gt; {
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">loop </span>{
-<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = view_rx.borrow().self_id() {
-<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(id);
-<a href=#249 id=249 data-nosnippet>249</a>        }
-<a href=#250 id=250 data-nosnippet>250</a>        view_rx
-<a href=#251 id=251 data-nosnippet>251</a>            .changed()
-<a href=#252 id=252 data-nosnippet>252</a>            .<span class="kw">await
-<a href=#253 id=253 data-nosnippet>253</a>            </span>.map_err(|<span class="kw">_</span>| HoundError::Media(<span class="string">"control closed before Welcome"</span>.into()))<span class="question-mark">?</span>;
-<a href=#254 id=254 data-nosnippet>254</a>    }
-<a href=#255 id=255 data-nosnippet>255</a>}
-<a href=#256 id=256 data-nosnippet>256</a>
-<a href=#257 id=257 data-nosnippet>257</a><span class="comment">// ─── iroh relay dial ────────────────────────────────────────────────────────────
-<a href=#258 id=258 data-nosnippet>258</a>
-<a href=#259 id=259 data-nosnippet>259</a></span><span class="doccomment">/// Dial the MoQ relay (its node id + relay URL) on a fresh iroh endpoint, returning
-<a href=#260 id=260 data-nosnippet>260</a>/// the QUIC connection the MoQ session rides. The endpoint is per-call with an
-<a href=#261 id=261 data-nosnippet>261</a>/// ephemeral key (no persisted device identity yet) — fine for the call's lifetime;
-<a href=#262 id=262 data-nosnippet>262</a>/// sharing it across calls is a later optimization.
-<a href=#263 id=263 data-nosnippet>263</a>/// Returns BOTH the endpoint and the connection: the caller MUST keep the
-<a href=#264 id=264 data-nosnippet>264</a>/// [`Endpoint`] alive for the connection's lifetime. The SFU is reachable only via
-<a href=#265 id=265 data-nosnippet>265</a>/// the relay (it has no client-routable direct address), so all packets — including
-<a href=#266 id=266 data-nosnippet>266</a>/// every stream after the handshake — ride the endpoint's magicsock/relay actor.
-<a href=#267 id=267 data-nosnippet>267</a>/// Dropping the endpoint stops that actor, so the QUIC handshake still completes but
-<a href=#268 id=268 data-nosnippet>268</a>/// the very next stream silently never transmits (the relay's `accept_bi` then times
-<a href=#269 id=269 data-nosnippet>269</a>/// out). Holding only the `Connection` is not enough.
-<a href=#270 id=270 data-nosnippet>270</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>dial_relay(
-<a href=#271 id=271 data-nosnippet>271</a>    relay_url: <span class="kw-2">&amp;</span>str,
-<a href=#272 id=272 data-nosnippet>272</a>    sfu_node_id: <span class="kw-2">&amp;</span>str,
-<a href=#273 id=273 data-nosnippet>273</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(iroh::endpoint::Endpoint, iroh::endpoint::Connection)&gt; {
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">use </span>iroh::endpoint::presets;
-<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">use </span>iroh::endpoint::{QuicTransportConfig, VarInt};
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">use </span>iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl};
-<a href=#277 id=277 data-nosnippet>277</a>
-<a href=#278 id=278 data-nosnippet>278</a>    <span class="kw">let </span>relay_url: RelayUrl = relay_url
-<a href=#279 id=279 data-nosnippet>279</a>        .parse()
-<a href=#280 id=280 data-nosnippet>280</a>        .map_err(|e| HoundError::Media(<span class="macro">format!</span>(<span class="string">"bad relay url: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">let </span>relay_id: EndpointId = sfu_node_id
+<a href=#166 id=166 data-nosnippet>166</a>                        // `send_replace`: a headless caller may not have subscribed
+<a href=#167 id=167 data-nosnippet>167</a>                        // `watch_call` yet (plain `send` drops the publish with zero
+<a href=#168 id=168 data-nosnippet>168</a>                        // receivers and the last roster change would be lost forever).
+<a href=#169 id=169 data-nosnippet>169</a>                        </span>view_out.send_replace(CallView::from_view_with(<span class="kw-2">&amp;</span>view, <span class="kw-2">&amp;</span>identities.load()));
+<a href=#170 id=170 data-nosnippet>170</a>                    }
+<a href=#171 id=171 data-nosnippet>171</a>                    <span class="comment">// Distinguish the two ways the control WS ends, so a recurring
+<a href=#172 id=172 data-nosnippet>172</a>                    // drop is diagnosable: a server-sent Close (with its reason) vs a
+<a href=#173 id=173 data-nosnippet>173</a>                    // read/transport error (network blip, reset). Either way the
+<a href=#174 id=174 data-nosnippet>174</a>                    // supervisor heals; this is purely for visibility.
+<a href=#175 id=175 data-nosnippet>175</a>                    </span><span class="prelude-val">Ok</span>(Message::Close(frame)) =&gt; {
+<a href=#176 id=176 data-nosnippet>176</a>                        <span class="macro">tracing::warn!</span>(<span class="question-mark">?</span>frame, <span class="string">"call: control WS closed by server"</span>);
+<a href=#177 id=177 data-nosnippet>177</a>                        <span class="kw">break</span>;
+<a href=#178 id=178 data-nosnippet>178</a>                    }
+<a href=#179 id=179 data-nosnippet>179</a>                    <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#180 id=180 data-nosnippet>180</a>                        <span class="macro">tracing::warn!</span>(error = %e, <span class="string">"call: control WS read error"</span>);
+<a href=#181 id=181 data-nosnippet>181</a>                        <span class="kw">break</span>;
+<a href=#182 id=182 data-nosnippet>182</a>                    }
+<a href=#183 id=183 data-nosnippet>183</a>                    <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {}
+<a href=#184 id=184 data-nosnippet>184</a>                }
+<a href=#185 id=185 data-nosnippet>185</a>            }
+<a href=#186 id=186 data-nosnippet>186</a>            <span class="comment">// The control plane dropped — wake the supervisor's monitor so it heals
+<a href=#187 id=187 data-nosnippet>187</a>            // the whole session (a fresh PeerId; the roster fully resyncs).
+<a href=#188 id=188 data-nosnippet>188</a>            </span><span class="kw">let _ </span>= closed_tx.send(());
+<a href=#189 id=189 data-nosnippet>189</a>        });
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+<a href=#192 id=192 data-nosnippet>192</a>            outbound: tx,
+<a href=#193 id=193 data-nosnippet>193</a>            view_rx,
+<a href=#194 id=194 data-nosnippet>194</a>            keyframe_tx,
+<a href=#195 id=195 data-nosnippet>195</a>            feedback_tx,
+<a href=#196 id=196 data-nosnippet>196</a>            quality_tx,
+<a href=#197 id=197 data-nosnippet>197</a>            closed: closed_rx,
+<a href=#198 id=198 data-nosnippet>198</a>        })
+<a href=#199 id=199 data-nosnippet>199</a>    }
+<a href=#200 id=200 data-nosnippet>200</a>}
+<a href=#201 id=201 data-nosnippet>201</a>
+<a href=#202 id=202 data-nosnippet>202</a><span class="doccomment">/// This device's video decode capabilities, advertised at `Hello`. The engine
+<a href=#203 id=203 data-nosnippet>203</a>/// reports HW/SW support; H.264 is always present (the universal floor).
+<a href=#204 id=204 data-nosnippet>204</a></span><span class="kw">fn </span>local_decode_caps() -&gt; hound_control::DecodeCaps {
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">let </span>caps = Engine::new().decode_caps();
+<a href=#206 id=206 data-nosnippet>206</a>    hound_control::DecodeCaps {
+<a href=#207 id=207 data-nosnippet>207</a>        av1: caps.av1,
+<a href=#208 id=208 data-nosnippet>208</a>        h265: caps.h265,
+<a href=#209 id=209 data-nosnippet>209</a>        h264: caps.h264,
+<a href=#210 id=210 data-nosnippet>210</a>    }
+<a href=#211 id=211 data-nosnippet>211</a>}
+<a href=#212 id=212 data-nosnippet>212</a>
+<a href=#213 id=213 data-nosnippet>213</a><span class="doccomment">/// Build the `ws(s)://.../space/{id}/control?token=...` URL from the HTTP base.
+<a href=#214 id=214 data-nosnippet>214</a></span><span class="kw">fn </span>control_ws_url(base_url: <span class="kw-2">&amp;</span>str, space_id: Uuid, token: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;String&gt; {
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">let </span>base = base_url.trim_end_matches(<span class="string">'/'</span>);
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let </span>ws_base = <span class="kw">if let </span><span class="prelude-val">Some</span>(rest) = base.strip_prefix(<span class="string">"https://"</span>) {
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="macro">format!</span>(<span class="string">"wss://{rest}"</span>)
+<a href=#218 id=218 data-nosnippet>218</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(rest) = base.strip_prefix(<span class="string">"http://"</span>) {
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="macro">format!</span>(<span class="string">"ws://{rest}"</span>)
+<a href=#220 id=220 data-nosnippet>220</a>    } <span class="kw">else if </span>base.starts_with(<span class="string">"ws://"</span>) || base.starts_with(<span class="string">"wss://"</span>) {
+<a href=#221 id=221 data-nosnippet>221</a>        base.to_owned()
+<a href=#222 id=222 data-nosnippet>222</a>    } <span class="kw">else </span>{
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(HoundError::Media(<span class="macro">format!</span>(
+<a href=#224 id=224 data-nosnippet>224</a>            <span class="string">"api_base has no http(s) scheme: {base_url}"
+<a href=#225 id=225 data-nosnippet>225</a>        </span>)));
+<a href=#226 id=226 data-nosnippet>226</a>    };
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="prelude-val">Ok</span>(<span class="macro">format!</span>(
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="string">"{ws_base}/space/{space_id}/control?token={}"</span>,
+<a href=#229 id=229 data-nosnippet>229</a>        url_token(token)
+<a href=#230 id=230 data-nosnippet>230</a>    ))
+<a href=#231 id=231 data-nosnippet>231</a>}
+<a href=#232 id=232 data-nosnippet>232</a>
+<a href=#233 id=233 data-nosnippet>233</a><span class="doccomment">/// Minimal percent-encoding for the query-string token (JWTs are URL-safe already).
+<a href=#234 id=234 data-nosnippet>234</a></span><span class="kw">fn </span>url_token(s: <span class="kw-2">&amp;</span>str) -&gt; String {
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = String::with_capacity(s.len());
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">for </span>b <span class="kw">in </span>s.bytes() {
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">match </span>b {
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="string">b'A'</span>..=<span class="string">b'Z' </span>| <span class="string">b'a'</span>..=<span class="string">b'z' </span>| <span class="string">b'0'</span>..=<span class="string">b'9' </span>| <span class="string">b'-' </span>| <span class="string">b'_' </span>| <span class="string">b'.' </span>| <span class="string">b'~' </span>=&gt; {
+<a href=#239 id=239 data-nosnippet>239</a>                out.push(b <span class="kw">as </span>char);
+<a href=#240 id=240 data-nosnippet>240</a>            }
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">_ </span>=&gt; out.push_str(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"%{b:02X}"</span>)),
+<a href=#242 id=242 data-nosnippet>242</a>        }
+<a href=#243 id=243 data-nosnippet>243</a>    }
+<a href=#244 id=244 data-nosnippet>244</a>    out
+<a href=#245 id=245 data-nosnippet>245</a>}
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a><span class="doccomment">/// Wait until the control reducer has a `self_id` (the server's `Welcome`).
+<a href=#248 id=248 data-nosnippet>248</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>wait_for_self_id(view_rx: <span class="kw-2">&amp;mut </span>watch::Receiver&lt;SessionView&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;PeerId&gt; {
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">loop </span>{
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = view_rx.borrow().self_id() {
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(id);
+<a href=#252 id=252 data-nosnippet>252</a>        }
+<a href=#253 id=253 data-nosnippet>253</a>        view_rx
+<a href=#254 id=254 data-nosnippet>254</a>            .changed()
+<a href=#255 id=255 data-nosnippet>255</a>            .<span class="kw">await
+<a href=#256 id=256 data-nosnippet>256</a>            </span>.map_err(|<span class="kw">_</span>| HoundError::Media(<span class="string">"control closed before Welcome"</span>.into()))<span class="question-mark">?</span>;
+<a href=#257 id=257 data-nosnippet>257</a>    }
+<a href=#258 id=258 data-nosnippet>258</a>}
+<a href=#259 id=259 data-nosnippet>259</a>
+<a href=#260 id=260 data-nosnippet>260</a><span class="comment">// ─── iroh relay dial ────────────────────────────────────────────────────────────
+<a href=#261 id=261 data-nosnippet>261</a>
+<a href=#262 id=262 data-nosnippet>262</a></span><span class="doccomment">/// Dial the MoQ relay (its node id + relay URL) on a fresh iroh endpoint, returning
+<a href=#263 id=263 data-nosnippet>263</a>/// the QUIC connection the MoQ session rides. The endpoint is per-call with an
+<a href=#264 id=264 data-nosnippet>264</a>/// ephemeral key (no persisted device identity yet) — fine for the call's lifetime;
+<a href=#265 id=265 data-nosnippet>265</a>/// sharing it across calls is a later optimization.
+<a href=#266 id=266 data-nosnippet>266</a>/// Returns BOTH the endpoint and the connection: the caller MUST keep the
+<a href=#267 id=267 data-nosnippet>267</a>/// [`Endpoint`] alive for the connection's lifetime. The SFU is reachable only via
+<a href=#268 id=268 data-nosnippet>268</a>/// the relay (it has no client-routable direct address), so all packets — including
+<a href=#269 id=269 data-nosnippet>269</a>/// every stream after the handshake — ride the endpoint's magicsock/relay actor.
+<a href=#270 id=270 data-nosnippet>270</a>/// Dropping the endpoint stops that actor, so the QUIC handshake still completes but
+<a href=#271 id=271 data-nosnippet>271</a>/// the very next stream silently never transmits (the relay's `accept_bi` then times
+<a href=#272 id=272 data-nosnippet>272</a>/// out). Holding only the `Connection` is not enough.
+<a href=#273 id=273 data-nosnippet>273</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>dial_relay(
+<a href=#274 id=274 data-nosnippet>274</a>    relay_url: <span class="kw-2">&amp;</span>str,
+<a href=#275 id=275 data-nosnippet>275</a>    sfu_node_id: <span class="kw-2">&amp;</span>str,
+<a href=#276 id=276 data-nosnippet>276</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(iroh::endpoint::Endpoint, iroh::endpoint::Connection)&gt; {
+<a href=#277 id=277 data-nosnippet>277</a>    <span class="kw">use </span>iroh::endpoint::presets;
+<a href=#278 id=278 data-nosnippet>278</a>    <span class="kw">use </span>iroh::endpoint::{QuicTransportConfig, VarInt};
+<a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">use </span>iroh::{Endpoint, EndpointAddr, EndpointId, RelayMap, RelayMode, RelayUrl};
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">let </span>relay_url: RelayUrl = relay_url
 <a href=#282 id=282 data-nosnippet>282</a>        .parse()
-<a href=#283 id=283 data-nosnippet>283</a>        .map_err(|<span class="kw">_</span>| HoundError::Media(<span class="macro">format!</span>(<span class="string">"unparseable sfu node id: {sfu_node_id:?}"</span>)))<span class="question-mark">?</span>;
-<a href=#284 id=284 data-nosnippet>284</a>
-<a href=#285 id=285 data-nosnippet>285</a>    <span class="comment">// Flow-control windows sized for the heaviest video track (a ~2.5 Mbps 1080p
-<a href=#286 id=286 data-nosnippet>286</a>    // screenshare, or a fast link's 4 Mbps 1080p60 top rung):
-<a href=#287 id=287 data-nosnippet>287</a>    // a too-small receive window forces the sender to stop-and-wait for window
-<a href=#288 id=288 data-nosnippet>288</a>    // updates, and every such update is another inbound packet → another wakeup
-<a href=#289 id=289 data-nosnippet>289</a>    // on a receive path that has no UDP GRO on macOS to coalesce them. Hold well
-<a href=#290 id=290 data-nosnippet>290</a>    // over a high-RTT BDP per stream, and the sum across the call's concurrent
-<a href=#291 id=291 data-nosnippet>291</a>    // moq streams (mic + cam + screen + screen-audio) at the connection level.
-<a href=#292 id=292 data-nosnippet>292</a>    // MTU is left at iroh's conservative default — PMTUD raises it, and a high
-<a href=#293 id=293 data-nosnippet>293</a>    // initial MTU risks black-holing on constrained paths. `max_concurrent_uni`
-<a href=#294 id=294 data-nosnippet>294</a>    // gives moq's per-group streams headroom so a screenshare burst never stalls
-<a href=#295 id=295 data-nosnippet>295</a>    // on the stream-count limit.
-<a href=#296 id=296 data-nosnippet>296</a>    </span><span class="kw">let </span>transport = QuicTransportConfig::builder()
-<a href=#297 id=297 data-nosnippet>297</a>        .stream_receive_window(VarInt::from_u32(<span class="number">4 </span>* <span class="number">1024 </span>* <span class="number">1024</span>))
-<a href=#298 id=298 data-nosnippet>298</a>        .receive_window(VarInt::from_u32(<span class="number">32 </span>* <span class="number">1024 </span>* <span class="number">1024</span>))
-<a href=#299 id=299 data-nosnippet>299</a>        .max_concurrent_uni_streams(VarInt::from_u32(<span class="number">1024</span>))
-<a href=#300 id=300 data-nosnippet>300</a>        .build();
-<a href=#301 id=301 data-nosnippet>301</a>
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">let </span>endpoint = Endpoint::builder(presets::N0)
-<a href=#303 id=303 data-nosnippet>303</a>        .relay_mode(RelayMode::Custom(RelayMap::from(relay_url.clone())))
-<a href=#304 id=304 data-nosnippet>304</a>        .transport_config(transport)
-<a href=#305 id=305 data-nosnippet>305</a>        .bind()
-<a href=#306 id=306 data-nosnippet>306</a>        .<span class="kw">await
-<a href=#307 id=307 data-nosnippet>307</a>        </span>.map_err(|e| HoundError::Media(<span class="macro">format!</span>(<span class="string">"bind iroh endpoint: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">let </span>addr = EndpointAddr::new(relay_id).with_relay_url(relay_url);
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>conn = endpoint
-<a href=#311 id=311 data-nosnippet>311</a>        .connect(addr, hound_transport::ALPN)
-<a href=#312 id=312 data-nosnippet>312</a>        .<span class="kw">await
-<a href=#313 id=313 data-nosnippet>313</a>        </span>.map_err(|e| HoundError::Media(<span class="macro">format!</span>(<span class="string">"dial MoQ relay: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#314 id=314 data-nosnippet>314</a>    <span class="prelude-val">Ok</span>((endpoint, conn))
-<a href=#315 id=315 data-nosnippet>315</a>}
+<a href=#283 id=283 data-nosnippet>283</a>        .map_err(|e| HoundError::Media(<span class="macro">format!</span>(<span class="string">"bad relay url: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">let </span>relay_id: EndpointId = sfu_node_id
+<a href=#285 id=285 data-nosnippet>285</a>        .parse()
+<a href=#286 id=286 data-nosnippet>286</a>        .map_err(|<span class="kw">_</span>| HoundError::Media(<span class="macro">format!</span>(<span class="string">"unparseable sfu node id: {sfu_node_id:?}"</span>)))<span class="question-mark">?</span>;
+<a href=#287 id=287 data-nosnippet>287</a>
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="comment">// Flow-control windows sized for the heaviest video track (a ~2.5 Mbps 1080p
+<a href=#289 id=289 data-nosnippet>289</a>    // screenshare, or a fast link's 4 Mbps 1080p60 top rung):
+<a href=#290 id=290 data-nosnippet>290</a>    // a too-small receive window forces the sender to stop-and-wait for window
+<a href=#291 id=291 data-nosnippet>291</a>    // updates, and every such update is another inbound packet → another wakeup
+<a href=#292 id=292 data-nosnippet>292</a>    // on a receive path that has no UDP GRO on macOS to coalesce them. Hold well
+<a href=#293 id=293 data-nosnippet>293</a>    // over a high-RTT BDP per stream, and the sum across the call's concurrent
+<a href=#294 id=294 data-nosnippet>294</a>    // moq streams (mic + cam + screen + screen-audio) at the connection level.
+<a href=#295 id=295 data-nosnippet>295</a>    // MTU is left at iroh's conservative default — PMTUD raises it, and a high
+<a href=#296 id=296 data-nosnippet>296</a>    // initial MTU risks black-holing on constrained paths. `max_concurrent_uni`
+<a href=#297 id=297 data-nosnippet>297</a>    // gives moq's per-group streams headroom so a screenshare burst never stalls
+<a href=#298 id=298 data-nosnippet>298</a>    // on the stream-count limit.
+<a href=#299 id=299 data-nosnippet>299</a>    </span><span class="kw">let </span>transport = QuicTransportConfig::builder()
+<a href=#300 id=300 data-nosnippet>300</a>        .stream_receive_window(VarInt::from_u32(<span class="number">4 </span>* <span class="number">1024 </span>* <span class="number">1024</span>))
+<a href=#301 id=301 data-nosnippet>301</a>        .receive_window(VarInt::from_u32(<span class="number">32 </span>* <span class="number">1024 </span>* <span class="number">1024</span>))
+<a href=#302 id=302 data-nosnippet>302</a>        .max_concurrent_uni_streams(VarInt::from_u32(<span class="number">1024</span>))
+<a href=#303 id=303 data-nosnippet>303</a>        .build();
+<a href=#304 id=304 data-nosnippet>304</a>
+<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">let </span>endpoint = Endpoint::builder(presets::N0)
+<a href=#306 id=306 data-nosnippet>306</a>        .relay_mode(RelayMode::Custom(RelayMap::from(relay_url.clone())))
+<a href=#307 id=307 data-nosnippet>307</a>        .transport_config(transport)
+<a href=#308 id=308 data-nosnippet>308</a>        .bind()
+<a href=#309 id=309 data-nosnippet>309</a>        .<span class="kw">await
+<a href=#310 id=310 data-nosnippet>310</a>        </span>.map_err(|e| HoundError::Media(<span class="macro">format!</span>(<span class="string">"bind iroh endpoint: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#311 id=311 data-nosnippet>311</a>
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>addr = EndpointAddr::new(relay_id).with_relay_url(relay_url);
+<a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">let </span>conn = endpoint
+<a href=#314 id=314 data-nosnippet>314</a>        .connect(addr, hound_transport::ALPN)
+<a href=#315 id=315 data-nosnippet>315</a>        .<span class="kw">await
+<a href=#316 id=316 data-nosnippet>316</a>        </span>.map_err(|e| HoundError::Media(<span class="macro">format!</span>(<span class="string">"dial MoQ relay: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="prelude-val">Ok</span>((endpoint, conn))
+<a href=#318 id=318 data-nosnippet>318</a>}
 </code></pre></div></section></main></body></html>

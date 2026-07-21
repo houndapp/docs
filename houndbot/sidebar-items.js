@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAIL_WAIT_TIMEOUT","SAMPLE_INTERVAL"],"fn":["find_voice_space","init_tracing","main","run","run_call","setup_failure","sign_in"],"mod":["mailpit","verdict"],"struct":["Args","Sample"]};
+window.SIDEBAR_ITEMS = {"fn":["find_voice_space","init_tracing","main","run","run_call","setup_failure","sign_in"],"mod":["verdict"],"struct":["Args"]};

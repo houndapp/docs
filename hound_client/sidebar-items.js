@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Codec","MediaKind","Source"],"mod":["app","audio_report","call","error","model","realtime","reducer","rest","session","stats"]};
+window.SIDEBAR_ITEMS = {"enum":["Codec","MediaKind","Source"],"mod":["app","audio_report","call","call_health","error","model","realtime","reducer","rest","session","stats"]};

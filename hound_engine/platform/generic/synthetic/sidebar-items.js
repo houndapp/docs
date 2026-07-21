@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["triangle"],"struct":["SyntheticCapturer"]};
+window.SIDEBAR_ITEMS = {"fn":["render_testcard","triangle"],"struct":["SyntheticCapturer"]};
