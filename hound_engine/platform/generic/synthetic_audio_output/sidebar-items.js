@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DRAIN_CHUNK_SAMPLES","DRAIN_INTERVAL","RING_CAPACITY_SAMPLES"],"fn":["drain_loop"],"struct":["Shared","SyntheticAudioOutput"]};
