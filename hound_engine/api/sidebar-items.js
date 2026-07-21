@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ScreenShareInner"],"struct":["Camera","DeviceDescriptor","Engine","Microphone","ScreenAudio","ScreenShare","VideoDecoder","VideoEncoder"]};
+window.SIDEBAR_ITEMS = {"enum":["CameraInner","MicrophoneInner","ScreenShareInner"],"struct":["Camera","DeviceDescriptor","Engine","Microphone","ScreenAudio","ScreenShare","VideoDecoder","VideoEncoder"]};

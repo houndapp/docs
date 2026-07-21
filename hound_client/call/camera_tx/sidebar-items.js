@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cam_capture_encode_loop","spawn_cam_publish"]};
+window.SIDEBAR_ITEMS = {"fn":["cam_capture_encode_loop","open_cam","spawn_cam_publish"]};

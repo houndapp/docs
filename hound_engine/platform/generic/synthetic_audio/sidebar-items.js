@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AMPLITUDE","FRAME_INTERVAL","TONE_HZ"],"struct":["SyntheticAudioInput"]};
