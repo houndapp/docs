@@ -273,49 +273,73 @@
 <a href=#273 id=273 data-nosnippet>273</a>        starved: <span class="bool-val">false</span>,
 <a href=#274 id=274 data-nosnippet>274</a>    };
 <a href=#275 id=275 data-nosnippet>275</a>
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">let </span>deadline = tokio::time::Instant::now() + Duration::from_secs(args.duration_secs);
-<a href=#277 id=277 data-nosnippet>277</a>    <span class="kw">loop </span>{
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="kw">let </span>snapshot = stats_rx.borrow_and_update().clone();
-<a href=#279 id=279 data-nosnippet>279</a>
-<a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">let </span>peers = snapshot.inbound.len() <span class="kw">as </span>u32;
-<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span>video: u64 = snapshot
-<a href=#282 id=282 data-nosnippet>282</a>            .inbound
-<a href=#283 id=283 data-nosnippet>283</a>            .iter()
-<a href=#284 id=284 data-nosnippet>284</a>            .map(|p| p.video.frames_received)
-<a href=#285 id=285 data-nosnippet>285</a>            .sum();
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">let </span>audio: u64 = snapshot
-<a href=#287 id=287 data-nosnippet>287</a>            .inbound
-<a href=#288 id=288 data-nosnippet>288</a>            .iter()
-<a href=#289 id=289 data-nosnippet>289</a>            .map(|p| p.audio.frames_received)
-<a href=#290 id=290 data-nosnippet>290</a>            .sum();
-<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">let </span>starved = snapshot.transport.playout_output_underruns &gt; <span class="number">0
-<a href=#292 id=292 data-nosnippet>292</a>            </span>|| snapshot.transport.playout_mix_starves &gt; <span class="number">0
-<a href=#293 id=293 data-nosnippet>293</a>            </span>|| snapshot.inbound.iter().any(|p| {
-<a href=#294 id=294 data-nosnippet>294</a>                p.audio.underflow &gt; <span class="number">0
-<a href=#295 id=295 data-nosnippet>295</a>                    </span>|| p.audio.late_drops &gt; <span class="number">0
-<a href=#296 id=296 data-nosnippet>296</a>                    </span>|| p.audio.overflow_drops &gt; <span class="number">0
-<a href=#297 id=297 data-nosnippet>297</a>                    </span>|| p.audio.lost &gt; <span class="number">0
-<a href=#298 id=298 data-nosnippet>298</a>            </span>});
-<a href=#299 id=299 data-nosnippet>299</a>
-<a href=#300 id=300 data-nosnippet>300</a>        sample.peers_seen = sample.peers_seen.max(peers);
-<a href=#301 id=301 data-nosnippet>301</a>        sample.video_frames_rx = sample.video_frames_rx.max(video);
-<a href=#302 id=302 data-nosnippet>302</a>        sample.audio_frames_rx = sample.audio_frames_rx.max(audio);
-<a href=#303 id=303 data-nosnippet>303</a>        sample.starved |= starved;
-<a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="macro">info!</span>(peers, video, audio, starved, <span class="string">"stats sample"</span>);
-<a href=#306 id=306 data-nosnippet>306</a>
-<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">if </span>tokio::time::Instant::now() &gt;= deadline {
-<a href=#308 id=308 data-nosnippet>308</a>            <span class="kw">break</span>;
-<a href=#309 id=309 data-nosnippet>309</a>        }
-<a href=#310 id=310 data-nosnippet>310</a>        tokio::time::sleep(SAMPLE_INTERVAL).<span class="kw">await</span>;
-<a href=#311 id=311 data-nosnippet>311</a>    }
-<a href=#312 id=312 data-nosnippet>312</a>
-<a href=#313 id=313 data-nosnippet>313</a>    client
-<a href=#314 id=314 data-nosnippet>314</a>        .call_leave()
-<a href=#315 id=315 data-nosnippet>315</a>        .<span class="kw">await
-<a href=#316 id=316 data-nosnippet>316</a>        </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"call_leave failed: {e}"</span>))<span class="question-mark">?</span>;
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="macro">info!</span>(<span class="string">"left call"</span>);
-<a href=#318 id=318 data-nosnippet>318</a>
-<a href=#319 id=319 data-nosnippet>319</a>    <span class="prelude-val">Ok</span>(sample)
-<a href=#320 id=320 data-nosnippet>320</a>}
+<a href=#276 id=276 data-nosnippet>276</a>    <span class="comment">// The starvation gate judges STEADY STATE: every stream's first moments
+<a href=#277 id=277 data-nosnippet>277</a>    // starve a little by design (the adaptive jitter buffer primes per PEER
+<a href=#278 id=278 data-nosnippet>278</a>    // stream, not per call — a peer joining later warms up then), so absolute
+<a href=#279 id=279 data-nosnippet>279</a>    // counters would fail every honest run. Anchor the warmup to the moment
+<a href=#280 id=280 data-nosnippet>280</a>    // all expected peers are present, baseline the counters once it passes,
+<a href=#281 id=281 data-nosnippet>281</a>    // and gate on growth beyond the baseline.
+<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">const </span>WARMUP: Duration = Duration::from_secs(<span class="number">5</span>);
+<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">let </span>started = tokio::time::Instant::now();
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">let </span><span class="kw-2">mut </span>peers_up_at: <span class="prelude-ty">Option</span>&lt;tokio::time::Instant&gt; = <span class="prelude-val">None</span>;
+<a href=#285 id=285 data-nosnippet>285</a>    <span class="kw">let </span><span class="kw-2">mut </span>starve_baseline: <span class="prelude-ty">Option</span>&lt;u64&gt; = <span class="prelude-val">None</span>;
+<a href=#286 id=286 data-nosnippet>286</a>
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">let </span>deadline = started + Duration::from_secs(args.duration_secs);
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">loop </span>{
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">let </span>snapshot = stats_rx.borrow_and_update().clone();
+<a href=#290 id=290 data-nosnippet>290</a>
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">let </span>peers = snapshot.inbound.len() <span class="kw">as </span>u32;
+<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">let </span>video: u64 = snapshot
+<a href=#293 id=293 data-nosnippet>293</a>            .inbound
+<a href=#294 id=294 data-nosnippet>294</a>            .iter()
+<a href=#295 id=295 data-nosnippet>295</a>            .map(|p| p.video.frames_received)
+<a href=#296 id=296 data-nosnippet>296</a>            .sum();
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">let </span>audio: u64 = snapshot
+<a href=#298 id=298 data-nosnippet>298</a>            .inbound
+<a href=#299 id=299 data-nosnippet>299</a>            .iter()
+<a href=#300 id=300 data-nosnippet>300</a>            .map(|p| p.audio.frames_received)
+<a href=#301 id=301 data-nosnippet>301</a>            .sum();
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">let </span>starve_total: u64 = snapshot.transport.playout_output_underruns
+<a href=#303 id=303 data-nosnippet>303</a>            + snapshot.transport.playout_mix_starves
+<a href=#304 id=304 data-nosnippet>304</a>            + snapshot
+<a href=#305 id=305 data-nosnippet>305</a>                .inbound
+<a href=#306 id=306 data-nosnippet>306</a>                .iter()
+<a href=#307 id=307 data-nosnippet>307</a>                .map(|p| {
+<a href=#308 id=308 data-nosnippet>308</a>                    p.audio.underflow + p.audio.late_drops + p.audio.overflow_drops + p.audio.lost
+<a href=#309 id=309 data-nosnippet>309</a>                })
+<a href=#310 id=310 data-nosnippet>310</a>                .sum::&lt;u64&gt;();
+<a href=#311 id=311 data-nosnippet>311</a>        <span class="kw">if </span>peers &gt;= args.expect_peers &amp;&amp; peers_up_at.is_none() {
+<a href=#312 id=312 data-nosnippet>312</a>            peers_up_at = <span class="prelude-val">Some</span>(tokio::time::Instant::now());
+<a href=#313 id=313 data-nosnippet>313</a>        }
+<a href=#314 id=314 data-nosnippet>314</a>        <span class="kw">let </span>starved = <span class="kw">match </span>starve_baseline {
+<a href=#315 id=315 data-nosnippet>315</a>            <span class="prelude-val">None </span>=&gt; {
+<a href=#316 id=316 data-nosnippet>316</a>                <span class="kw">if </span>peers_up_at.is_some_and(|t| t.elapsed() &gt;= WARMUP) {
+<a href=#317 id=317 data-nosnippet>317</a>                    starve_baseline = <span class="prelude-val">Some</span>(starve_total);
+<a href=#318 id=318 data-nosnippet>318</a>                }
+<a href=#319 id=319 data-nosnippet>319</a>                <span class="bool-val">false
+<a href=#320 id=320 data-nosnippet>320</a>            </span>}
+<a href=#321 id=321 data-nosnippet>321</a>            <span class="prelude-val">Some</span>(baseline) =&gt; starve_total &gt; baseline,
+<a href=#322 id=322 data-nosnippet>322</a>        };
+<a href=#323 id=323 data-nosnippet>323</a>
+<a href=#324 id=324 data-nosnippet>324</a>        sample.peers_seen = sample.peers_seen.max(peers);
+<a href=#325 id=325 data-nosnippet>325</a>        sample.video_frames_rx = sample.video_frames_rx.max(video);
+<a href=#326 id=326 data-nosnippet>326</a>        sample.audio_frames_rx = sample.audio_frames_rx.max(audio);
+<a href=#327 id=327 data-nosnippet>327</a>        sample.starved |= starved;
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="macro">info!</span>(peers, video, audio, starved, <span class="string">"stats sample"</span>);
+<a href=#330 id=330 data-nosnippet>330</a>
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">if </span>tokio::time::Instant::now() &gt;= deadline {
+<a href=#332 id=332 data-nosnippet>332</a>            <span class="kw">break</span>;
+<a href=#333 id=333 data-nosnippet>333</a>        }
+<a href=#334 id=334 data-nosnippet>334</a>        tokio::time::sleep(SAMPLE_INTERVAL).<span class="kw">await</span>;
+<a href=#335 id=335 data-nosnippet>335</a>    }
+<a href=#336 id=336 data-nosnippet>336</a>
+<a href=#337 id=337 data-nosnippet>337</a>    client
+<a href=#338 id=338 data-nosnippet>338</a>        .call_leave()
+<a href=#339 id=339 data-nosnippet>339</a>        .<span class="kw">await
+<a href=#340 id=340 data-nosnippet>340</a>        </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"call_leave failed: {e}"</span>))<span class="question-mark">?</span>;
+<a href=#341 id=341 data-nosnippet>341</a>    <span class="macro">info!</span>(<span class="string">"left call"</span>);
+<a href=#342 id=342 data-nosnippet>342</a>
+<a href=#343 id=343 data-nosnippet>343</a>    <span class="prelude-val">Ok</span>(sample)
+<a href=#344 id=344 data-nosnippet>344</a>}
 </code></pre></div></section></main></body></html>
