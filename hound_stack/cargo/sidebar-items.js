@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_bin","run_captured","target_debug_dir"]};

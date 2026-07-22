@@ -1,0 +1,84 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="`hound-stack`: the dev/CI stack lifecycle library backing the `hound-stack` CLI (`src/main.rs`). One implementation shared by every caller that needs “bring the dev backend stack up, wait for it to be healthy, tear it down” — the `e2e` and `visual` subcommands, plus the `up`/`down` manual-dev commands. Replaces the hand-synced `tools/houndbot/e2e.sh` / `ui/integration_test/visual.sh` shell scripts."><title>hound_stack - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="hound_stack" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate hound_stack</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../hound_stack/index.html">hound_<wbr>stack</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>hound_<wbr>stack</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/hound_stack/lib.rs.html#1-50">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><code>hound-stack</code>: the dev/CI stack lifecycle library backing the
+<code>hound-stack</code> CLI (<code>src/main.rs</code>). One implementation shared by every
+caller that needs “bring the dev backend stack up, wait for it to be
+healthy, tear it down” — the <code>e2e</code> and <code>visual</code> subcommands, plus the
+<code>up</code>/<code>down</code> manual-dev commands. Replaces the hand-synced
+<code>tools/houndbot/e2e.sh</code> / <code>ui/integration_test/visual.sh</code> shell scripts.</p>
+<p>Noise contract (every flow): the console gets one line per lifecycle
+step; every subprocess’s full output lands in a separated artifact file
+(<code>build.log</code> for all build phases, <code>compose.log</code>, <code>backend.log</code>,
+<code>sfu.log</code>, bot logs, test output); binaries are built quietly first and
+then exec’d so runtime logs hold runtime lines only; a failure surfaces
+the relevant log’s tail inline.</p>
+<p>Module map:</p>
+<ul>
+<li><a href="ports/index.html" title="mod hound_stack::ports"><code>ports</code></a> — host port preflight (fail fast on a leftover/concurrent run).</li>
+<li><a href="compose/index.html" title="mod hound_stack::compose"><code>compose</code></a> — the <code>docker compose</code>/<code>docker-compose</code>/mise fallback chain,
+output to <code>compose.log</code>.</li>
+<li><a href="wait/index.html" title="mod hound_stack::wait"><code>wait</code></a> — deadline-bounded polling (HTTP reachability, container
+health, log lines) — no bare sleeps beyond the poll interval.</li>
+<li><a href="cargo/index.html" title="mod hound_stack::cargo"><code>cargo</code></a> — quiet builds to <code>build.log</code>; runtime logs never see
+compiler chatter.</li>
+<li><a href="logs/index.html" title="mod hound_stack::logs"><code>logs</code></a> — log sectioning + failure-tail helpers.</li>
+<li><a href="backend/index.html" title="mod hound_stack::backend"><code>backend</code></a> — spawns the (prebuilt) host backend with the shared dev env.</li>
+<li><a href="sfu/index.html" title="mod hound_stack::sfu"><code>sfu</code></a> — forces the SFU’s one-shot registration POST to re-land.</li>
+<li><a href="artifacts/index.html" title="mod hound_stack::artifacts"><code>artifacts</code></a> — <code>E2E_OUT_DIR</code>/<code>VISUAL_OUT_DIR</code>-style output dir
+resolution.</li>
+<li><a href="tee/index.html" title="mod hound_stack::tee"><code>tee</code></a> — runs a child process, teeing its output to console + a log
+file (the Rust equivalent of <code>cmd | tee log</code>).</li>
+<li><a href="lifecycle/index.html" title="mod hound_stack::lifecycle"><code>lifecycle</code></a> — <a href="lifecycle/struct.LiveStack.html" title="struct hound_stack::lifecycle::LiveStack"><code>lifecycle::LiveStack</code></a>: bring-up plus idempotent,
+drop-safe teardown (partial bring-up failures included), composing the
+modules above.</li>
+<li><a href="e2e/index.html" title="mod hound_stack::e2e"><code>e2e</code></a> — the <code>hound-testkit</code> scenario suite flow.</li>
+<li><a href="visual/index.html" title="mod hound_stack::visual"><code>visual</code></a> — the visual snapshot harness flow (bootstraps via
+<code>hound_testkit::Env</code> rather than re-implementing it in shell).</li>
+<li><a href="updown/index.html" title="mod hound_stack::updown"><code>updown</code></a> — manual <code>up</code>/<code>down</code> dev commands.</li>
+</ul>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="artifacts/index.html" title="mod hound_stack::artifacts">artifacts</a></dt><dd>Artifact directory resolution: an env var (<code>E2E_OUT_DIR</code>/<code>VISUAL_OUT_DIR</code>
+— a durable, CI-collectible dir) if set, else a throwaway temp dir left
+in place for local inspection. Same compat contract the two shell
+scripts documented.</dd><dt><a class="mod" href="backend/index.html" title="mod hound_stack::backend">backend</a></dt><dd>The host backend child process: the exact dev env both shell harnesses
+ran the backend under — this is the one place that env now lives.</dd><dt><a class="mod" href="cargo/index.html" title="mod hound_stack::cargo">cargo</a></dt><dd>Quiet cargo builds, separated from runtime logs. Every binary the harness
+runs (backend, houndbot, snapdiff, the nextest test binaries) is built
+HERE first — full compiler output captured into the run’s <code>build.log</code>,
+surfaced only on failure — and then executed directly, so each runtime
+artifact (<code>backend.log</code>, bot logs, test output) contains runtime lines
+only, never pages of “Compiling…” chatter.</dd><dt><a class="mod" href="compose/index.html" title="mod hound_stack::compose">compose</a></dt><dd>Compose driver: resolves the same <code>docker compose</code> (plugin) →
+<code>docker-compose</code> (standalone) → mise-pinned fallback chain the shell
+harnesses used, so a CI host that ships bare docker (no plugin, no
+standalone binary — the X64 runner) still works without a host install.</dd><dt><a class="mod" href="e2e/index.html" title="mod hound_stack::e2e">e2e</a></dt><dd><code>hound-stack e2e</code>: bring the stack up, run the <code>hound-testkit</code> scenario
+suite (<code>cargo nextest run -p hound-testkit --profile e2e</code>) against it,
+collect artifacts, tear down. Mirrors the retired <code>tools/houndbot/e2e.sh</code>.
+Extra CLI args forward to <code>cargo nextest run</code> (e.g. an <code>-E</code> filter for a
+fast local iteration loop against one scenario file).</dd><dt><a class="mod" href="lifecycle/index.html" title="mod hound_stack::lifecycle">lifecycle</a></dt><dd>The shared stack lifecycle: compose bring-up, health waits, host backend,
+SFU re-registration — and its mirror-image teardown (backend kill, SFU
+log capture, <code>compose down --volumes</code>). One <a href="lifecycle/struct.LiveStack.html" title="struct hound_stack::lifecycle::LiveStack"><code>LiveStack</code></a> per invocation
+of <code>e2e</code>/<code>visual</code>/<code>up</code>; <a href="lifecycle/struct.LiveStack.html#method.teardown" title="method hound_stack::lifecycle::LiveStack::teardown"><code>LiveStack::teardown</code></a> is idempotent, so it’s
+safe to call both explicitly (to observe teardown before the process
+exits) and again from <code>Drop</code> — a panic, early return, or PARTIAL bring-up
+failure (compose up but the backend never came) still tears everything
+down, mirroring the shell scripts’ <code>trap cleanup EXIT</code>.</dd><dt><a class="mod" href="logs/index.html" title="mod hound_stack::logs">logs</a></dt><dd>Log-file helpers for the harness’s noise policy: every subprocess writes
+its full output to a per-concern artifact file, the console gets one
+progress line per lifecycle step, and a failure surfaces the relevant
+log’s tail inline — never the whole stream.</dd><dt><a class="mod" href="ports/index.html" title="mod hound_stack::ports">ports</a></dt><dd>Port preflight: fail fast if this run’s fixed host ports are already
+taken by a leftover/concurrent stack, instead of racing it through
+<code>compose up</code>/backend-startup timeouts.</dd><dt><a class="mod" href="sfu/index.html" title="mod hound_stack::sfu">sfu</a></dt><dd>SFU (re-)registration: the SFU registers its node ID with the backend via
+a one-shot POST at ITS OWN startup — <code>compose up -d</code> only (re)creates
+containers whose config changed, so a <code>hound-sfu</code> container left running
+from a previous invocation never re-POSTs against a freshly
+<code>MIGRATE=fresh</code>’d backend (whose <code>instance</code> row has no <code>sfu_node_id</code>
+yet). Restarting it once the backend is reachable forces that POST to
+land (see MEMORY.md “SFU registration fragility” / <code>services/sfu/src/main.rs</code>).</dd><dt><a class="mod" href="tee/index.html" title="mod hound_stack::tee">tee</a></dt><dd>Run a child process, teeing its stdout/stderr to both this process’s own
+stdout/stderr and a log file — the Rust equivalent of the shell scripts’
+<code>cmd 2&gt;&amp;1 | tee "$LOG"</code>.</dd><dt><a class="mod" href="updown/index.html" title="mod hound_stack::updown">updown</a></dt><dd><code>hound-stack up</code>/<code>down</code>: manual dev convenience — bring the stack up and
+hold it open (Ctrl-C tears it down), or force a standalone teardown when
+a prior <code>up</code> didn’t get the chance to run its own cleanup (killed
+terminal, crashed host).</dd><dt><a class="mod" href="visual/index.html" title="mod hound_stack::visual">visual</a></dt><dd><code>hound-stack visual</code>: bring the stack up, bootstrap the shared community
+via [<code>hound_testkit::Env</code>] (no bash curl/jq re-implementation — see its
+module doc), spawn one <code>houndbot --testcard</code> peer into the voice call,
+run the real-app Flutter integration test, then <code>snapdiff compare</code>
+against the accepted baselines. Mirrors the retired
+<code>ui/integration_test/visual.sh</code>.</dd><dt><a class="mod" href="wait/index.html" title="mod hound_stack::wait">wait</a></dt><dd>Deadline-bounded polling — no bare sleeps beyond the poll interval (see
+<code>AGENTS.md</code>’s “Test determinism”). Every waiter here bounds total wall
+time and returns a descriptive <code>eyre</code> error on timeout instead of hanging
+or (worse) racing a downstream timeout with a less useful cause.</dd></dl></section></div></main></body></html>

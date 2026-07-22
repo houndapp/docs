@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["OUT_DIR_ENV"],"fn":["down","up"]};

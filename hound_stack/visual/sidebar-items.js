@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["INFRA_FAILURE","OUT_DIR_ENV"],"fn":["collect_screenshots","copy_pngs","count_pngs","run","run_inner","spawn_bot"],"struct":["VisualOptions"]};

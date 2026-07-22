@@ -7,7 +7,7 @@ stats-sampling internals to <a href="auth/index.html" title="mod hound_testkit::
 <p>Entry point: <a href="env/struct.Env.html#method.from_env" title="associated function hound_testkit::env::Env::from_env"><code>Env::from_env</code></a> → <a href="env/struct.Env.html#method.user" title="method hound_testkit::env::Env::user"><code>Env::user</code></a> → <a href="participant/struct.Participant.html#method.join" title="method hound_testkit::participant::Participant::join"><code>Participant::join</code></a> /
 <a href="participant/struct.Participant.html#method.open_text" title="method hound_testkit::participant::Participant::open_text"><code>Participant::open_text</code></a> for the <a href="call/struct.InCall.html" title="struct hound_testkit::call::InCall"><code>InCall</code></a>/<a href="messaging/struct.TextSpace.html" title="struct hound_testkit::messaging::TextSpace"><code>TextSpace</code></a> expectation
 DSL. The stack (compose + backend) is provided externally — see
-<code>crates/bot/e2e.sh</code> / <code>mise run e2e:call</code>.</p>
+<code>tools/stack</code> (<code>hound-stack e2e</code>) / <code>mise run e2e:call</code>.</p>
 <p>Errors are <code>eyre</code> (not a typed error enum like the product crates): test
 support wants rich contextual reports and has no consumers that match on
 variants — a deliberate deviation, not an oversight.</p>
@@ -15,14 +15,14 @@ variants — a deliberate deviation, not an oversight.</p>
 listener <code>HoundClient</code>’s interactive flow binds — a headless caller never
 clicks the emailed link, so that listener is dead weight, and skipping it
 makes concurrent sign-ins trivially port-safe), poll Mailpit for the code,
-and adopt the session. Ported out of <code>crates/bot</code> so both <code>houndbot</code> and
+and adopt the session. Ported out of <code>tools/houndbot</code> so both <code>houndbot</code> and
 the scenario suite (<code>crate::env::Env::user</code>) share one implementation.</dd><dt><a class="mod" href="call/index.html" title="mod hound_testkit::call">call</a></dt><dd><code>InCall</code>: a joined participant’s call handle. Every <code>expect_*</code> is
 deadline-bounded and watch-driven — it polls a <code>tokio::sync::watch</code>
 channel to a condition (never a blind <code>sleep</code>-then-assert), and fails with
 the last-observed state on timeout.</dd><dt><a class="mod" href="env/index.html" title="mod hound_testkit::env">env</a></dt><dd><code>Env</code>: the shared per-process scenario harness — backend/Mailpit endpoints, a
 lazily-bootstrapped default community (<code>general</code>/<code>voice</code> space pair), and
 per-run-unique participant emails.</dd><dt><a class="mod" href="mailpit/index.html" title="mod hound_testkit::mailpit">mailpit</a></dt><dd>Mailpit polling: find the magic-link email the backend sent and pull out its
-sign-in code. Moved here (from <code>crates/bot</code>) so both <code>houndbot</code> and the
+sign-in code. Moved here (from <code>tools/houndbot</code>) so both <code>houndbot</code> and the
 scenario suite share one implementation.</dd><dt><a class="mod" href="messaging/index.html" title="mod hound_testkit::messaging">messaging</a></dt><dd>Messaging over an opened text space: send + a deadline-bounded,
 watch-driven wait for a message with matching contents to arrive via the
 realtime plane (or be present already — history + a same-tick echo both

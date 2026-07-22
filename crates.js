@@ -1,2 +1,2 @@
-window.ALL_CRATES = ["backend","hound_auth","hound_browser_auth","hound_client","hound_control","hound_engine","hound_media","hound_passkey","hound_render","hound_sfu","hound_steam","hound_testkit","hound_transport","houndbot","houndctl","migration","openapi","rust_lib_app_flutter","snapdiff"];
-//{"start":21,"fragment_lengths":[9,13,21,15,16,15,14,16,15,12,14,16,18,11,11,12,10,23,11]}
+window.ALL_CRATES = ["backend","hound_auth","hound_browser_auth","hound_client","hound_control","hound_engine","hound_media","hound_passkey","hound_render","hound_sfu","hound_stack","hound_steam","hound_testkit","hound_transport","houndbot","houndctl","migration","openapi","rust_lib_houndchat","snapdiff"];
+//{"start":21,"fragment_lengths":[9,13,21,15,16,15,14,16,15,12,14,14,16,18,11,11,12,10,21,11]}

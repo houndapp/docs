@@ -27,7 +27,7 @@ stamped on <code>clock</code>. Infallible in practice — kept <code>Result</cod
 the real device openers it stands in for.
 <code>testcard</code> switches from the moving pattern to the static test card:
 no per-frame motion, pure function of geometry — for visual snapshot
-testing (ui/integration_test/visual_test.dart + crates/snapdiff), where
+testing (ui/integration_test/visual_test.dart + tools/snapdiff), where
 a rendered peer tile must be pixel-identical run over run. The moving
 pattern stays the norm everywhere else: its motion is what keeps the
 encoder producing real bitrate, which the call e2e suite’s
