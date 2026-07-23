@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["JwtClaimsError"],"fn":["decode_magic_register","decode_steam_link"],"mod":["jwt_claims","relay"],"struct":["MagicRegisterClaims","SteamLinkClaims"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AuthError"],"fn":["refresh_token","revoke_token","validate_token"],"struct":["Claims","Jwt","MagicRegisterClaims","RefreshTokenRequest","RefreshTokenResponse","SteamLinkClaims"]};
+window.SIDEBAR_ITEMS = {"enum":["AuthError"],"fn":["refresh_token","revoke_token","validate_token"],"struct":["Claims","Jwt","RefreshTokenRequest","RefreshTokenResponse"]};

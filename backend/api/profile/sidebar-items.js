@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["get_global_profile","patch_global_avatar","router"],"struct":["FindProfileParameters","MergedProfile","PatchAvatarRequest","ProfileResponse"]};
+window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["get_global_profile","patch_global_avatar","router"],"struct":["FindProfileParameters","PatchAvatarRequest","ProfileResponse"]};
