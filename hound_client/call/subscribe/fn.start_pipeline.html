@@ -7,7 +7,7 @@
     space_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
     relay: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;MoqRelaySession&gt;,
     sink: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="../trait.VideoSink.html" title="trait hound_client::call::VideoSink">VideoSink</a>&gt;,
-    playout_bus: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../../../hound_engine/audio/mix/struct.PlayoutBus.html" title="struct hound_engine::audio::mix::PlayoutBus">PlayoutBus</a>&gt;,
+    playout_bus: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;PlayoutBus&gt;,
     levels: Sender&lt;<a class="struct" href="../struct.LevelsView.html" title="struct hound_client::call::LevelsView">LevelsView</a>&gt;,
     clock: CaptureClock,
     stats: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../../stats/struct.CallStats.html" title="struct hound_client::stats::CallStats">CallStats</a>&gt;,
