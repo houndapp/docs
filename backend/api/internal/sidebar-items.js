@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["authorized","get_sfu_nodes","post_sfu_register","router"],"struct":["SfuRegisterRequest"]};
+window.SIDEBAR_ITEMS = {"constant":["METRICS_CI_MAX_BYTES"],"fn":["authorized","get_metrics","get_sfu_nodes","post_metrics_ci","post_sfu_register","router"],"struct":["SfuRegisterRequest"]};
