@@ -1069,177 +1069,181 @@
 <a href=#1069 id=1069 data-nosnippet>1069</a>                PeerInfo {
 <a href=#1070 id=1070 data-nosnippet>1070</a>                    id: PeerId(<span class="number">1</span>),
 <a href=#1071 id=1071 data-nosnippet>1071</a>                    decode_caps: DecodeCaps::ALL,
-<a href=#1072 id=1072 data-nosnippet>1072</a>                },
-<a href=#1073 id=1073 data-nosnippet>1073</a>                PeerInfo {
-<a href=#1074 id=1074 data-nosnippet>1074</a>                    id: PeerId(<span class="number">2</span>),
-<a href=#1075 id=1075 data-nosnippet>1075</a>                    decode_caps: DecodeCaps::ALL,
-<a href=#1076 id=1076 data-nosnippet>1076</a>                },
-<a href=#1077 id=1077 data-nosnippet>1077</a>            ],
-<a href=#1078 id=1078 data-nosnippet>1078</a>            tracks: <span class="macro">vec!</span>[
-<a href=#1079 id=1079 data-nosnippet>1079</a>                TrackInfo {
-<a href=#1080 id=1080 data-nosnippet>1080</a>                    id: TrackId(<span class="number">10</span>),
-<a href=#1081 id=1081 data-nosnippet>1081</a>                    peer: PeerId(<span class="number">1</span>),
-<a href=#1082 id=1082 data-nosnippet>1082</a>                    kind: MediaKind::Video,
-<a href=#1083 id=1083 data-nosnippet>1083</a>                    source: Source::Camera,
-<a href=#1084 id=1084 data-nosnippet>1084</a>                    codec: CtlCodec::H264,
-<a href=#1085 id=1085 data-nosnippet>1085</a>                    muted: <span class="bool-val">false</span>,
-<a href=#1086 id=1086 data-nosnippet>1086</a>                    low: <span class="bool-val">false</span>,
-<a href=#1087 id=1087 data-nosnippet>1087</a>                },
-<a href=#1088 id=1088 data-nosnippet>1088</a>                TrackInfo {
-<a href=#1089 id=1089 data-nosnippet>1089</a>                    id: TrackId(<span class="number">20</span>),
-<a href=#1090 id=1090 data-nosnippet>1090</a>                    peer: PeerId(<span class="number">2</span>),
-<a href=#1091 id=1091 data-nosnippet>1091</a>                    kind: MediaKind::Video,
-<a href=#1092 id=1092 data-nosnippet>1092</a>                    source: Source::Camera,
-<a href=#1093 id=1093 data-nosnippet>1093</a>                    codec: CtlCodec::H264,
-<a href=#1094 id=1094 data-nosnippet>1094</a>                    muted: <span class="bool-val">false</span>,
-<a href=#1095 id=1095 data-nosnippet>1095</a>                    low: <span class="bool-val">false</span>,
-<a href=#1096 id=1096 data-nosnippet>1096</a>                },
-<a href=#1097 id=1097 data-nosnippet>1097</a>            ],
-<a href=#1098 id=1098 data-nosnippet>1098</a>        });
-<a href=#1099 id=1099 data-nosnippet>1099</a>        <span class="kw">let </span>(_view_tx, view_rx) = watch::channel(view);
-<a href=#1100 id=1100 data-nosnippet>1100</a>        <span class="kw">let </span>(fb_tx, fb_rx) = broadcast::channel::&lt;MediaFeedback&gt;(<span class="number">8</span>);
-<a href=#1101 id=1101 data-nosnippet>1101</a>        <span class="kw">let </span>adapt = Arc::new(AdaptShared::default());
-<a href=#1102 id=1102 data-nosnippet>1102</a>        <span class="kw">let </span>layers = Arc::new(LayerControl::new(<span class="number">1_000_000</span>));
-<a href=#1103 id=1103 data-nosnippet>1103</a>        <span class="kw">let </span>task = spawn_feedback_listener(
-<a href=#1104 id=1104 data-nosnippet>1104</a>            fb_rx,
-<a href=#1105 id=1105 data-nosnippet>1105</a>            view_rx,
-<a href=#1106 id=1106 data-nosnippet>1106</a>            PeerId(<span class="number">1</span>),
-<a href=#1107 id=1107 data-nosnippet>1107</a>            Source::Camera,
-<a href=#1108 id=1108 data-nosnippet>1108</a>            adapt.clone(),
-<a href=#1109 id=1109 data-nosnippet>1109</a>            layers,
-<a href=#1110 id=1110 data-nosnippet>1110</a>        );
-<a href=#1111 id=1111 data-nosnippet>1111</a>
-<a href=#1112 id=1112 data-nosnippet>1112</a>        <span class="comment">// A report for a peer's track (20) must be ignored.
-<a href=#1113 id=1113 data-nosnippet>1113</a>        </span>fb_tx
-<a href=#1114 id=1114 data-nosnippet>1114</a>            .send(MediaFeedback {
-<a href=#1115 id=1115 data-nosnippet>1115</a>                track: TrackId(<span class="number">20</span>),
-<a href=#1116 id=1116 data-nosnippet>1116</a>                from: PeerId(<span class="number">2</span>),
-<a href=#1117 id=1117 data-nosnippet>1117</a>                received: <span class="number">50</span>,
-<a href=#1118 id=1118 data-nosnippet>1118</a>                lost: <span class="number">50</span>,
-<a href=#1119 id=1119 data-nosnippet>1119</a>                jitter_us: <span class="prelude-val">None</span>,
-<a href=#1120 id=1120 data-nosnippet>1120</a>            })
-<a href=#1121 id=1121 data-nosnippet>1121</a>            .unwrap();
-<a href=#1122 id=1122 data-nosnippet>1122</a>        <span class="comment">// A report for OUR track (10) must fold.
-<a href=#1123 id=1123 data-nosnippet>1123</a>        </span>fb_tx
-<a href=#1124 id=1124 data-nosnippet>1124</a>            .send(MediaFeedback {
-<a href=#1125 id=1125 data-nosnippet>1125</a>                track: TrackId(<span class="number">10</span>),
-<a href=#1126 id=1126 data-nosnippet>1126</a>                from: PeerId(<span class="number">2</span>),
-<a href=#1127 id=1127 data-nosnippet>1127</a>                received: <span class="number">90</span>,
-<a href=#1128 id=1128 data-nosnippet>1128</a>                lost: <span class="number">10</span>,
-<a href=#1129 id=1129 data-nosnippet>1129</a>                jitter_us: <span class="prelude-val">None</span>,
-<a href=#1130 id=1130 data-nosnippet>1130</a>            })
-<a href=#1131 id=1131 data-nosnippet>1131</a>            .unwrap();
-<a href=#1132 id=1132 data-nosnippet>1132</a>
-<a href=#1133 id=1133 data-nosnippet>1133</a>        <span class="comment">// Give the listener task a moment to drain both.
-<a href=#1134 id=1134 data-nosnippet>1134</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
-<a href=#1135 id=1135 data-nosnippet>1135</a>            <span class="kw">if </span>adapt.remote_reported.load(Ordering::Relaxed) {
-<a href=#1136 id=1136 data-nosnippet>1136</a>                <span class="kw">break</span>;
-<a href=#1137 id=1137 data-nosnippet>1137</a>            }
-<a href=#1138 id=1138 data-nosnippet>1138</a>            tokio::time::sleep(std::time::Duration::from_millis(<span class="number">1</span>)).<span class="kw">await</span>;
-<a href=#1139 id=1139 data-nosnippet>1139</a>        }
-<a href=#1140 id=1140 data-nosnippet>1140</a>        <span class="kw">let </span>loss = adapt.take_remote_loss().expect(<span class="string">"our-track report folded"</span>);
-<a href=#1141 id=1141 data-nosnippet>1141</a>        <span class="macro">assert!</span>(
-<a href=#1142 id=1142 data-nosnippet>1142</a>            (loss - <span class="number">0.10</span>).abs() &lt; <span class="number">1e-6</span>,
-<a href=#1143 id=1143 data-nosnippet>1143</a>            <span class="string">"only our track's 10% loss folded, got {loss}"
-<a href=#1144 id=1144 data-nosnippet>1144</a>        </span>);
-<a href=#1145 id=1145 data-nosnippet>1145</a>        task.abort();
-<a href=#1146 id=1146 data-nosnippet>1146</a>    }
-<a href=#1147 id=1147 data-nosnippet>1147</a>
-<a href=#1148 id=1148 data-nosnippet>1148</a>    <span class="doccomment">/// A peer the planner has capped (requested a below-source layer) must never have
-<a href=#1149 id=1149 data-nosnippet>1149</a>    /// its report folded into the SOURCE track's BWE — even though the report names
-<a href=#1150 id=1150 data-nosnippet>1150</a>    /// our source track (the `subscribe.rs`-side fallback puts a capped peer on the
-<a href=#1151 id=1151 data-nosnippet>1151</a>    /// source track transiently, before the low track's first frame). A peer the
-<a href=#1152 id=1152 data-nosnippet>1152</a>    /// planner has NO entry for (assumed to take source, per `SimulcastPlanner`'s own
-<a href=#1153 id=1153 data-nosnippet>1153</a>    /// doc comment) still folds normally — proving the exclusion is specific to capped
-<a href=#1154 id=1154 data-nosnippet>1154</a>    /// peers, not a general breakage.
-<a href=#1155 id=1155 data-nosnippet>1155</a>    </span><span class="attr">#[tokio::test]
-<a href=#1156 id=1156 data-nosnippet>1156</a>    </span><span class="kw">async fn </span>feedback_listener_excludes_capped_peer_reports() {
-<a href=#1157 id=1157 data-nosnippet>1157</a>        <span class="kw">use </span>hound_control::{DecodeCaps, PeerInfo, TrackId, TrackInfo};
-<a href=#1158 id=1158 data-nosnippet>1158</a>
-<a href=#1159 id=1159 data-nosnippet>1159</a>        <span class="comment">// Same fixture as `feedback_listener_filters_to_our_track`: track 10 is OUR
-<a href=#1160 id=1160 data-nosnippet>1160</a>        // camera (peer 1 = self); peer 2 is a remote peer subscribed to it.
-<a href=#1161 id=1161 data-nosnippet>1161</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>view = SessionView::new();
-<a href=#1162 id=1162 data-nosnippet>1162</a>        view.apply(<span class="kw-2">&amp;</span>ServerMessage::Welcome {
-<a href=#1163 id=1163 data-nosnippet>1163</a>            protocol_version: PROTOCOL_VERSION,
-<a href=#1164 id=1164 data-nosnippet>1164</a>            self_id: PeerId(<span class="number">1</span>),
-<a href=#1165 id=1165 data-nosnippet>1165</a>            peers: <span class="macro">vec!</span>[
-<a href=#1166 id=1166 data-nosnippet>1166</a>                PeerInfo {
-<a href=#1167 id=1167 data-nosnippet>1167</a>                    id: PeerId(<span class="number">1</span>),
-<a href=#1168 id=1168 data-nosnippet>1168</a>                    decode_caps: DecodeCaps::ALL,
-<a href=#1169 id=1169 data-nosnippet>1169</a>                },
-<a href=#1170 id=1170 data-nosnippet>1170</a>                PeerInfo {
-<a href=#1171 id=1171 data-nosnippet>1171</a>                    id: PeerId(<span class="number">2</span>),
-<a href=#1172 id=1172 data-nosnippet>1172</a>                    decode_caps: DecodeCaps::ALL,
-<a href=#1173 id=1173 data-nosnippet>1173</a>                },
-<a href=#1174 id=1174 data-nosnippet>1174</a>            ],
-<a href=#1175 id=1175 data-nosnippet>1175</a>            tracks: <span class="macro">vec!</span>[TrackInfo {
-<a href=#1176 id=1176 data-nosnippet>1176</a>                id: TrackId(<span class="number">10</span>),
-<a href=#1177 id=1177 data-nosnippet>1177</a>                peer: PeerId(<span class="number">1</span>),
-<a href=#1178 id=1178 data-nosnippet>1178</a>                kind: MediaKind::Video,
-<a href=#1179 id=1179 data-nosnippet>1179</a>                source: Source::Camera,
-<a href=#1180 id=1180 data-nosnippet>1180</a>                codec: CtlCodec::H264,
-<a href=#1181 id=1181 data-nosnippet>1181</a>                muted: <span class="bool-val">false</span>,
-<a href=#1182 id=1182 data-nosnippet>1182</a>                low: <span class="bool-val">false</span>,
-<a href=#1183 id=1183 data-nosnippet>1183</a>            }],
-<a href=#1184 id=1184 data-nosnippet>1184</a>        });
-<a href=#1185 id=1185 data-nosnippet>1185</a>        <span class="kw">let </span>(_view_tx, view_rx) = watch::channel(view);
-<a href=#1186 id=1186 data-nosnippet>1186</a>        <span class="kw">let </span>(fb_tx, fb_rx) = broadcast::channel::&lt;MediaFeedback&gt;(<span class="number">8</span>);
-<a href=#1187 id=1187 data-nosnippet>1187</a>        <span class="kw">let </span>adapt = Arc::new(AdaptShared::default());
-<a href=#1188 id=1188 data-nosnippet>1188</a>        <span class="kw">let </span>layers = Arc::new(LayerControl::new(<span class="number">1_000_000</span>));
-<a href=#1189 id=1189 data-nosnippet>1189</a>        <span class="comment">// Mark peer 2 as capped (below the 1_000_000 source_bps) — the planner now
-<a href=#1190 id=1190 data-nosnippet>1190</a>        // considers it a low-layer receiver.
-<a href=#1191 id=1191 data-nosnippet>1191</a>        </span>layers.set_request(<span class="number">2</span>, hound_media::QualityRequest::Capped(<span class="number">200_000</span>));
-<a href=#1192 id=1192 data-nosnippet>1192</a>        <span class="kw">let </span>task = spawn_feedback_listener(
-<a href=#1193 id=1193 data-nosnippet>1193</a>            fb_rx,
-<a href=#1194 id=1194 data-nosnippet>1194</a>            view_rx,
-<a href=#1195 id=1195 data-nosnippet>1195</a>            PeerId(<span class="number">1</span>),
-<a href=#1196 id=1196 data-nosnippet>1196</a>            Source::Camera,
-<a href=#1197 id=1197 data-nosnippet>1197</a>            adapt.clone(),
-<a href=#1198 id=1198 data-nosnippet>1198</a>            layers,
-<a href=#1199 id=1199 data-nosnippet>1199</a>        );
-<a href=#1200 id=1200 data-nosnippet>1200</a>
-<a href=#1201 id=1201 data-nosnippet>1201</a>        <span class="comment">// A capped peer's report on our source track must never fold.
-<a href=#1202 id=1202 data-nosnippet>1202</a>        </span>fb_tx
-<a href=#1203 id=1203 data-nosnippet>1203</a>            .send(MediaFeedback {
-<a href=#1204 id=1204 data-nosnippet>1204</a>                track: TrackId(<span class="number">10</span>),
-<a href=#1205 id=1205 data-nosnippet>1205</a>                from: PeerId(<span class="number">2</span>),
-<a href=#1206 id=1206 data-nosnippet>1206</a>                received: <span class="number">50</span>,
-<a href=#1207 id=1207 data-nosnippet>1207</a>                lost: <span class="number">50</span>,
-<a href=#1208 id=1208 data-nosnippet>1208</a>                jitter_us: <span class="prelude-val">None</span>,
-<a href=#1209 id=1209 data-nosnippet>1209</a>            })
-<a href=#1210 id=1210 data-nosnippet>1210</a>            .unwrap();
-<a href=#1211 id=1211 data-nosnippet>1211</a>        <span class="comment">// Give the listener a moment to (not) process it.
-<a href=#1212 id=1212 data-nosnippet>1212</a>        </span>tokio::time::sleep(std::time::Duration::from_millis(<span class="number">50</span>)).<span class="kw">await</span>;
-<a href=#1213 id=1213 data-nosnippet>1213</a>        <span class="macro">assert!</span>(
-<a href=#1214 id=1214 data-nosnippet>1214</a>            adapt.take_remote_loss().is_none(),
-<a href=#1215 id=1215 data-nosnippet>1215</a>            <span class="string">"a capped peer's report must never fold into the source adaptation"
-<a href=#1216 id=1216 data-nosnippet>1216</a>        </span>);
-<a href=#1217 id=1217 data-nosnippet>1217</a>
-<a href=#1218 id=1218 data-nosnippet>1218</a>        <span class="comment">// A NON-capped peer's report (the planner has no entry for peer 3 — assumed to
-<a href=#1219 id=1219 data-nosnippet>1219</a>        // take source) must still fold normally.
-<a href=#1220 id=1220 data-nosnippet>1220</a>        </span>fb_tx
-<a href=#1221 id=1221 data-nosnippet>1221</a>            .send(MediaFeedback {
-<a href=#1222 id=1222 data-nosnippet>1222</a>                track: TrackId(<span class="number">10</span>),
-<a href=#1223 id=1223 data-nosnippet>1223</a>                from: PeerId(<span class="number">3</span>),
-<a href=#1224 id=1224 data-nosnippet>1224</a>                received: <span class="number">90</span>,
-<a href=#1225 id=1225 data-nosnippet>1225</a>                lost: <span class="number">10</span>,
-<a href=#1226 id=1226 data-nosnippet>1226</a>                jitter_us: <span class="prelude-val">None</span>,
-<a href=#1227 id=1227 data-nosnippet>1227</a>            })
-<a href=#1228 id=1228 data-nosnippet>1228</a>            .unwrap();
-<a href=#1229 id=1229 data-nosnippet>1229</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
-<a href=#1230 id=1230 data-nosnippet>1230</a>            <span class="kw">if </span>adapt.remote_reported.load(Ordering::Relaxed) {
-<a href=#1231 id=1231 data-nosnippet>1231</a>                <span class="kw">break</span>;
-<a href=#1232 id=1232 data-nosnippet>1232</a>            }
-<a href=#1233 id=1233 data-nosnippet>1233</a>            tokio::time::sleep(std::time::Duration::from_millis(<span class="number">1</span>)).<span class="kw">await</span>;
-<a href=#1234 id=1234 data-nosnippet>1234</a>        }
-<a href=#1235 id=1235 data-nosnippet>1235</a>        <span class="kw">let </span>loss = adapt
-<a href=#1236 id=1236 data-nosnippet>1236</a>            .take_remote_loss()
-<a href=#1237 id=1237 data-nosnippet>1237</a>            .expect(<span class="string">"a non-capped peer's report must fold"</span>);
-<a href=#1238 id=1238 data-nosnippet>1238</a>        <span class="macro">assert!</span>(
-<a href=#1239 id=1239 data-nosnippet>1239</a>            (loss - <span class="number">0.10</span>).abs() &lt; <span class="number">1e-6</span>,
-<a href=#1240 id=1240 data-nosnippet>1240</a>            <span class="string">"non-capped peer's 10% loss folded, got {loss}"
-<a href=#1241 id=1241 data-nosnippet>1241</a>        </span>);
-<a href=#1242 id=1242 data-nosnippet>1242</a>        task.abort();
-<a href=#1243 id=1243 data-nosnippet>1243</a>    }
-<a href=#1244 id=1244 data-nosnippet>1244</a>}
+<a href=#1072 id=1072 data-nosnippet>1072</a>                    user_id: uuid::Uuid::nil(),
+<a href=#1073 id=1073 data-nosnippet>1073</a>                },
+<a href=#1074 id=1074 data-nosnippet>1074</a>                PeerInfo {
+<a href=#1075 id=1075 data-nosnippet>1075</a>                    id: PeerId(<span class="number">2</span>),
+<a href=#1076 id=1076 data-nosnippet>1076</a>                    decode_caps: DecodeCaps::ALL,
+<a href=#1077 id=1077 data-nosnippet>1077</a>                    user_id: uuid::Uuid::nil(),
+<a href=#1078 id=1078 data-nosnippet>1078</a>                },
+<a href=#1079 id=1079 data-nosnippet>1079</a>            ],
+<a href=#1080 id=1080 data-nosnippet>1080</a>            tracks: <span class="macro">vec!</span>[
+<a href=#1081 id=1081 data-nosnippet>1081</a>                TrackInfo {
+<a href=#1082 id=1082 data-nosnippet>1082</a>                    id: TrackId(<span class="number">10</span>),
+<a href=#1083 id=1083 data-nosnippet>1083</a>                    peer: PeerId(<span class="number">1</span>),
+<a href=#1084 id=1084 data-nosnippet>1084</a>                    kind: MediaKind::Video,
+<a href=#1085 id=1085 data-nosnippet>1085</a>                    source: Source::Camera,
+<a href=#1086 id=1086 data-nosnippet>1086</a>                    codec: CtlCodec::H264,
+<a href=#1087 id=1087 data-nosnippet>1087</a>                    muted: <span class="bool-val">false</span>,
+<a href=#1088 id=1088 data-nosnippet>1088</a>                    low: <span class="bool-val">false</span>,
+<a href=#1089 id=1089 data-nosnippet>1089</a>                },
+<a href=#1090 id=1090 data-nosnippet>1090</a>                TrackInfo {
+<a href=#1091 id=1091 data-nosnippet>1091</a>                    id: TrackId(<span class="number">20</span>),
+<a href=#1092 id=1092 data-nosnippet>1092</a>                    peer: PeerId(<span class="number">2</span>),
+<a href=#1093 id=1093 data-nosnippet>1093</a>                    kind: MediaKind::Video,
+<a href=#1094 id=1094 data-nosnippet>1094</a>                    source: Source::Camera,
+<a href=#1095 id=1095 data-nosnippet>1095</a>                    codec: CtlCodec::H264,
+<a href=#1096 id=1096 data-nosnippet>1096</a>                    muted: <span class="bool-val">false</span>,
+<a href=#1097 id=1097 data-nosnippet>1097</a>                    low: <span class="bool-val">false</span>,
+<a href=#1098 id=1098 data-nosnippet>1098</a>                },
+<a href=#1099 id=1099 data-nosnippet>1099</a>            ],
+<a href=#1100 id=1100 data-nosnippet>1100</a>        });
+<a href=#1101 id=1101 data-nosnippet>1101</a>        <span class="kw">let </span>(_view_tx, view_rx) = watch::channel(view);
+<a href=#1102 id=1102 data-nosnippet>1102</a>        <span class="kw">let </span>(fb_tx, fb_rx) = broadcast::channel::&lt;MediaFeedback&gt;(<span class="number">8</span>);
+<a href=#1103 id=1103 data-nosnippet>1103</a>        <span class="kw">let </span>adapt = Arc::new(AdaptShared::default());
+<a href=#1104 id=1104 data-nosnippet>1104</a>        <span class="kw">let </span>layers = Arc::new(LayerControl::new(<span class="number">1_000_000</span>));
+<a href=#1105 id=1105 data-nosnippet>1105</a>        <span class="kw">let </span>task = spawn_feedback_listener(
+<a href=#1106 id=1106 data-nosnippet>1106</a>            fb_rx,
+<a href=#1107 id=1107 data-nosnippet>1107</a>            view_rx,
+<a href=#1108 id=1108 data-nosnippet>1108</a>            PeerId(<span class="number">1</span>),
+<a href=#1109 id=1109 data-nosnippet>1109</a>            Source::Camera,
+<a href=#1110 id=1110 data-nosnippet>1110</a>            adapt.clone(),
+<a href=#1111 id=1111 data-nosnippet>1111</a>            layers,
+<a href=#1112 id=1112 data-nosnippet>1112</a>        );
+<a href=#1113 id=1113 data-nosnippet>1113</a>
+<a href=#1114 id=1114 data-nosnippet>1114</a>        <span class="comment">// A report for a peer's track (20) must be ignored.
+<a href=#1115 id=1115 data-nosnippet>1115</a>        </span>fb_tx
+<a href=#1116 id=1116 data-nosnippet>1116</a>            .send(MediaFeedback {
+<a href=#1117 id=1117 data-nosnippet>1117</a>                track: TrackId(<span class="number">20</span>),
+<a href=#1118 id=1118 data-nosnippet>1118</a>                from: PeerId(<span class="number">2</span>),
+<a href=#1119 id=1119 data-nosnippet>1119</a>                received: <span class="number">50</span>,
+<a href=#1120 id=1120 data-nosnippet>1120</a>                lost: <span class="number">50</span>,
+<a href=#1121 id=1121 data-nosnippet>1121</a>                jitter_us: <span class="prelude-val">None</span>,
+<a href=#1122 id=1122 data-nosnippet>1122</a>            })
+<a href=#1123 id=1123 data-nosnippet>1123</a>            .unwrap();
+<a href=#1124 id=1124 data-nosnippet>1124</a>        <span class="comment">// A report for OUR track (10) must fold.
+<a href=#1125 id=1125 data-nosnippet>1125</a>        </span>fb_tx
+<a href=#1126 id=1126 data-nosnippet>1126</a>            .send(MediaFeedback {
+<a href=#1127 id=1127 data-nosnippet>1127</a>                track: TrackId(<span class="number">10</span>),
+<a href=#1128 id=1128 data-nosnippet>1128</a>                from: PeerId(<span class="number">2</span>),
+<a href=#1129 id=1129 data-nosnippet>1129</a>                received: <span class="number">90</span>,
+<a href=#1130 id=1130 data-nosnippet>1130</a>                lost: <span class="number">10</span>,
+<a href=#1131 id=1131 data-nosnippet>1131</a>                jitter_us: <span class="prelude-val">None</span>,
+<a href=#1132 id=1132 data-nosnippet>1132</a>            })
+<a href=#1133 id=1133 data-nosnippet>1133</a>            .unwrap();
+<a href=#1134 id=1134 data-nosnippet>1134</a>
+<a href=#1135 id=1135 data-nosnippet>1135</a>        <span class="comment">// Give the listener task a moment to drain both.
+<a href=#1136 id=1136 data-nosnippet>1136</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
+<a href=#1137 id=1137 data-nosnippet>1137</a>            <span class="kw">if </span>adapt.remote_reported.load(Ordering::Relaxed) {
+<a href=#1138 id=1138 data-nosnippet>1138</a>                <span class="kw">break</span>;
+<a href=#1139 id=1139 data-nosnippet>1139</a>            }
+<a href=#1140 id=1140 data-nosnippet>1140</a>            tokio::time::sleep(std::time::Duration::from_millis(<span class="number">1</span>)).<span class="kw">await</span>;
+<a href=#1141 id=1141 data-nosnippet>1141</a>        }
+<a href=#1142 id=1142 data-nosnippet>1142</a>        <span class="kw">let </span>loss = adapt.take_remote_loss().expect(<span class="string">"our-track report folded"</span>);
+<a href=#1143 id=1143 data-nosnippet>1143</a>        <span class="macro">assert!</span>(
+<a href=#1144 id=1144 data-nosnippet>1144</a>            (loss - <span class="number">0.10</span>).abs() &lt; <span class="number">1e-6</span>,
+<a href=#1145 id=1145 data-nosnippet>1145</a>            <span class="string">"only our track's 10% loss folded, got {loss}"
+<a href=#1146 id=1146 data-nosnippet>1146</a>        </span>);
+<a href=#1147 id=1147 data-nosnippet>1147</a>        task.abort();
+<a href=#1148 id=1148 data-nosnippet>1148</a>    }
+<a href=#1149 id=1149 data-nosnippet>1149</a>
+<a href=#1150 id=1150 data-nosnippet>1150</a>    <span class="doccomment">/// A peer the planner has capped (requested a below-source layer) must never have
+<a href=#1151 id=1151 data-nosnippet>1151</a>    /// its report folded into the SOURCE track's BWE — even though the report names
+<a href=#1152 id=1152 data-nosnippet>1152</a>    /// our source track (the `subscribe.rs`-side fallback puts a capped peer on the
+<a href=#1153 id=1153 data-nosnippet>1153</a>    /// source track transiently, before the low track's first frame). A peer the
+<a href=#1154 id=1154 data-nosnippet>1154</a>    /// planner has NO entry for (assumed to take source, per `SimulcastPlanner`'s own
+<a href=#1155 id=1155 data-nosnippet>1155</a>    /// doc comment) still folds normally — proving the exclusion is specific to capped
+<a href=#1156 id=1156 data-nosnippet>1156</a>    /// peers, not a general breakage.
+<a href=#1157 id=1157 data-nosnippet>1157</a>    </span><span class="attr">#[tokio::test]
+<a href=#1158 id=1158 data-nosnippet>1158</a>    </span><span class="kw">async fn </span>feedback_listener_excludes_capped_peer_reports() {
+<a href=#1159 id=1159 data-nosnippet>1159</a>        <span class="kw">use </span>hound_control::{DecodeCaps, PeerInfo, TrackId, TrackInfo};
+<a href=#1160 id=1160 data-nosnippet>1160</a>
+<a href=#1161 id=1161 data-nosnippet>1161</a>        <span class="comment">// Same fixture as `feedback_listener_filters_to_our_track`: track 10 is OUR
+<a href=#1162 id=1162 data-nosnippet>1162</a>        // camera (peer 1 = self); peer 2 is a remote peer subscribed to it.
+<a href=#1163 id=1163 data-nosnippet>1163</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>view = SessionView::new();
+<a href=#1164 id=1164 data-nosnippet>1164</a>        view.apply(<span class="kw-2">&amp;</span>ServerMessage::Welcome {
+<a href=#1165 id=1165 data-nosnippet>1165</a>            protocol_version: PROTOCOL_VERSION,
+<a href=#1166 id=1166 data-nosnippet>1166</a>            self_id: PeerId(<span class="number">1</span>),
+<a href=#1167 id=1167 data-nosnippet>1167</a>            peers: <span class="macro">vec!</span>[
+<a href=#1168 id=1168 data-nosnippet>1168</a>                PeerInfo {
+<a href=#1169 id=1169 data-nosnippet>1169</a>                    id: PeerId(<span class="number">1</span>),
+<a href=#1170 id=1170 data-nosnippet>1170</a>                    decode_caps: DecodeCaps::ALL,
+<a href=#1171 id=1171 data-nosnippet>1171</a>                    user_id: uuid::Uuid::nil(),
+<a href=#1172 id=1172 data-nosnippet>1172</a>                },
+<a href=#1173 id=1173 data-nosnippet>1173</a>                PeerInfo {
+<a href=#1174 id=1174 data-nosnippet>1174</a>                    id: PeerId(<span class="number">2</span>),
+<a href=#1175 id=1175 data-nosnippet>1175</a>                    decode_caps: DecodeCaps::ALL,
+<a href=#1176 id=1176 data-nosnippet>1176</a>                    user_id: uuid::Uuid::nil(),
+<a href=#1177 id=1177 data-nosnippet>1177</a>                },
+<a href=#1178 id=1178 data-nosnippet>1178</a>            ],
+<a href=#1179 id=1179 data-nosnippet>1179</a>            tracks: <span class="macro">vec!</span>[TrackInfo {
+<a href=#1180 id=1180 data-nosnippet>1180</a>                id: TrackId(<span class="number">10</span>),
+<a href=#1181 id=1181 data-nosnippet>1181</a>                peer: PeerId(<span class="number">1</span>),
+<a href=#1182 id=1182 data-nosnippet>1182</a>                kind: MediaKind::Video,
+<a href=#1183 id=1183 data-nosnippet>1183</a>                source: Source::Camera,
+<a href=#1184 id=1184 data-nosnippet>1184</a>                codec: CtlCodec::H264,
+<a href=#1185 id=1185 data-nosnippet>1185</a>                muted: <span class="bool-val">false</span>,
+<a href=#1186 id=1186 data-nosnippet>1186</a>                low: <span class="bool-val">false</span>,
+<a href=#1187 id=1187 data-nosnippet>1187</a>            }],
+<a href=#1188 id=1188 data-nosnippet>1188</a>        });
+<a href=#1189 id=1189 data-nosnippet>1189</a>        <span class="kw">let </span>(_view_tx, view_rx) = watch::channel(view);
+<a href=#1190 id=1190 data-nosnippet>1190</a>        <span class="kw">let </span>(fb_tx, fb_rx) = broadcast::channel::&lt;MediaFeedback&gt;(<span class="number">8</span>);
+<a href=#1191 id=1191 data-nosnippet>1191</a>        <span class="kw">let </span>adapt = Arc::new(AdaptShared::default());
+<a href=#1192 id=1192 data-nosnippet>1192</a>        <span class="kw">let </span>layers = Arc::new(LayerControl::new(<span class="number">1_000_000</span>));
+<a href=#1193 id=1193 data-nosnippet>1193</a>        <span class="comment">// Mark peer 2 as capped (below the 1_000_000 source_bps) — the planner now
+<a href=#1194 id=1194 data-nosnippet>1194</a>        // considers it a low-layer receiver.
+<a href=#1195 id=1195 data-nosnippet>1195</a>        </span>layers.set_request(<span class="number">2</span>, hound_media::QualityRequest::Capped(<span class="number">200_000</span>));
+<a href=#1196 id=1196 data-nosnippet>1196</a>        <span class="kw">let </span>task = spawn_feedback_listener(
+<a href=#1197 id=1197 data-nosnippet>1197</a>            fb_rx,
+<a href=#1198 id=1198 data-nosnippet>1198</a>            view_rx,
+<a href=#1199 id=1199 data-nosnippet>1199</a>            PeerId(<span class="number">1</span>),
+<a href=#1200 id=1200 data-nosnippet>1200</a>            Source::Camera,
+<a href=#1201 id=1201 data-nosnippet>1201</a>            adapt.clone(),
+<a href=#1202 id=1202 data-nosnippet>1202</a>            layers,
+<a href=#1203 id=1203 data-nosnippet>1203</a>        );
+<a href=#1204 id=1204 data-nosnippet>1204</a>
+<a href=#1205 id=1205 data-nosnippet>1205</a>        <span class="comment">// A capped peer's report on our source track must never fold.
+<a href=#1206 id=1206 data-nosnippet>1206</a>        </span>fb_tx
+<a href=#1207 id=1207 data-nosnippet>1207</a>            .send(MediaFeedback {
+<a href=#1208 id=1208 data-nosnippet>1208</a>                track: TrackId(<span class="number">10</span>),
+<a href=#1209 id=1209 data-nosnippet>1209</a>                from: PeerId(<span class="number">2</span>),
+<a href=#1210 id=1210 data-nosnippet>1210</a>                received: <span class="number">50</span>,
+<a href=#1211 id=1211 data-nosnippet>1211</a>                lost: <span class="number">50</span>,
+<a href=#1212 id=1212 data-nosnippet>1212</a>                jitter_us: <span class="prelude-val">None</span>,
+<a href=#1213 id=1213 data-nosnippet>1213</a>            })
+<a href=#1214 id=1214 data-nosnippet>1214</a>            .unwrap();
+<a href=#1215 id=1215 data-nosnippet>1215</a>        <span class="comment">// Give the listener a moment to (not) process it.
+<a href=#1216 id=1216 data-nosnippet>1216</a>        </span>tokio::time::sleep(std::time::Duration::from_millis(<span class="number">50</span>)).<span class="kw">await</span>;
+<a href=#1217 id=1217 data-nosnippet>1217</a>        <span class="macro">assert!</span>(
+<a href=#1218 id=1218 data-nosnippet>1218</a>            adapt.take_remote_loss().is_none(),
+<a href=#1219 id=1219 data-nosnippet>1219</a>            <span class="string">"a capped peer's report must never fold into the source adaptation"
+<a href=#1220 id=1220 data-nosnippet>1220</a>        </span>);
+<a href=#1221 id=1221 data-nosnippet>1221</a>
+<a href=#1222 id=1222 data-nosnippet>1222</a>        <span class="comment">// A NON-capped peer's report (the planner has no entry for peer 3 — assumed to
+<a href=#1223 id=1223 data-nosnippet>1223</a>        // take source) must still fold normally.
+<a href=#1224 id=1224 data-nosnippet>1224</a>        </span>fb_tx
+<a href=#1225 id=1225 data-nosnippet>1225</a>            .send(MediaFeedback {
+<a href=#1226 id=1226 data-nosnippet>1226</a>                track: TrackId(<span class="number">10</span>),
+<a href=#1227 id=1227 data-nosnippet>1227</a>                from: PeerId(<span class="number">3</span>),
+<a href=#1228 id=1228 data-nosnippet>1228</a>                received: <span class="number">90</span>,
+<a href=#1229 id=1229 data-nosnippet>1229</a>                lost: <span class="number">10</span>,
+<a href=#1230 id=1230 data-nosnippet>1230</a>                jitter_us: <span class="prelude-val">None</span>,
+<a href=#1231 id=1231 data-nosnippet>1231</a>            })
+<a href=#1232 id=1232 data-nosnippet>1232</a>            .unwrap();
+<a href=#1233 id=1233 data-nosnippet>1233</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
+<a href=#1234 id=1234 data-nosnippet>1234</a>            <span class="kw">if </span>adapt.remote_reported.load(Ordering::Relaxed) {
+<a href=#1235 id=1235 data-nosnippet>1235</a>                <span class="kw">break</span>;
+<a href=#1236 id=1236 data-nosnippet>1236</a>            }
+<a href=#1237 id=1237 data-nosnippet>1237</a>            tokio::time::sleep(std::time::Duration::from_millis(<span class="number">1</span>)).<span class="kw">await</span>;
+<a href=#1238 id=1238 data-nosnippet>1238</a>        }
+<a href=#1239 id=1239 data-nosnippet>1239</a>        <span class="kw">let </span>loss = adapt
+<a href=#1240 id=1240 data-nosnippet>1240</a>            .take_remote_loss()
+<a href=#1241 id=1241 data-nosnippet>1241</a>            .expect(<span class="string">"a non-capped peer's report must fold"</span>);
+<a href=#1242 id=1242 data-nosnippet>1242</a>        <span class="macro">assert!</span>(
+<a href=#1243 id=1243 data-nosnippet>1243</a>            (loss - <span class="number">0.10</span>).abs() &lt; <span class="number">1e-6</span>,
+<a href=#1244 id=1244 data-nosnippet>1244</a>            <span class="string">"non-capped peer's 10% loss folded, got {loss}"
+<a href=#1245 id=1245 data-nosnippet>1245</a>        </span>);
+<a href=#1246 id=1246 data-nosnippet>1246</a>        task.abort();
+<a href=#1247 id=1247 data-nosnippet>1247</a>    }
+<a href=#1248 id=1248 data-nosnippet>1248</a>}
 </code></pre></div></section></main></body></html>

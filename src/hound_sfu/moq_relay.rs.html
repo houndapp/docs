@@ -41,324 +41,906 @@
 <a href=#41 id=41 data-nosnippet>41</a>//!    dedicated control bi-stream, reusing [`crate::auth::verify_relay_token`]
 <a href=#42 id=42 data-nosnippet>42</a>//!    (the same HMAC-SHA256 `{user}:{space}:{expiry}:{mac}` scheme the backend
 <a href=#43 id=43 data-nosnippet>43</a>//!    mints). A bad/expired/missing token is rejected before the MoQ handshake
-<a href=#44 id=44 data-nosnippet>44</a>//!    runs.
-<a href=#45 id=45 data-nosnippet>45</a>//! 2. **Scope the connection to its space.** From the validated
-<a href=#46 id=46 data-nosnippet>46</a>//!    [`crate::auth::RelayTokenClaims`] we derive the namespace prefix
-<a href=#47 id=47 data-nosnippet>47</a>//!    `space/{space_id}` and hand the moq-net session an origin **scoped** to it
-<a href=#48 id=48 data-nosnippet>48</a>//!    via [`moq_net::OriginProducer::scope`] / [`moq_net::OriginConsumer::scope`].
-<a href=#49 id=49 data-nosnippet>49</a>//!    A scoped producer's `publish_broadcast` returns `false` for any path
-<a href=#50 id=50 data-nosnippet>50</a>//!    outside the prefix, and a scoped consumer never sees announcements outside
-<a href=#51 id=51 data-nosnippet>51</a>//!    it — so a participant authenticated for space A **cannot** announce or
-<a href=#52 id=52 data-nosnippet>52</a>//!    subscribe to space B's namespace. moq-net enforces the boundary; we just
-<a href=#53 id=53 data-nosnippet>53</a>//!    set it from the token.
-<a href=#54 id=54 data-nosnippet>54</a>//!
-<a href=#55 id=55 data-nosnippet>55</a>//! This is **call-membership** auth. Per-track allow-listing (which *peer* may
-<a href=#56 id=56 data-nosnippet>56</a>//! publish which *track* within a space, driven by `hound-control`'s
-<a href=#57 id=57 data-nosnippet>57</a>//! `SessionServer` roster) is a later refinement — see the
-<a href=#58 id=58 data-nosnippet>58</a>//! [`NAMESPACE_CONVENTION`] seam.
-<a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">use </span>iroh::Endpoint;
-<a href=#61 id=61 data-nosnippet>61</a><span class="kw">pub use </span>moq_net::OriginProducer;
-<a href=#62 id=62 data-nosnippet>62</a><span class="kw">use </span>moq_net::{Origin, Path};
-<a href=#63 id=63 data-nosnippet>63</a>
-<a href=#64 id=64 data-nosnippet>64</a><span class="kw">use </span><span class="kw">crate</span>::auth::{RelayTokenClaims, verify_relay_token};
-<a href=#65 id=65 data-nosnippet>65</a>
-<a href=#66 id=66 data-nosnippet>66</a><span class="doccomment">/// MoQ ALPN the relay accepts. Must be a moq-net ALPN: in raw mode
-<a href=#67 id=67 data-nosnippet>67</a>/// `web-transport-iroh` reports the iroh connection's ALPN as the MoQ protocol
-<a href=#68 id=68 data-nosnippet>68</a>/// and moq-net rejects an unrecognised one with `Error::UnknownAlpn`. `moql` is
-<a href=#69 id=69 data-nosnippet>69</a>/// moq-net's version-negotiation ALPN and matches the client
-<a href=#70 id=70 data-nosnippet>70</a>/// (`hound_transport::ALPN`). This is the only ALPN the SFU endpoint advertises.
-<a href=#71 id=71 data-nosnippet>71</a></span><span class="kw">pub const </span>RELAY_ALPN: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"moql"</span>;
-<a href=#72 id=72 data-nosnippet>72</a>
-<a href=#73 id=73 data-nosnippet>73</a><span class="doccomment">/// Marker documenting that [`RELAY_ALPN`] is the moq-net negotiation ALPN, not a
-<a href=#74 id=74 data-nosnippet>74</a>/// free-to-choose `hound-*` value (the latter fails the handshake).
-<a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub const </span>RELAY_ALPN_PREFIX: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"moq"</span>;
-<a href=#76 id=76 data-nosnippet>76</a>
-<a href=#77 id=77 data-nosnippet>77</a><span class="doccomment">/// The broadcast-namespace convention every announce/subscribe must obey.
-<a href=#78 id=78 data-nosnippet>78</a>///
-<a href=#79 id=79 data-nosnippet>79</a>/// ```text
-<a href=#80 id=80 data-nosnippet>80</a>/// space/{space_id}/peer/{peer_id}/{track}
-<a href=#81 id=81 data-nosnippet>81</a>/// ```
-<a href=#82 id=82 data-nosnippet>82</a>///
-<a href=#83 id=83 data-nosnippet>83</a>/// The relay scopes each authenticated connection to the `space/{space_id}`
-<a href=#84 id=84 data-nosnippet>84</a>/// prefix taken from its relay token. moq-net then refuses any publish or
-<a href=#85 id=85 data-nosnippet>85</a>/// subscribe outside that prefix. The `peer/{peer_id}/{track}` tail is **not**
-<a href=#86 id=86 data-nosnippet>86</a>/// enforced yet: per-track / per-peer allow-listing (e.g. preventing peer A from
-<a href=#87 id=87 data-nosnippet>87</a>/// impersonating peer B's namespace, or gating screenshare tracks) is a future
-<a href=#88 id=88 data-nosnippet>88</a>/// `hound-control` `SessionServer`-driven refinement. The
-<a href=#89 id=89 data-nosnippet>89</a>/// seam to add it is [`space_scope`] → tighten the scope prefix to
-<a href=#90 id=90 data-nosnippet>90</a>/// `space/{space_id}/peer/{peer_id}` for a publisher once the roster is wired.
-<a href=#91 id=91 data-nosnippet>91</a></span><span class="kw">pub const </span>NAMESPACE_CONVENTION: <span class="kw-2">&amp;</span>str = <span class="string">"space/{space_id}/peer/{peer_id}/{track}"</span>;
-<a href=#92 id=92 data-nosnippet>92</a>
-<a href=#93 id=93 data-nosnippet>93</a><span class="doccomment">/// Maximum relay-token length accepted on the control stream. A valid token is
-<a href=#94 id=94 data-nosnippet>94</a>/// `36 + 1 + 36 + 1 + ~10 + 1 + 64 ≈ 150` bytes; this bound stops a malicious
-<a href=#95 id=95 data-nosnippet>95</a>/// client pinning memory with a giant "token".
-<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">const </span>MAX_TOKEN_LEN: usize = <span class="number">512</span>;
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a><span class="doccomment">/// One-byte control-stream replies the relay sends after token verification.
-<a href=#99 id=99 data-nosnippet>99</a>/// The client gates its MoQ handshake on reading [`AUTH_OK`].
-<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">const </span>AUTH_OK: u8 = <span class="number">1</span>;
-<a href=#101 id=101 data-nosnippet>101</a><span class="kw">const </span>AUTH_REJECT: u8 = <span class="number">0</span>;
-<a href=#102 id=102 data-nosnippet>102</a>
-<a href=#103 id=103 data-nosnippet>103</a><span class="doccomment">/// How long the relay waits, after sending an [`AUTH_REJECT`], for the client to
-<a href=#104 id=104 data-nosnippet>104</a>/// read the verdict and close the connection before the handler gives up. A
-<a href=#105 id=105 data-nosnippet>105</a>/// safety valve so a vanished client can't pin the task; we only care that the
-<a href=#106 id=106 data-nosnippet>106</a>/// reject byte had a chance to land.
-<a href=#107 id=107 data-nosnippet>107</a></span><span class="kw">const </span>AUTH_REJECT_DRAIN: std::time::Duration = std::time::Duration::from_secs(<span class="number">5</span>);
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a><span class="doccomment">/// Errors from the relay's connection-acceptance / auth path. moq-net session
-<a href=#110 id=110 data-nosnippet>110</a>/// errors after a successful handshake are logged inside the spawned session
-<a href=#111 id=111 data-nosnippet>111</a>/// task, not surfaced here.
-<a href=#112 id=112 data-nosnippet>112</a></span><span class="attr">#[derive(Debug, thiserror::Error)]
-<a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">pub enum </span>RelayError {
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="doccomment">/// An iroh stream/connection operation failed during the handshake.
-<a href=#115 id=115 data-nosnippet>115</a>    </span><span class="attr">#[error(<span class="string">"iroh: {0}"</span>)]
-<a href=#116 id=116 data-nosnippet>116</a>    </span>Iroh(String),
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="doccomment">/// The relay token was missing, malformed, or failed verification.
-<a href=#118 id=118 data-nosnippet>118</a>    </span><span class="attr">#[error(<span class="string">"auth: {0}"</span>)]
-<a href=#119 id=119 data-nosnippet>119</a>    </span>Auth(String),
-<a href=#120 id=120 data-nosnippet>120</a>    <span class="doccomment">/// The moq-net server handshake failed.
-<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="attr">#[error(<span class="string">"moq: {0}"</span>)]
-<a href=#122 id=122 data-nosnippet>122</a>    </span>Moq(String),
-<a href=#123 id=123 data-nosnippet>123</a>}
-<a href=#124 id=124 data-nosnippet>124</a>
-<a href=#125 id=125 data-nosnippet>125</a><span class="doccomment">/// Create a fresh, wildcard-scoped root [`OriginProducer`] — the shared origin
-<a href=#126 id=126 data-nosnippet>126</a>/// through which moq-net forwards every broadcast.
-<a href=#127 id=127 data-nosnippet>127</a>///
-<a href=#128 id=128 data-nosnippet>128</a>/// Every accepted relay connection gets a *space-scoped view* of this same
-<a href=#129 id=129 data-nosnippet>129</a>/// origin (see [`handle_relay_connection`]), so a publisher and a subscriber in
-<a href=#130 id=130 data-nosnippet>130</a>/// the same space meet here and moq-net fans the objects out. [`Relay`] builds
-<a href=#131 id=131 data-nosnippet>131</a>/// one internally; the dual-ALPN SFU loop ([`crate::sfu::Sfu`]) builds one too so
-<a href=#132 id=132 data-nosnippet>132</a>/// it can serve the relay on its own endpoint without constructing a [`Relay`].
-<a href=#133 id=133 data-nosnippet>133</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new_root_origin() -&gt; OriginProducer {
-<a href=#134 id=134 data-nosnippet>134</a>    Origin::random().produce()
-<a href=#135 id=135 data-nosnippet>135</a>}
+<a href=#44 id=44 data-nosnippet>44</a>//!    runs. The whole exchange is bounded by [`RelayConfig::auth_deadline`] (see
+<a href=#45 id=45 data-nosnippet>45</a>//!    [`handle_connection`]) — a client that completes the QUIC handshake but
+<a href=#46 id=46 data-nosnippet>46</a>//!    never opens/finishes the token stream cannot hold the connection open
+<a href=#47 id=47 data-nosnippet>47</a>//!    indefinitely.
+<a href=#48 id=48 data-nosnippet>48</a>//! 2. **Admit the session against [`SessionLimits`]** — a global cap and a
+<a href=#49 id=49 data-nosnippet>49</a>//!    per-user cap, checked right after a successful token verification and
+<a href=#50 id=50 data-nosnippet>50</a>//!    before the moq-net handshake runs (see [`SessionRegistry`]). Over-cap is a
+<a href=#51 id=51 data-nosnippet>51</a>//!    clean [`AUTH_REJECT`], not a dropped connection.
+<a href=#52 id=52 data-nosnippet>52</a>//! 3. **Scope the connection to its space** — always, both halves. From the
+<a href=#53 id=53 data-nosnippet>53</a>//!    validated [`crate::auth::RelayTokenClaims`] we derive the namespace prefix
+<a href=#54 id=54 data-nosnippet>54</a>//!    `space/{space_id}` and hand the moq-net session an origin **scoped** to it
+<a href=#55 id=55 data-nosnippet>55</a>//!    via [`moq_net::OriginProducer::scope`] / [`moq_net::OriginConsumer::scope`].
+<a href=#56 id=56 data-nosnippet>56</a>//!    A scoped producer's `publish_broadcast` returns `false` for any path
+<a href=#57 id=57 data-nosnippet>57</a>//!    outside the prefix, and a scoped consumer never sees announcements outside
+<a href=#58 id=58 data-nosnippet>58</a>//!    it — so a participant authenticated for space A **cannot** announce or
+<a href=#59 id=59 data-nosnippet>59</a>//!    subscribe to space B's namespace. moq-net enforces the boundary; we just
+<a href=#60 id=60 data-nosnippet>60</a>//!    set it from the token.
+<a href=#61 id=61 data-nosnippet>61</a>//! 4. **Scope the INGEST half to the caller's own peer namespace, always.** The
+<a href=#62 id=62 data-nosnippet>62</a>//!    two halves of a session are scoped independently (see
+<a href=#63 id=63 data-nosnippet>63</a>//!    [`handle_connection`]): the SERVE half (`with_publish`, subscribing)
+<a href=#64 id=64 data-nosnippet>64</a>//!    stays `space/{space_id}` — a participant must be able to subscribe to
+<a href=#65 id=65 data-nosnippet>65</a>//!    anyone in the call. The INGEST half (`with_consume`, announcing) is
+<a href=#66 id=66 data-nosnippet>66</a>//!    tightened to `space/{space_id}/peer/{user_id}`, so a connection
+<a href=#67 id=67 data-nosnippet>67</a>//!    authenticated as user A can only announce broadcasts under its own
+<a href=#68 id=68 data-nosnippet>68</a>//!    `user_id` sub-path — it can never publish (or displace, via moq-net's
+<a href=#69 id=69 data-nosnippet>69</a>//!    route tie-break) under another peer's path. This is what makes the
+<a href=#70 id=70 data-nosnippet>70</a>//!    `peer/{user_id}/{peer_id}/{track}` tail of [`NAMESPACE_CONVENTION`] a
+<a href=#71 id=71 data-nosnippet>71</a>//!    real boundary rather than just a naming convention.
+<a href=#72 id=72 data-nosnippet>72</a>//!
+<a href=#73 id=73 data-nosnippet>73</a>//! This is **call-membership + per-user-namespace** auth. Per-track allow-listing
+<a href=#74 id=74 data-nosnippet>74</a>//! (which *peer* may publish which *track* within a space, driven by
+<a href=#75 id=75 data-nosnippet>75</a>//! `hound-control`'s `SessionServer` roster) remains a later refinement.
+<a href=#76 id=76 data-nosnippet>76</a>//!
+<a href=#77 id=77 data-nosnippet>77</a>//! ## Ongoing per-connection budgets (after admission)
+<a href=#78 id=78 data-nosnippet>78</a>//!
+<a href=#79 id=79 data-nosnippet>79</a>//! Auth and [`SessionRegistry::admit`] are one-time checks at connection
+<a href=#80 id=80 data-nosnippet>80</a>//! start. A connection that passes both can still misbehave for the rest of
+<a href=#81 id=81 data-nosnippet>81</a>//! its life — flooding ingress bytes, or announcing an unbounded number of
+<a href=#82 id=82 data-nosnippet>82</a>//! broadcast paths — so [`handle_connection`] also spawns a per-connection
+<a href=#83 id=83 data-nosnippet>83</a>//! [`ingress_watchdog`] that runs for the session's whole lifetime, enforcing
+<a href=#84 id=84 data-nosnippet>84</a>//! [`IngressLimits`] and logging a periodic ops summary. See that function's
+<a href=#85 id=85 data-nosnippet>85</a>//! doc for the enforcement details and close-code scheme.
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a></span><span class="kw">use </span>std::collections::{HashMap, HashSet};
+<a href=#88 id=88 data-nosnippet>88</a><span class="kw">use </span>std::sync::atomic::{AtomicUsize, Ordering};
+<a href=#89 id=89 data-nosnippet>89</a><span class="kw">use </span>std::sync::{Arc, Mutex};
+<a href=#90 id=90 data-nosnippet>90</a><span class="kw">use </span>std::time::{Duration, Instant};
+<a href=#91 id=91 data-nosnippet>91</a>
+<a href=#92 id=92 data-nosnippet>92</a><span class="kw">use </span>iroh::Endpoint;
+<a href=#93 id=93 data-nosnippet>93</a><span class="kw">pub use </span>moq_net::OriginProducer;
+<a href=#94 id=94 data-nosnippet>94</a><span class="kw">use </span>moq_net::{Origin, OriginConsumer, Path, PathOwned};
+<a href=#95 id=95 data-nosnippet>95</a><span class="kw">use </span>uuid::Uuid;
+<a href=#96 id=96 data-nosnippet>96</a>
+<a href=#97 id=97 data-nosnippet>97</a><span class="kw">use </span><span class="kw">crate</span>::auth::{RelayTokenClaims, verify_relay_token};
+<a href=#98 id=98 data-nosnippet>98</a><span class="kw">use </span><span class="kw">crate</span>::ingress::IngressBudget;
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a><span class="doccomment">/// MoQ ALPN the relay accepts. Must be a moq-net ALPN: in raw mode
+<a href=#101 id=101 data-nosnippet>101</a>/// `web-transport-iroh` reports the iroh connection's ALPN as the MoQ protocol
+<a href=#102 id=102 data-nosnippet>102</a>/// and moq-net rejects an unrecognised one with `Error::UnknownAlpn`. `moql` is
+<a href=#103 id=103 data-nosnippet>103</a>/// moq-net's version-negotiation ALPN and matches the client
+<a href=#104 id=104 data-nosnippet>104</a>/// (`hound_transport::ALPN`). This is the only ALPN the SFU endpoint advertises.
+<a href=#105 id=105 data-nosnippet>105</a></span><span class="kw">pub const </span>RELAY_ALPN: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"moql"</span>;
+<a href=#106 id=106 data-nosnippet>106</a>
+<a href=#107 id=107 data-nosnippet>107</a><span class="doccomment">/// Marker documenting that [`RELAY_ALPN`] is the moq-net negotiation ALPN, not a
+<a href=#108 id=108 data-nosnippet>108</a>/// free-to-choose `hound-*` value (the latter fails the handshake).
+<a href=#109 id=109 data-nosnippet>109</a></span><span class="kw">pub const </span>RELAY_ALPN_PREFIX: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"moq"</span>;
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a><span class="doccomment">/// The broadcast-namespace convention every announce/subscribe must obey.
+<a href=#112 id=112 data-nosnippet>112</a>///
+<a href=#113 id=113 data-nosnippet>113</a>/// ```text
+<a href=#114 id=114 data-nosnippet>114</a>/// space/{space_id}/peer/{user_id}/{peer_id}/{track}
+<a href=#115 id=115 data-nosnippet>115</a>/// ```
+<a href=#116 id=116 data-nosnippet>116</a>///
+<a href=#117 id=117 data-nosnippet>117</a>/// `user_id` is the AUTHENTICATED identity from the relay token / `PeerInfo`
+<a href=#118 id=118 data-nosnippet>118</a>/// roster (a UUID) — the segment the relay enforces. `peer_id` is the
+<a href=#119 id=119 data-nosnippet>119</a>/// control-plane-assigned `u32` tail that keeps a single user's multiple
+<a href=#120 id=120 data-nosnippet>120</a>/// devices/sessions distinct within their own namespace.
+<a href=#121 id=121 data-nosnippet>121</a>///
+<a href=#122 id=122 data-nosnippet>122</a>/// The relay ALWAYS scopes each authenticated connection's SERVE (subscribe)
+<a href=#123 id=123 data-nosnippet>123</a>/// half to the `space/{space_id}` prefix taken from its relay token — moq-net
+<a href=#124 id=124 data-nosnippet>124</a>/// refuses any subscribe outside it (no cross-space leakage). The INGEST
+<a href=#125 id=125 data-nosnippet>125</a>/// (publish) half is ALWAYS additionally tightened to
+<a href=#126 id=126 data-nosnippet>126</a>/// `space/{space_id}/peer/{user_id}`, so a connection can only announce under
+<a href=#127 id=127 data-nosnippet>127</a>/// its own authenticated user's sub-path — see [`handle_connection`] and
+<a href=#128 id=128 data-nosnippet>128</a>/// [`peer_scope`]. Per-track allow-listing (e.g. gating who may publish a
+<a href=#129 id=129 data-nosnippet>129</a>/// specific `hound-control` `TrackId`) remains a later refinement.
+<a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">pub const </span>NAMESPACE_CONVENTION: <span class="kw-2">&amp;</span>str = <span class="string">"space/{space_id}/peer/{user_id}/{peer_id}/{track}"</span>;
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a><span class="doccomment">/// Maximum relay-token length accepted on the control stream. A valid token is
+<a href=#133 id=133 data-nosnippet>133</a>/// `36 + 1 + 36 + 1 + ~10 + 1 + 64 ≈ 150` bytes; this bound stops a malicious
+<a href=#134 id=134 data-nosnippet>134</a>/// client pinning memory with a giant "token".
+<a href=#135 id=135 data-nosnippet>135</a></span><span class="kw">const </span>MAX_TOKEN_LEN: usize = <span class="number">512</span>;
 <a href=#136 id=136 data-nosnippet>136</a>
-<a href=#137 id=137 data-nosnippet>137</a><span class="doccomment">/// Build the `space/{space_id}` namespace prefix a connection is scoped to.
-<a href=#138 id=138 data-nosnippet>138</a>///
-<a href=#139 id=139 data-nosnippet>139</a>/// This is the call-membership boundary: everything a participant may announce
-<a href=#140 id=140 data-nosnippet>140</a>/// or subscribe lives under this prefix, and moq-net rejects anything outside
-<a href=#141 id=141 data-nosnippet>141</a>/// it. Per-peer tightening (the `hound-control` refinement) would append
-<a href=#142 id=142 data-nosnippet>142</a>/// `/peer/{peer_id}` here.
-<a href=#143 id=143 data-nosnippet>143</a></span><span class="kw">fn </span>space_scope(claims: <span class="kw-2">&amp;</span>RelayTokenClaims) -&gt; String {
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="macro">format!</span>(<span class="string">"space/{}"</span>, claims.space_id)
-<a href=#145 id=145 data-nosnippet>145</a>}
-<a href=#146 id=146 data-nosnippet>146</a>
-<a href=#147 id=147 data-nosnippet>147</a><span class="doccomment">/// The MoQ relay server.
-<a href=#148 id=148 data-nosnippet>148</a>///
-<a href=#149 id=149 data-nosnippet>149</a>/// Owns the iroh [`Endpoint`], the shared [`OriginProducer`] root through which
-<a href=#150 id=150 data-nosnippet>150</a>/// moq-net forwards every broadcast, and the relay-token HMAC secret. Call
-<a href=#151 id=151 data-nosnippet>151</a>/// [`Relay::run`] to accept connections.
-<a href=#152 id=152 data-nosnippet>152</a>///
-<a href=#153 id=153 data-nosnippet>153</a>/// This is a standalone-relay convenience used by tests; the production binary
-<a href=#154 id=154 data-nosnippet>154</a>/// drives the same [`handle_connection`] logic through [`crate::sfu::Sfu`]
-<a href=#155 id=155 data-nosnippet>155</a>/// instead so the service endpoint is a single iroh node.
-<a href=#156 id=156 data-nosnippet>156</a></span><span class="kw">pub struct </span>Relay {
-<a href=#157 id=157 data-nosnippet>157</a>    endpoint: Endpoint,
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="doccomment">/// The shared root origin (wildcard scope). Every accepted connection gets a
-<a href=#159 id=159 data-nosnippet>159</a>    /// space-scoped view of this same origin, so a publisher in space X and a
-<a href=#160 id=160 data-nosnippet>160</a>    /// subscriber in space X meet here and moq-net fans the objects out.
-<a href=#161 id=161 data-nosnippet>161</a>    </span>origin: OriginProducer,
-<a href=#162 id=162 data-nosnippet>162</a>    relay_hmac_secret: String,
-<a href=#163 id=163 data-nosnippet>163</a>}
-<a href=#164 id=164 data-nosnippet>164</a>
-<a href=#165 id=165 data-nosnippet>165</a><span class="kw">impl </span>Relay {
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="doccomment">/// Build a relay around an already-bound iroh [`Endpoint`].
-<a href=#167 id=167 data-nosnippet>167</a>    ///
-<a href=#168 id=168 data-nosnippet>168</a>    /// The caller is responsible for having advertised [`RELAY_ALPN`] on the
-<a href=#169 id=169 data-nosnippet>169</a>    /// endpoint. Mirrors [`crate::sfu::Sfu::from_endpoint`] so the hermetic
-<a href=#170 id=170 data-nosnippet>170</a>    /// tests exercise the same accept/auth glue that runs in production.
-<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">pub fn </span>from_endpoint(endpoint: Endpoint, relay_hmac_secret: String) -&gt; <span class="self">Self </span>{
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="self">Self </span>{
-<a href=#173 id=173 data-nosnippet>173</a>            endpoint,
-<a href=#174 id=174 data-nosnippet>174</a>            origin: new_root_origin(),
-<a href=#175 id=175 data-nosnippet>175</a>            relay_hmac_secret,
-<a href=#176 id=176 data-nosnippet>176</a>        }
-<a href=#177 id=177 data-nosnippet>177</a>    }
-<a href=#178 id=178 data-nosnippet>178</a>
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="doccomment">/// The iroh node id clients dial to reach this relay.
-<a href=#180 id=180 data-nosnippet>180</a>    </span><span class="kw">pub fn </span>node_id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; iroh::EndpointId {
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="self">self</span>.endpoint.id()
-<a href=#182 id=182 data-nosnippet>182</a>    }
-<a href=#183 id=183 data-nosnippet>183</a>
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="doccomment">/// Accept connections in a loop until the endpoint closes.
-<a href=#185 id=185 data-nosnippet>185</a>    ///
-<a href=#186 id=186 data-nosnippet>186</a>    /// Each connection is handed to [`handle_connection`] in its own task. The
-<a href=#187 id=187 data-nosnippet>187</a>    /// shared origin and secret are cloned per connection (both cheap: the
-<a href=#188 id=188 data-nosnippet>188</a>    /// origin is `Arc`-backed internally, the secret is a short `String`).
-<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="kw">pub async fn </span>run(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; eyre::Result&lt;()&gt; {
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="macro">tracing::info!</span>(node_id = %<span class="self">self</span>.endpoint.id(), <span class="string">"MoQ relay accepting connections"</span>);
-<a href=#191 id=191 data-nosnippet>191</a>
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">loop </span>{
-<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(incoming) = <span class="self">self</span>.endpoint.accept().<span class="kw">await else </span>{
-<a href=#194 id=194 data-nosnippet>194</a>                <span class="macro">tracing::info!</span>(<span class="string">"MoQ relay endpoint closed — stopping accept loop"</span>);
-<a href=#195 id=195 data-nosnippet>195</a>                <span class="kw">break</span>;
-<a href=#196 id=196 data-nosnippet>196</a>            };
-<a href=#197 id=197 data-nosnippet>197</a>
-<a href=#198 id=198 data-nosnippet>198</a>            <span class="kw">let </span>conn = <span class="kw">match </span>incoming.<span class="kw">await </span>{
-<a href=#199 id=199 data-nosnippet>199</a>                <span class="prelude-val">Ok</span>(c) =&gt; c,
-<a href=#200 id=200 data-nosnippet>200</a>                <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#201 id=201 data-nosnippet>201</a>                    <span class="macro">tracing::warn!</span>(<span class="string">"incoming relay connection failed: {e}"</span>);
-<a href=#202 id=202 data-nosnippet>202</a>                    <span class="kw">continue</span>;
-<a href=#203 id=203 data-nosnippet>203</a>                }
-<a href=#204 id=204 data-nosnippet>204</a>            };
-<a href=#205 id=205 data-nosnippet>205</a>
-<a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">let </span>origin = <span class="self">self</span>.origin.clone();
-<a href=#207 id=207 data-nosnippet>207</a>            <span class="kw">let </span>secret = <span class="self">self</span>.relay_hmac_secret.clone();
-<a href=#208 id=208 data-nosnippet>208</a>            tokio::spawn(<span class="kw">async move </span>{
-<a href=#209 id=209 data-nosnippet>209</a>                <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = handle_connection(conn, origin, secret).<span class="kw">await </span>{
-<a href=#210 id=210 data-nosnippet>210</a>                    <span class="macro">tracing::warn!</span>(<span class="string">"relay connection handler error: {e}"</span>);
-<a href=#211 id=211 data-nosnippet>211</a>                }
-<a href=#212 id=212 data-nosnippet>212</a>            });
-<a href=#213 id=213 data-nosnippet>213</a>        }
-<a href=#214 id=214 data-nosnippet>214</a>
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="prelude-val">Ok</span>(())
-<a href=#216 id=216 data-nosnippet>216</a>    }
-<a href=#217 id=217 data-nosnippet>217</a>}
-<a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a><span class="doccomment">/// Handle one incoming MoQ relay connection on a **shared** origin.
-<a href=#220 id=220 data-nosnippet>220</a>///
-<a href=#221 id=221 data-nosnippet>221</a>/// This is the per-connection relay logic factored out of [`Relay::run`] so the
-<a href=#222 id=222 data-nosnippet>222</a>/// SFU service's accept loop ([`crate::sfu::Sfu::run`]) can drive the relay
-<a href=#223 id=223 data-nosnippet>223</a>/// with the SFU's shared origin and relay secret. [`Relay::run`] (used by the
-<a href=#224 id=224 data-nosnippet>224</a>/// standalone relay tests) and the SFU loop both call it, so they exercise
-<a href=#225 id=225 data-nosnippet>225</a>/// identical auth/scoping/session glue.
-<a href=#226 id=226 data-nosnippet>226</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_relay_connection(
-<a href=#227 id=227 data-nosnippet>227</a>    conn: iroh::endpoint::Connection,
-<a href=#228 id=228 data-nosnippet>228</a>    origin: OriginProducer,
-<a href=#229 id=229 data-nosnippet>229</a>    relay_hmac_secret: String,
-<a href=#230 id=230 data-nosnippet>230</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), RelayError&gt; {
-<a href=#231 id=231 data-nosnippet>231</a>    handle_connection(conn, origin, relay_hmac_secret).<span class="kw">await
-<a href=#232 id=232 data-nosnippet>232</a></span>}
-<a href=#233 id=233 data-nosnippet>233</a>
-<a href=#234 id=234 data-nosnippet>234</a><span class="doccomment">/// Handle one incoming MoQ relay connection: authenticate, scope, run the
-<a href=#235 id=235 data-nosnippet>235</a>/// moq-net server session.
-<a href=#236 id=236 data-nosnippet>236</a>///
-<a href=#237 id=237 data-nosnippet>237</a>/// ## Stream ordering (why the token stream is accepted first)
-<a href=#238 id=238 data-nosnippet>238</a>///
-<a href=#239 id=239 data-nosnippet>239</a>/// The client opens the **relay-token control bi-stream first** and awaits the
-<a href=#240 id=240 data-nosnippet>240</a>/// relay's [`AUTH_OK`] before starting its MoQ handshake. The relay accepts that
-<a href=#241 id=241 data-nosnippet>241</a>/// bi-stream (`conn.accept_bi`) before handing the connection to
-<a href=#242 id=242 data-nosnippet>242</a>/// [`moq_net::Server::accept`] (which opens *its own* control stream). QUIC
-<a href=#243 id=243 data-nosnippet>243</a>/// bi-streams are accepted in open order, so the token exchange always lands
-<a href=#244 id=244 data-nosnippet>244</a>/// before the MoQ control stream. If auth fails the connection is closed and the
-<a href=#245 id=245 data-nosnippet>245</a>/// MoQ handshake never runs.
-<a href=#246 id=246 data-nosnippet>246</a></span><span class="kw">async fn </span>handle_connection(
-<a href=#247 id=247 data-nosnippet>247</a>    conn: iroh::endpoint::Connection,
-<a href=#248 id=248 data-nosnippet>248</a>    origin: OriginProducer,
-<a href=#249 id=249 data-nosnippet>249</a>    relay_hmac_secret: String,
-<a href=#250 id=250 data-nosnippet>250</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), RelayError&gt; {
-<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">let </span>peer = conn.remote_id();
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="macro">tracing::info!</span>(%peer, <span class="string">"relay connection accepted"</span>);
-<a href=#253 id=253 data-nosnippet>253</a>
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="comment">// ── Relay-token auth (control bi-stream) ───────────────────────────────
-<a href=#255 id=255 data-nosnippet>255</a>    </span><span class="kw">let </span>claims = <span class="kw">match </span>authenticate(<span class="kw-2">&amp;</span>conn, <span class="kw-2">&amp;</span>relay_hmac_secret).<span class="kw">await </span>{
-<a href=#256 id=256 data-nosnippet>256</a>        <span class="prelude-val">Ok</span>(claims) =&gt; claims,
-<a href=#257 id=257 data-nosnippet>257</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#258 id=258 data-nosnippet>258</a>            <span class="macro">tracing::warn!</span>(%peer, <span class="string">"relay auth rejected: {e}"</span>);
-<a href=#259 id=259 data-nosnippet>259</a>            <span class="comment">// Don't slam `conn.close` here: a `CONNECTION_CLOSE` frame can
-<a href=#260 id=260 data-nosnippet>260</a>            // overtake the buffered reject byte, so the client would observe a
-<a href=#261 id=261 data-nosnippet>261</a>            // generic connection error instead of the explicit reject verdict.
-<a href=#262 id=262 data-nosnippet>262</a>            // Wait (bounded) for the client to read the verdict and close the
-<a href=#263 id=263 data-nosnippet>263</a>            // connection itself, giving the reject byte a chance to land.
-<a href=#264 id=264 data-nosnippet>264</a>            </span><span class="kw">let _ </span>= tokio::time::timeout(AUTH_REJECT_DRAIN, conn.closed()).<span class="kw">await</span>;
-<a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(e);
+<a href=#137 id=137 data-nosnippet>137</a><span class="doccomment">/// One-byte control-stream replies the relay sends after token verification.
+<a href=#138 id=138 data-nosnippet>138</a>/// The client gates its MoQ handshake on reading [`AUTH_OK`].
+<a href=#139 id=139 data-nosnippet>139</a></span><span class="kw">const </span>AUTH_OK: u8 = <span class="number">1</span>;
+<a href=#140 id=140 data-nosnippet>140</a><span class="kw">const </span>AUTH_REJECT: u8 = <span class="number">0</span>;
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a><span class="doccomment">/// How long the relay waits, after sending an [`AUTH_REJECT`], for the client to
+<a href=#143 id=143 data-nosnippet>143</a>/// read the verdict and close the connection before the handler gives up. A
+<a href=#144 id=144 data-nosnippet>144</a>/// safety valve so a vanished client can't pin the task; we only care that the
+<a href=#145 id=145 data-nosnippet>145</a>/// reject byte had a chance to land.
+<a href=#146 id=146 data-nosnippet>146</a></span><span class="kw">const </span>AUTH_REJECT_DRAIN: Duration = Duration::from_secs(<span class="number">5</span>);
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a><span class="doccomment">/// Deadline for the whole relay-token control-stream handshake (`authenticate`:
+<a href=#149 id=149 data-nosnippet>149</a>/// `accept_bi` + the two `read_exact`s). QUIC's automatic keepalives mean the
+<a href=#150 id=150 data-nosnippet>150</a>/// idle timeout never fires on its own, so a bound here is the only thing
+<a href=#151 id=151 data-nosnippet>151</a>/// stopping a client that completes the QUIC handshake but never opens (or
+<a href=#152 id=152 data-nosnippet>152</a>/// never finishes) the token stream from holding the connection — and the task
+<a href=#153 id=153 data-nosnippet>153</a>/// serving it — open indefinitely. [`SessionRegistry`] admission only ever runs
+<a href=#154 id=154 data-nosnippet>154</a>/// after a successful auth (see `handle_connection`), so this deadline is also
+<a href=#155 id=155 data-nosnippet>155</a>/// what keeps an unauthenticated connection from ever holding a session slot or
+<a href=#156 id=156 data-nosnippet>156</a>/// blocking the SIGTERM drain wait: bounding "unauthenticated" bounds the
+<a href=#157 id=157 data-nosnippet>157</a>/// exposure. Production default (see [`RelayConfig::default`]); tests
+<a href=#158 id=158 data-nosnippet>158</a>/// substitute a much shorter value to exercise the timeout deterministically.
+<a href=#159 id=159 data-nosnippet>159</a></span><span class="kw">pub const </span>AUTH_DEADLINE: Duration = Duration::from_secs(<span class="number">10</span>);
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a><span class="doccomment">/// Session admission caps, enforced by [`SessionRegistry::admit`] right after a
+<a href=#162 id=162 data-nosnippet>162</a>/// successful auth and before the moq-net handshake runs.
+<a href=#163 id=163 data-nosnippet>163</a></span><span class="attr">#[derive(Debug, Clone, Copy)]
+<a href=#164 id=164 data-nosnippet>164</a></span><span class="kw">pub struct </span>SessionLimits {
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="doccomment">/// Maximum concurrent authenticated sessions across all users.
+<a href=#166 id=166 data-nosnippet>166</a>    </span><span class="kw">pub </span>max_sessions: usize,
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="doccomment">/// Maximum concurrent authenticated sessions for a single `user_id`.
+<a href=#168 id=168 data-nosnippet>168</a>    </span><span class="kw">pub </span>max_per_user: usize,
+<a href=#169 id=169 data-nosnippet>169</a>}
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a><span class="kw">impl </span>Default <span class="kw">for </span>SessionLimits {
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="doccomment">/// Production defaults — see `main.rs`'s `MAX_SESSIONS` /
+<a href=#173 id=173 data-nosnippet>173</a>    /// `MAX_SESSIONS_PER_USER` CLI flags, which override these.
+<a href=#174 id=174 data-nosnippet>174</a>    </span><span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="self">Self </span>{
+<a href=#176 id=176 data-nosnippet>176</a>            max_sessions: <span class="number">512</span>,
+<a href=#177 id=177 data-nosnippet>177</a>            max_per_user: <span class="number">3</span>,
+<a href=#178 id=178 data-nosnippet>178</a>        }
+<a href=#179 id=179 data-nosnippet>179</a>    }
+<a href=#180 id=180 data-nosnippet>180</a>}
+<a href=#181 id=181 data-nosnippet>181</a>
+<a href=#182 id=182 data-nosnippet>182</a><span class="doccomment">/// Ongoing per-connection ingress budget, enforced continuously by
+<a href=#183 id=183 data-nosnippet>183</a>/// [`ingress_watchdog`] for the life of an admitted session — unlike
+<a href=#184 id=184 data-nosnippet>184</a>/// [`SessionLimits`] (checked once at admission), this is a running check
+<a href=#185 id=185 data-nosnippet>185</a>/// against traffic the connection generates after it's already in the call.
+<a href=#186 id=186 data-nosnippet>186</a></span><span class="attr">#[derive(Debug, Clone, Copy)]
+<a href=#187 id=187 data-nosnippet>187</a></span><span class="kw">pub struct </span>IngressLimits {
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="doccomment">/// Sustained ingress cap in bytes/sec, read from `conn.stats().udp_rx.bytes`
+<a href=#189 id=189 data-nosnippet>189</a>    /// (cumulative QUIC bytes received — the actual cost to the node, not just
+<a href=#190 id=190 data-nosnippet>190</a>    /// media payload). `0` disables the budget. The default (~24 Mbit/s) is
+<a href=#191 id=191 data-nosnippet>191</a>    /// generous headroom over the heaviest legitimate publisher (source + low
+<a href=#192 id=192 data-nosnippet>192</a>    /// simulcast video, screenshare, audio).
+<a href=#193 id=193 data-nosnippet>193</a>    </span><span class="kw">pub </span>max_bytes_per_sec: u64,
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="doccomment">/// How often [`ingress_watchdog`] samples `conn.stats()`. Kept separate
+<a href=#195 id=195 data-nosnippet>195</a>    /// from `window` (rather than derived from it) so tests can shrink both
+<a href=#196 id=196 data-nosnippet>196</a>    /// independently instead of waiting out the production window.
+<a href=#197 id=197 data-nosnippet>197</a>    </span><span class="kw">pub </span>sample_interval: Duration,
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="doccomment">/// Sustained-rate averaging span handed to [`IngressBudget::new`] — a
+<a href=#199 id=199 data-nosnippet>199</a>    /// spike shorter than this self-corrects (see that type's doc); a rate
+<a href=#200 id=200 data-nosnippet>200</a>    /// held for the whole window trips.
+<a href=#201 id=201 data-nosnippet>201</a>    </span><span class="kw">pub </span>window: Duration,
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="doccomment">/// Maximum distinct broadcast paths this connection's authenticated
+<a href=#203 id=203 data-nosnippet>203</a>    /// ingest scope (`space/{s}/peer/{user_id}`) may have announced at once
+<a href=#204 id=204 data-nosnippet>204</a>    /// before [`ingress_watchdog`] closes it. `0` disables enforcement.
+<a href=#205 id=205 data-nosnippet>205</a>    /// Bounds unbounded origin-tree growth / task spawn from one connection
+<a href=#206 id=206 data-nosnippet>206</a>    /// announcing broadcasts without limit. NOTE: scoped to the
+<a href=#207 id=207 data-nosnippet>207</a>    /// authenticated `(space, user)` ingest namespace, not the raw QUIC
+<a href=#208 id=208 data-nosnippet>208</a>    /// connection identity — see [`ingress_watchdog`]'s doc for why, and the
+<a href=#209 id=209 data-nosnippet>209</a>    /// practical effect when the same user holds multiple concurrent
+<a href=#210 id=210 data-nosnippet>210</a>    /// sessions (bounded separately by [`SessionLimits::max_per_user`]).
+<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">pub </span>max_broadcasts_per_session: usize,
+<a href=#212 id=212 data-nosnippet>212</a>}
+<a href=#213 id=213 data-nosnippet>213</a>
+<a href=#214 id=214 data-nosnippet>214</a><span class="kw">impl </span>Default <span class="kw">for </span>IngressLimits {
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="doccomment">/// Production defaults — see `main.rs`'s `MAX_INGRESS_BYTES_PER_SEC` /
+<a href=#216 id=216 data-nosnippet>216</a>    /// `MAX_BROADCASTS_PER_SESSION` CLI flags, which override
+<a href=#217 id=217 data-nosnippet>217</a>    /// `max_bytes_per_sec` / `max_broadcasts_per_session`. `sample_interval`
+<a href=#218 id=218 data-nosnippet>218</a>    /// and `window` are not exposed as CLI flags (only tests need to shrink
+<a href=#219 id=219 data-nosnippet>219</a>    /// them).
+<a href=#220 id=220 data-nosnippet>220</a>    </span><span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="self">Self </span>{
+<a href=#222 id=222 data-nosnippet>222</a>            max_bytes_per_sec: <span class="number">3_000_000</span>,
+<a href=#223 id=223 data-nosnippet>223</a>            sample_interval: Duration::from_secs(<span class="number">5</span>),
+<a href=#224 id=224 data-nosnippet>224</a>            window: Duration::from_secs(<span class="number">30</span>),
+<a href=#225 id=225 data-nosnippet>225</a>            max_broadcasts_per_session: <span class="number">16</span>,
+<a href=#226 id=226 data-nosnippet>226</a>        }
+<a href=#227 id=227 data-nosnippet>227</a>    }
+<a href=#228 id=228 data-nosnippet>228</a>}
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a><span class="doccomment">/// Cadence of the per-connection ops summary line [`ingress_watchdog`] logs.
+<a href=#231 id=231 data-nosnippet>231</a>/// Fixed, not configurable: it's per-connection and [`SessionLimits`] already
+<a href=#232 id=232 data-nosnippet>232</a>/// bounds how many connections exist, so log volume is bounded by
+<a href=#233 id=233 data-nosnippet>233</a>/// construction without a knob.
+<a href=#234 id=234 data-nosnippet>234</a></span><span class="kw">const </span>OPS_LOG_INTERVAL: Duration = Duration::from_secs(<span class="number">60</span>);
+<a href=#235 id=235 data-nosnippet>235</a>
+<a href=#236 id=236 data-nosnippet>236</a><span class="doccomment">/// Application-level QUIC close code [`ingress_watchdog`] sends when it closes
+<a href=#237 id=237 data-nosnippet>237</a>/// a connection for exceeding [`IngressLimits::max_bytes_per_sec`] — distinct
+<a href=#238 id=238 data-nosnippet>238</a>/// from the generic `0` code the auth/goodbye paths use, so a client
+<a href=#239 id=239 data-nosnippet>239</a>/// inspecting the code/reason on `conn.closed()` can tell "the relay enforced
+<a href=#240 id=240 data-nosnippet>240</a>/// a policy" apart from "auth failed" or "the network died".
+<a href=#241 id=241 data-nosnippet>241</a></span><span class="kw">pub const </span>CLOSE_INGRESS_BUDGET_EXCEEDED: u32 = <span class="number">1</span>;
+<a href=#242 id=242 data-nosnippet>242</a>
+<a href=#243 id=243 data-nosnippet>243</a><span class="doccomment">/// Close code for exceeding [`IngressLimits::max_broadcasts_per_session`]. See
+<a href=#244 id=244 data-nosnippet>244</a>/// [`CLOSE_INGRESS_BUDGET_EXCEEDED`].
+<a href=#245 id=245 data-nosnippet>245</a></span><span class="kw">pub const </span>CLOSE_BROADCAST_QUOTA_EXCEEDED: u32 = <span class="number">2</span>;
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a><span class="doccomment">/// Runtime knobs for the relay's connection-acceptance path — threaded through
+<a href=#248 id=248 data-nosnippet>248</a>/// [`Relay::from_endpoint`] / [`crate::sfu::Sfu::from_endpoint`]. `Default`
+<a href=#249 id=249 data-nosnippet>249</a>/// carries the production values; tests substitute a short `auth_deadline`, a
+<a href=#250 id=250 data-nosnippet>250</a>/// tiny [`SessionLimits`], or a tiny/fast [`IngressLimits`] to exercise the
+<a href=#251 id=251 data-nosnippet>251</a>/// reject paths deterministically without spinning up hundreds of connections
+<a href=#252 id=252 data-nosnippet>252</a>/// or waiting out production timers.
+<a href=#253 id=253 data-nosnippet>253</a></span><span class="attr">#[derive(Debug, Clone)]
+<a href=#254 id=254 data-nosnippet>254</a></span><span class="kw">pub struct </span>RelayConfig {
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="kw">pub </span>auth_deadline: Duration,
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="kw">pub </span>limits: SessionLimits,
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="kw">pub </span>ingress: IngressLimits,
+<a href=#258 id=258 data-nosnippet>258</a>}
+<a href=#259 id=259 data-nosnippet>259</a>
+<a href=#260 id=260 data-nosnippet>260</a><span class="kw">impl </span>Default <span class="kw">for </span>RelayConfig {
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="self">Self </span>{
+<a href=#263 id=263 data-nosnippet>263</a>            auth_deadline: AUTH_DEADLINE,
+<a href=#264 id=264 data-nosnippet>264</a>            limits: SessionLimits::default(),
+<a href=#265 id=265 data-nosnippet>265</a>            ingress: IngressLimits::default(),
 <a href=#266 id=266 data-nosnippet>266</a>        }
-<a href=#267 id=267 data-nosnippet>267</a>    };
-<a href=#268 id=268 data-nosnippet>268</a>
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="comment">// ── Namespace scoping (the call-membership boundary) ───────────────────
-<a href=#270 id=270 data-nosnippet>270</a>    // Derive a space-scoped view of the shared origin. moq-net enforces the
-<a href=#271 id=271 data-nosnippet>271</a>    // prefix: a publisher scoped here cannot announce outside `space/{id}` and a
-<a href=#272 id=272 data-nosnippet>272</a>    // subscriber scoped here never sees another space's broadcasts.
-<a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">let </span>scope = space_scope(<span class="kw-2">&amp;</span>claims);
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">let </span>scope_path = Path::new(<span class="kw-2">&amp;</span>scope);
-<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">let </span>scoped_publish = origin
-<a href=#276 id=276 data-nosnippet>276</a>        .scope(std::slice::from_ref(<span class="kw-2">&amp;</span>scope_path))
-<a href=#277 id=277 data-nosnippet>277</a>        .ok_or_else(|| RelayError::Moq(<span class="macro">format!</span>(<span class="string">"origin scope rejected namespace {scope:?}"</span>)))<span class="question-mark">?</span>;
-<a href=#278 id=278 data-nosnippet>278</a>    <span class="comment">// `with_consume` ingests remote announces INTO this scoped origin; the
-<a href=#279 id=279 data-nosnippet>279</a>    // matching consumer (`with_publish`) serves them back OUT to subscribers.
-<a href=#280 id=280 data-nosnippet>280</a>    // Both are the same scoped origin, so publishers and subscribers in this
-<a href=#281 id=281 data-nosnippet>281</a>    // space meet and moq-net forwards between them.
-<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">let </span>scoped_consume = scoped_publish.consume();
-<a href=#283 id=283 data-nosnippet>283</a>
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="macro">tracing::info!</span>(%peer, %claims.user_id, %claims.space_id, namespace = %scope, <span class="string">"relay connection authorised"</span>);
-<a href=#285 id=285 data-nosnippet>285</a>
-<a href=#286 id=286 data-nosnippet>286</a>    <span class="comment">// ── MoQ server handshake + session ─────────────────────────────────────
-<a href=#287 id=287 data-nosnippet>287</a>    // `web-transport-iroh` raw mode: speak MoQ directly over iroh, no HTTP/3.
-<a href=#288 id=288 data-nosnippet>288</a>    </span><span class="kw">let </span>wt = web_transport_iroh::Session::raw(conn.clone());
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">let </span>session = moq_net::Server::new()
-<a href=#290 id=290 data-nosnippet>290</a>        .with_consume(scoped_publish)
-<a href=#291 id=291 data-nosnippet>291</a>        .with_publish(scoped_consume)
-<a href=#292 id=292 data-nosnippet>292</a>        .accept(wt)
-<a href=#293 id=293 data-nosnippet>293</a>        .<span class="kw">await
-<a href=#294 id=294 data-nosnippet>294</a>        </span>.map_err(|e| RelayError::Moq(<span class="macro">format!</span>(<span class="string">"server accept: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#267 id=267 data-nosnippet>267</a>    }
+<a href=#268 id=268 data-nosnippet>268</a>}
+<a href=#269 id=269 data-nosnippet>269</a>
+<a href=#270 id=270 data-nosnippet>270</a><span class="doccomment">/// Why [`SessionRegistry::admit`] refused a session — carries the count that
+<a href=#271 id=271 data-nosnippet>271</a>/// triggered the rejection, purely for the log line at the call site.
+<a href=#272 id=272 data-nosnippet>272</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#273 id=273 data-nosnippet>273</a></span><span class="kw">enum </span>AdmitRejected {
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="doccomment">/// The global cap was at (or, transiently, just over) this count.
+<a href=#275 id=275 data-nosnippet>275</a>    </span>Global(usize),
+<a href=#276 id=276 data-nosnippet>276</a>    <span class="doccomment">/// This user's own cap was at this count.
+<a href=#277 id=277 data-nosnippet>277</a>    </span>PerUser(usize),
+<a href=#278 id=278 data-nosnippet>278</a>}
+<a href=#279 id=279 data-nosnippet>279</a>
+<a href=#280 id=280 data-nosnippet>280</a><span class="doccomment">/// Shared session accounting: a global count plus a per-user count, gating
+<a href=#281 id=281 data-nosnippet>281</a>/// admission at [`SessionLimits`] and released via [`SessionGuard`]. Cheap to
+<a href=#282 id=282 data-nosnippet>282</a>/// clone (every field is `Arc`-backed) — each accept-loop task holds its own
+<a href=#283 id=283 data-nosnippet>283</a>/// clone.
+<a href=#284 id=284 data-nosnippet>284</a>///
+<a href=#285 id=285 data-nosnippet>285</a>/// Only *authenticated* sessions are ever admitted here (see
+<a href=#286 id=286 data-nosnippet>286</a>/// [`handle_connection`]), so [`SessionRegistry::active_sessions`] — the
+<a href=#287 id=287 data-nosnippet>287</a>/// counter `main`'s SIGTERM drain wait polls — never counts a connection that
+<a href=#288 id=288 data-nosnippet>288</a>/// never passed the auth gate.
+<a href=#289 id=289 data-nosnippet>289</a></span><span class="attr">#[derive(Clone)]
+<a href=#290 id=290 data-nosnippet>290</a></span><span class="kw">pub struct </span>SessionRegistry {
+<a href=#291 id=291 data-nosnippet>291</a>    active: Arc&lt;AtomicUsize&gt;,
+<a href=#292 id=292 data-nosnippet>292</a>    per_user: Arc&lt;Mutex&lt;HashMap&lt;Uuid, usize&gt;&gt;&gt;,
+<a href=#293 id=293 data-nosnippet>293</a>    limits: SessionLimits,
+<a href=#294 id=294 data-nosnippet>294</a>}
 <a href=#295 id=295 data-nosnippet>295</a>
-<a href=#296 id=296 data-nosnippet>296</a>    <span class="comment">// The session drives forwarding on background tasks (moq-net spawns them in
-<a href=#297 id=297 data-nosnippet>297</a>    // `lite::start`). Hold it alive until the connection closes, then drop it so
-<a href=#298 id=298 data-nosnippet>298</a>    // its broadcasts unannounce and subscribers see end-of-track.
-<a href=#299 id=299 data-nosnippet>299</a>    </span><span class="kw">let </span>_session = session;
-<a href=#300 id=300 data-nosnippet>300</a>    conn.closed().<span class="kw">await</span>;
-<a href=#301 id=301 data-nosnippet>301</a>    <span class="macro">tracing::info!</span>(%peer, %claims.user_id, <span class="string">"relay connection closed"</span>);
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="prelude-val">Ok</span>(())
-<a href=#303 id=303 data-nosnippet>303</a>}
+<a href=#296 id=296 data-nosnippet>296</a><span class="kw">impl </span>SessionRegistry {
+<a href=#297 id=297 data-nosnippet>297</a>    <span class="kw">pub fn </span>new(limits: SessionLimits) -&gt; <span class="self">Self </span>{
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="self">Self </span>{
+<a href=#299 id=299 data-nosnippet>299</a>            active: Arc::new(AtomicUsize::new(<span class="number">0</span>)),
+<a href=#300 id=300 data-nosnippet>300</a>            per_user: Arc::new(Mutex::new(HashMap::new())),
+<a href=#301 id=301 data-nosnippet>301</a>            limits,
+<a href=#302 id=302 data-nosnippet>302</a>        }
+<a href=#303 id=303 data-nosnippet>303</a>    }
 <a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a><span class="doccomment">/// Read and verify the relay token off the dedicated control bi-stream.
-<a href=#306 id=306 data-nosnippet>306</a>///
-<a href=#307 id=307 data-nosnippet>307</a>/// Wire format (client → relay): `u16 LE length` + `token bytes`. Reply
-<a href=#308 id=308 data-nosnippet>308</a>/// (relay → client): one byte, [`AUTH_OK`] or [`AUTH_REJECT`]. The token scheme
-<a href=#309 id=309 data-nosnippet>309</a>/// is the backend's HMAC `{user_id}:{space_id}:{expiry}:{mac}`, verified by the
-<a href=#310 id=310 data-nosnippet>310</a>/// shared [`crate::auth::verify_relay_token`].
-<a href=#311 id=311 data-nosnippet>311</a></span><span class="kw">async fn </span>authenticate(
-<a href=#312 id=312 data-nosnippet>312</a>    conn: <span class="kw-2">&amp;</span>iroh::endpoint::Connection,
-<a href=#313 id=313 data-nosnippet>313</a>    secret: <span class="kw-2">&amp;</span>str,
-<a href=#314 id=314 data-nosnippet>314</a>) -&gt; <span class="prelude-ty">Result</span>&lt;RelayTokenClaims, RelayError&gt; {
-<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>send, <span class="kw-2">mut </span>recv) = conn
-<a href=#316 id=316 data-nosnippet>316</a>        .accept_bi()
-<a href=#317 id=317 data-nosnippet>317</a>        .<span class="kw">await
-<a href=#318 id=318 data-nosnippet>318</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"accept token stream: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#319 id=319 data-nosnippet>319</a>
-<a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">let </span><span class="kw-2">mut </span>len_buf = [<span class="number">0u8</span>; <span class="number">2</span>];
-<a href=#321 id=321 data-nosnippet>321</a>    recv.read_exact(<span class="kw-2">&amp;mut </span>len_buf)
-<a href=#322 id=322 data-nosnippet>322</a>        .<span class="kw">await
-<a href=#323 id=323 data-nosnippet>323</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"read token len: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">let </span>len = u16::from_le_bytes(len_buf) <span class="kw">as </span>usize;
-<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">if </span>len == <span class="number">0 </span>|| len &gt; MAX_TOKEN_LEN {
-<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">let _ </span>= reject(<span class="kw-2">&amp;mut </span>send).<span class="kw">await</span>;
-<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(RelayError::Auth(<span class="macro">format!</span>(
-<a href=#328 id=328 data-nosnippet>328</a>            <span class="string">"token length {len} out of bounds (1..={MAX_TOKEN_LEN})"
-<a href=#329 id=329 data-nosnippet>329</a>        </span>)));
-<a href=#330 id=330 data-nosnippet>330</a>    }
-<a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">let </span><span class="kw-2">mut </span>token_buf = <span class="macro">vec!</span>[<span class="number">0u8</span>; len];
-<a href=#333 id=333 data-nosnippet>333</a>    recv.read_exact(<span class="kw-2">&amp;mut </span>token_buf)
-<a href=#334 id=334 data-nosnippet>334</a>        .<span class="kw">await
-<a href=#335 id=335 data-nosnippet>335</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"read token: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#336 id=336 data-nosnippet>336</a>    <span class="kw">let </span>token = String::from_utf8(token_buf)
-<a href=#337 id=337 data-nosnippet>337</a>        .map_err(|<span class="kw">_</span>| RelayError::Auth(<span class="string">"token is not valid UTF-8"</span>.into()))<span class="question-mark">?</span>;
-<a href=#338 id=338 data-nosnippet>338</a>
-<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">let </span>now = chrono::Utc::now().timestamp();
-<a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">match </span>verify_relay_token(<span class="kw-2">&amp;</span>token, secret, now) {
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="prelude-val">Ok</span>(claims) =&gt; {
-<a href=#342 id=342 data-nosnippet>342</a>            send.write_all(<span class="kw-2">&amp;</span>[AUTH_OK])
-<a href=#343 id=343 data-nosnippet>343</a>                .<span class="kw">await
-<a href=#344 id=344 data-nosnippet>344</a>                </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"write auth ok: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#345 id=345 data-nosnippet>345</a>            <span class="kw">let _ </span>= send.finish();
-<a href=#346 id=346 data-nosnippet>346</a>            <span class="prelude-val">Ok</span>(claims)
-<a href=#347 id=347 data-nosnippet>347</a>        }
-<a href=#348 id=348 data-nosnippet>348</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#349 id=349 data-nosnippet>349</a>            <span class="kw">let _ </span>= reject(<span class="kw-2">&amp;mut </span>send).<span class="kw">await</span>;
-<a href=#350 id=350 data-nosnippet>350</a>            <span class="prelude-val">Err</span>(RelayError::Auth(e.to_string()))
-<a href=#351 id=351 data-nosnippet>351</a>        }
-<a href=#352 id=352 data-nosnippet>352</a>    }
-<a href=#353 id=353 data-nosnippet>353</a>}
-<a href=#354 id=354 data-nosnippet>354</a>
-<a href=#355 id=355 data-nosnippet>355</a><span class="doccomment">/// Send the one-byte rejection and finish the control stream. Best-effort: the
-<a href=#356 id=356 data-nosnippet>356</a>/// caller has already decided to reject, so a write error here is not fatal.
-<a href=#357 id=357 data-nosnippet>357</a></span><span class="kw">async fn </span>reject(send: <span class="kw-2">&amp;mut </span>iroh::endpoint::SendStream) -&gt; <span class="prelude-ty">Result</span>&lt;(), RelayError&gt; {
-<a href=#358 id=358 data-nosnippet>358</a>    send.write_all(<span class="kw-2">&amp;</span>[AUTH_REJECT])
-<a href=#359 id=359 data-nosnippet>359</a>        .<span class="kw">await
-<a href=#360 id=360 data-nosnippet>360</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"write auth reject: {e}"</span>)))<span class="question-mark">?</span>;
-<a href=#361 id=361 data-nosnippet>361</a>    <span class="kw">let _ </span>= send.finish();
-<a href=#362 id=362 data-nosnippet>362</a>    <span class="prelude-val">Ok</span>(())
-<a href=#363 id=363 data-nosnippet>363</a>}
+<a href=#305 id=305 data-nosnippet>305</a>    <span class="doccomment">/// Shared handle on the global active-session counter.
+<a href=#306 id=306 data-nosnippet>306</a>    </span><span class="kw">pub fn </span>active_sessions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;AtomicUsize&gt; {
+<a href=#307 id=307 data-nosnippet>307</a>        <span class="self">self</span>.active.clone()
+<a href=#308 id=308 data-nosnippet>308</a>    }
+<a href=#309 id=309 data-nosnippet>309</a>
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="doccomment">/// Try to admit one session for `user_id`.
+<a href=#311 id=311 data-nosnippet>311</a>    ///
+<a href=#312 id=312 data-nosnippet>312</a>    /// Reserves global capacity with `fetch_add` first and rolls it back on
+<a href=#313 id=313 data-nosnippet>313</a>    /// rejection, rather than check-then-increment, so two concurrent
+<a href=#314 id=314 data-nosnippet>314</a>    /// accept-loop tasks racing the last slot can't both observe "space
+<a href=#315 id=315 data-nosnippet>315</a>    /// available" and overshoot the cap. `Ok` also bumps the per-user count and
+<a href=#316 id=316 data-nosnippet>316</a>    /// returns the RAII guard that reverses both counters on drop; `Err` leaves
+<a href=#317 id=317 data-nosnippet>317</a>    /// every counter exactly as it found it.
+<a href=#318 id=318 data-nosnippet>318</a>    </span><span class="kw">fn </span>admit(<span class="kw-2">&amp;</span><span class="self">self</span>, user_id: Uuid) -&gt; <span class="prelude-ty">Result</span>&lt;SessionGuard, AdmitRejected&gt; {
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">let </span>active = <span class="self">self</span>.active.fetch_add(<span class="number">1</span>, Ordering::SeqCst) + <span class="number">1</span>;
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw">if </span>active &gt; <span class="self">self</span>.limits.max_sessions {
+<a href=#321 id=321 data-nosnippet>321</a>            <span class="self">self</span>.active.fetch_sub(<span class="number">1</span>, Ordering::SeqCst);
+<a href=#322 id=322 data-nosnippet>322</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(AdmitRejected::Global(active - <span class="number">1</span>));
+<a href=#323 id=323 data-nosnippet>323</a>        }
+<a href=#324 id=324 data-nosnippet>324</a>
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="kw">let </span><span class="kw-2">mut </span>per_user = <span class="self">self</span>.per_user.lock().unwrap();
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">let </span>count = per_user.entry(user_id).or_insert(<span class="number">0</span>);
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">if </span><span class="kw-2">*</span>count &gt;= <span class="self">self</span>.limits.max_per_user {
+<a href=#328 id=328 data-nosnippet>328</a>            <span class="kw">let </span>count = <span class="kw-2">*</span>count;
+<a href=#329 id=329 data-nosnippet>329</a>            drop(per_user);
+<a href=#330 id=330 data-nosnippet>330</a>            <span class="self">self</span>.active.fetch_sub(<span class="number">1</span>, Ordering::SeqCst);
+<a href=#331 id=331 data-nosnippet>331</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(AdmitRejected::PerUser(count));
+<a href=#332 id=332 data-nosnippet>332</a>        }
+<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw-2">*</span>count += <span class="number">1</span>;
+<a href=#334 id=334 data-nosnippet>334</a>        drop(per_user);
+<a href=#335 id=335 data-nosnippet>335</a>
+<a href=#336 id=336 data-nosnippet>336</a>        <span class="prelude-val">Ok</span>(SessionGuard {
+<a href=#337 id=337 data-nosnippet>337</a>            active: <span class="self">self</span>.active.clone(),
+<a href=#338 id=338 data-nosnippet>338</a>            per_user: <span class="self">self</span>.per_user.clone(),
+<a href=#339 id=339 data-nosnippet>339</a>            user_id,
+<a href=#340 id=340 data-nosnippet>340</a>        })
+<a href=#341 id=341 data-nosnippet>341</a>    }
+<a href=#342 id=342 data-nosnippet>342</a>}
+<a href=#343 id=343 data-nosnippet>343</a>
+<a href=#344 id=344 data-nosnippet>344</a><span class="doccomment">/// RAII guard for one admitted session: decrements the global count and its
+<a href=#345 id=345 data-nosnippet>345</a>/// user's per-user entry on drop (removing the entry once it reaches zero), so
+<a href=#346 id=346 data-nosnippet>346</a>/// a panic or early return anywhere in the connection handler still releases
+<a href=#347 id=347 data-nosnippet>347</a>/// capacity — admission can never wedge on a phantom session.
+<a href=#348 id=348 data-nosnippet>348</a></span><span class="kw">pub struct </span>SessionGuard {
+<a href=#349 id=349 data-nosnippet>349</a>    active: Arc&lt;AtomicUsize&gt;,
+<a href=#350 id=350 data-nosnippet>350</a>    per_user: Arc&lt;Mutex&lt;HashMap&lt;Uuid, usize&gt;&gt;&gt;,
+<a href=#351 id=351 data-nosnippet>351</a>    user_id: Uuid,
+<a href=#352 id=352 data-nosnippet>352</a>}
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a><span class="kw">impl </span>Drop <span class="kw">for </span>SessionGuard {
+<a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="self">self</span>.active.fetch_sub(<span class="number">1</span>, Ordering::SeqCst);
+<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">let </span><span class="kw-2">mut </span>per_user = <span class="self">self</span>.per_user.lock().unwrap();
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">if let </span>std::collections::hash_map::Entry::Occupied(<span class="kw-2">mut </span>entry) = per_user.entry(<span class="self">self</span>.user_id)
+<a href=#359 id=359 data-nosnippet>359</a>        {
+<a href=#360 id=360 data-nosnippet>360</a>            <span class="kw-2">*</span>entry.get_mut() -= <span class="number">1</span>;
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="kw">if </span><span class="kw-2">*</span>entry.get() == <span class="number">0 </span>{
+<a href=#362 id=362 data-nosnippet>362</a>                entry.remove();
+<a href=#363 id=363 data-nosnippet>363</a>            }
+<a href=#364 id=364 data-nosnippet>364</a>        }
+<a href=#365 id=365 data-nosnippet>365</a>    }
+<a href=#366 id=366 data-nosnippet>366</a>}
+<a href=#367 id=367 data-nosnippet>367</a>
+<a href=#368 id=368 data-nosnippet>368</a><span class="doccomment">/// Errors from the relay's connection-acceptance / auth path. moq-net session
+<a href=#369 id=369 data-nosnippet>369</a>/// errors after a successful handshake are logged inside the spawned session
+<a href=#370 id=370 data-nosnippet>370</a>/// task, not surfaced here.
+<a href=#371 id=371 data-nosnippet>371</a></span><span class="attr">#[derive(Debug, thiserror::Error)]
+<a href=#372 id=372 data-nosnippet>372</a></span><span class="kw">pub enum </span>RelayError {
+<a href=#373 id=373 data-nosnippet>373</a>    <span class="doccomment">/// An iroh stream/connection operation failed during the handshake.
+<a href=#374 id=374 data-nosnippet>374</a>    </span><span class="attr">#[error(<span class="string">"iroh: {0}"</span>)]
+<a href=#375 id=375 data-nosnippet>375</a>    </span>Iroh(String),
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="doccomment">/// The relay token was missing, malformed, failed verification, timed out,
+<a href=#377 id=377 data-nosnippet>377</a>    /// or the session was over a [`SessionLimits`] cap.
+<a href=#378 id=378 data-nosnippet>378</a>    </span><span class="attr">#[error(<span class="string">"auth: {0}"</span>)]
+<a href=#379 id=379 data-nosnippet>379</a>    </span>Auth(String),
+<a href=#380 id=380 data-nosnippet>380</a>    <span class="doccomment">/// The moq-net server handshake failed.
+<a href=#381 id=381 data-nosnippet>381</a>    </span><span class="attr">#[error(<span class="string">"moq: {0}"</span>)]
+<a href=#382 id=382 data-nosnippet>382</a>    </span>Moq(String),
+<a href=#383 id=383 data-nosnippet>383</a>}
+<a href=#384 id=384 data-nosnippet>384</a>
+<a href=#385 id=385 data-nosnippet>385</a><span class="doccomment">/// Create a fresh, wildcard-scoped root [`OriginProducer`] — the shared origin
+<a href=#386 id=386 data-nosnippet>386</a>/// through which moq-net forwards every broadcast.
+<a href=#387 id=387 data-nosnippet>387</a>///
+<a href=#388 id=388 data-nosnippet>388</a>/// Every accepted relay connection gets a *space-scoped view* of this same
+<a href=#389 id=389 data-nosnippet>389</a>/// origin (see [`handle_relay_connection`]), so a publisher and a subscriber in
+<a href=#390 id=390 data-nosnippet>390</a>/// the same space meet here and moq-net fans the objects out. [`Relay`] builds
+<a href=#391 id=391 data-nosnippet>391</a>/// one internally; the dual-ALPN SFU loop ([`crate::sfu::Sfu`]) builds one too so
+<a href=#392 id=392 data-nosnippet>392</a>/// it can serve the relay on its own endpoint without constructing a [`Relay`].
+<a href=#393 id=393 data-nosnippet>393</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new_root_origin() -&gt; OriginProducer {
+<a href=#394 id=394 data-nosnippet>394</a>    Origin::random().produce()
+<a href=#395 id=395 data-nosnippet>395</a>}
+<a href=#396 id=396 data-nosnippet>396</a>
+<a href=#397 id=397 data-nosnippet>397</a><span class="doccomment">/// Build the `space/{space_id}` namespace prefix a connection is scoped to.
+<a href=#398 id=398 data-nosnippet>398</a>///
+<a href=#399 id=399 data-nosnippet>399</a>/// This is the call-membership boundary: everything a participant may announce
+<a href=#400 id=400 data-nosnippet>400</a>/// or subscribe lives under this prefix, and moq-net rejects anything outside
+<a href=#401 id=401 data-nosnippet>401</a>/// it. The SERVE (subscribe) half is ALWAYS scoped to this — see [`peer_scope`]
+<a href=#402 id=402 data-nosnippet>402</a>/// for the tighter INGEST-half prefix.
+<a href=#403 id=403 data-nosnippet>403</a></span><span class="kw">fn </span>space_scope(claims: <span class="kw-2">&amp;</span>RelayTokenClaims) -&gt; String {
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="macro">format!</span>(<span class="string">"space/{}"</span>, claims.space_id)
+<a href=#405 id=405 data-nosnippet>405</a>}
+<a href=#406 id=406 data-nosnippet>406</a>
+<a href=#407 id=407 data-nosnippet>407</a><span class="doccomment">/// Build the `space/{space_id}/peer/{user_id}` namespace prefix the INGEST
+<a href=#408 id=408 data-nosnippet>408</a>/// (publish) half is ALWAYS scoped to. `user_id` comes from the validated relay
+<a href=#409 id=409 data-nosnippet>409</a>/// token, never the client — so a connection can only announce broadcasts under
+<a href=#410 id=410 data-nosnippet>410</a>/// its own authenticated user's sub-path, closing the "any space member can
+<a href=#411 id=411 data-nosnippet>411</a>/// announce under (and displace) another peer's path" hole.
+<a href=#412 id=412 data-nosnippet>412</a></span><span class="kw">fn </span>peer_scope(claims: <span class="kw-2">&amp;</span>RelayTokenClaims) -&gt; String {
+<a href=#413 id=413 data-nosnippet>413</a>    <span class="macro">format!</span>(<span class="string">"space/{}/peer/{}"</span>, claims.space_id, claims.user_id)
+<a href=#414 id=414 data-nosnippet>414</a>}
+<a href=#415 id=415 data-nosnippet>415</a>
+<a href=#416 id=416 data-nosnippet>416</a><span class="doccomment">/// The MoQ relay server.
+<a href=#417 id=417 data-nosnippet>417</a>///
+<a href=#418 id=418 data-nosnippet>418</a>/// Owns the iroh [`Endpoint`], the shared [`OriginProducer`] root through which
+<a href=#419 id=419 data-nosnippet>419</a>/// moq-net forwards every broadcast, the relay-token HMAC secret, and the
+<a href=#420 id=420 data-nosnippet>420</a>/// [`SessionRegistry`] admission accounting. Call [`Relay::run`] to accept
+<a href=#421 id=421 data-nosnippet>421</a>/// connections.
+<a href=#422 id=422 data-nosnippet>422</a>///
+<a href=#423 id=423 data-nosnippet>423</a>/// This is a standalone-relay convenience used by tests; the production binary
+<a href=#424 id=424 data-nosnippet>424</a>/// drives the same [`handle_connection`] logic through [`crate::sfu::Sfu`]
+<a href=#425 id=425 data-nosnippet>425</a>/// instead so the service endpoint is a single iroh node.
+<a href=#426 id=426 data-nosnippet>426</a></span><span class="kw">pub struct </span>Relay {
+<a href=#427 id=427 data-nosnippet>427</a>    endpoint: Endpoint,
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="doccomment">/// The shared root origin (wildcard scope). Every accepted connection gets a
+<a href=#429 id=429 data-nosnippet>429</a>    /// space-scoped view of this same origin, so a publisher in space X and a
+<a href=#430 id=430 data-nosnippet>430</a>    /// subscriber in space X meet here and moq-net fans the objects out.
+<a href=#431 id=431 data-nosnippet>431</a>    </span>origin: OriginProducer,
+<a href=#432 id=432 data-nosnippet>432</a>    relay_hmac_secret: String,
+<a href=#433 id=433 data-nosnippet>433</a>    registry: SessionRegistry,
+<a href=#434 id=434 data-nosnippet>434</a>    auth_deadline: Duration,
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="doccomment">/// Per-connection ingress-watchdog budget — see [`IngressLimits`].
+<a href=#436 id=436 data-nosnippet>436</a>    </span>ingress: IngressLimits,
+<a href=#437 id=437 data-nosnippet>437</a>}
+<a href=#438 id=438 data-nosnippet>438</a>
+<a href=#439 id=439 data-nosnippet>439</a><span class="kw">impl </span>Relay {
+<a href=#440 id=440 data-nosnippet>440</a>    <span class="doccomment">/// Build a relay around an already-bound iroh [`Endpoint`].
+<a href=#441 id=441 data-nosnippet>441</a>    ///
+<a href=#442 id=442 data-nosnippet>442</a>    /// The caller is responsible for having advertised [`RELAY_ALPN`] on the
+<a href=#443 id=443 data-nosnippet>443</a>    /// endpoint. Mirrors [`crate::sfu::Sfu::from_endpoint`] so the hermetic
+<a href=#444 id=444 data-nosnippet>444</a>    /// tests exercise the same accept/auth glue that runs in production.
+<a href=#445 id=445 data-nosnippet>445</a>    </span><span class="kw">pub fn </span>from_endpoint(
+<a href=#446 id=446 data-nosnippet>446</a>        endpoint: Endpoint,
+<a href=#447 id=447 data-nosnippet>447</a>        relay_hmac_secret: String,
+<a href=#448 id=448 data-nosnippet>448</a>        config: RelayConfig,
+<a href=#449 id=449 data-nosnippet>449</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="self">Self </span>{
+<a href=#451 id=451 data-nosnippet>451</a>            endpoint,
+<a href=#452 id=452 data-nosnippet>452</a>            origin: new_root_origin(),
+<a href=#453 id=453 data-nosnippet>453</a>            relay_hmac_secret,
+<a href=#454 id=454 data-nosnippet>454</a>            registry: SessionRegistry::new(config.limits),
+<a href=#455 id=455 data-nosnippet>455</a>            auth_deadline: config.auth_deadline,
+<a href=#456 id=456 data-nosnippet>456</a>            ingress: config.ingress,
+<a href=#457 id=457 data-nosnippet>457</a>        }
+<a href=#458 id=458 data-nosnippet>458</a>    }
+<a href=#459 id=459 data-nosnippet>459</a>
+<a href=#460 id=460 data-nosnippet>460</a>    <span class="doccomment">/// The iroh node id clients dial to reach this relay.
+<a href=#461 id=461 data-nosnippet>461</a>    </span><span class="kw">pub fn </span>node_id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; iroh::EndpointId {
+<a href=#462 id=462 data-nosnippet>462</a>        <span class="self">self</span>.endpoint.id()
+<a href=#463 id=463 data-nosnippet>463</a>    }
+<a href=#464 id=464 data-nosnippet>464</a>
+<a href=#465 id=465 data-nosnippet>465</a>    <span class="doccomment">/// Shared handle on the active-session counter — see
+<a href=#466 id=466 data-nosnippet>466</a>    /// [`SessionRegistry::active_sessions`]. Exposed for tests asserting that a
+<a href=#467 id=467 data-nosnippet>467</a>    /// rejected/timed-out connection never touches it.
+<a href=#468 id=468 data-nosnippet>468</a>    </span><span class="kw">pub fn </span>active_sessions(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;AtomicUsize&gt; {
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="self">self</span>.registry.active_sessions()
+<a href=#470 id=470 data-nosnippet>470</a>    }
+<a href=#471 id=471 data-nosnippet>471</a>
+<a href=#472 id=472 data-nosnippet>472</a>    <span class="doccomment">/// Accept connections in a loop until the endpoint closes.
+<a href=#473 id=473 data-nosnippet>473</a>    ///
+<a href=#474 id=474 data-nosnippet>474</a>    /// Each connection is handed to [`handle_connection`] in its own task. The
+<a href=#475 id=475 data-nosnippet>475</a>    /// shared origin and secret are cloned per connection (both cheap: the
+<a href=#476 id=476 data-nosnippet>476</a>    /// origin is `Arc`-backed internally, the secret is a short `String`).
+<a href=#477 id=477 data-nosnippet>477</a>    </span><span class="kw">pub async fn </span>run(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; eyre::Result&lt;()&gt; {
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="macro">tracing::info!</span>(node_id = %<span class="self">self</span>.endpoint.id(), <span class="string">"MoQ relay accepting connections"</span>);
+<a href=#479 id=479 data-nosnippet>479</a>
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="kw">loop </span>{
+<a href=#481 id=481 data-nosnippet>481</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(incoming) = <span class="self">self</span>.endpoint.accept().<span class="kw">await else </span>{
+<a href=#482 id=482 data-nosnippet>482</a>                <span class="macro">tracing::info!</span>(<span class="string">"MoQ relay endpoint closed — stopping accept loop"</span>);
+<a href=#483 id=483 data-nosnippet>483</a>                <span class="kw">break</span>;
+<a href=#484 id=484 data-nosnippet>484</a>            };
+<a href=#485 id=485 data-nosnippet>485</a>
+<a href=#486 id=486 data-nosnippet>486</a>            <span class="kw">let </span>conn = <span class="kw">match </span>incoming.<span class="kw">await </span>{
+<a href=#487 id=487 data-nosnippet>487</a>                <span class="prelude-val">Ok</span>(c) =&gt; c,
+<a href=#488 id=488 data-nosnippet>488</a>                <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#489 id=489 data-nosnippet>489</a>                    <span class="macro">tracing::warn!</span>(<span class="string">"incoming relay connection failed: {e}"</span>);
+<a href=#490 id=490 data-nosnippet>490</a>                    <span class="kw">continue</span>;
+<a href=#491 id=491 data-nosnippet>491</a>                }
+<a href=#492 id=492 data-nosnippet>492</a>            };
+<a href=#493 id=493 data-nosnippet>493</a>
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="kw">let </span>origin = <span class="self">self</span>.origin.clone();
+<a href=#495 id=495 data-nosnippet>495</a>            <span class="kw">let </span>secret = <span class="self">self</span>.relay_hmac_secret.clone();
+<a href=#496 id=496 data-nosnippet>496</a>            <span class="kw">let </span>registry = <span class="self">self</span>.registry.clone();
+<a href=#497 id=497 data-nosnippet>497</a>            <span class="kw">let </span>auth_deadline = <span class="self">self</span>.auth_deadline;
+<a href=#498 id=498 data-nosnippet>498</a>            <span class="kw">let </span>ingress = <span class="self">self</span>.ingress;
+<a href=#499 id=499 data-nosnippet>499</a>            tokio::spawn(<span class="kw">async move </span>{
+<a href=#500 id=500 data-nosnippet>500</a>                <span class="kw">if let </span><span class="prelude-val">Err</span>(e) =
+<a href=#501 id=501 data-nosnippet>501</a>                    handle_connection(conn, origin, secret, registry, auth_deadline, ingress).<span class="kw">await
+<a href=#502 id=502 data-nosnippet>502</a>                </span>{
+<a href=#503 id=503 data-nosnippet>503</a>                    <span class="macro">tracing::warn!</span>(<span class="string">"relay connection handler error: {e}"</span>);
+<a href=#504 id=504 data-nosnippet>504</a>                }
+<a href=#505 id=505 data-nosnippet>505</a>            });
+<a href=#506 id=506 data-nosnippet>506</a>        }
+<a href=#507 id=507 data-nosnippet>507</a>
+<a href=#508 id=508 data-nosnippet>508</a>        <span class="prelude-val">Ok</span>(())
+<a href=#509 id=509 data-nosnippet>509</a>    }
+<a href=#510 id=510 data-nosnippet>510</a>}
+<a href=#511 id=511 data-nosnippet>511</a>
+<a href=#512 id=512 data-nosnippet>512</a><span class="doccomment">/// Handle one incoming MoQ relay connection on a **shared** origin.
+<a href=#513 id=513 data-nosnippet>513</a>///
+<a href=#514 id=514 data-nosnippet>514</a>/// This is the per-connection relay logic factored out of [`Relay::run`] so the
+<a href=#515 id=515 data-nosnippet>515</a>/// SFU service's accept loop ([`crate::sfu::Sfu::run`]) can drive the relay
+<a href=#516 id=516 data-nosnippet>516</a>/// with the SFU's shared origin, relay secret, and session registry.
+<a href=#517 id=517 data-nosnippet>517</a>/// [`Relay::run`] (used by the standalone relay tests) and the SFU loop both
+<a href=#518 id=518 data-nosnippet>518</a>/// call it, so they exercise identical auth/admission/scoping/session glue.
+<a href=#519 id=519 data-nosnippet>519</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>handle_relay_connection(
+<a href=#520 id=520 data-nosnippet>520</a>    conn: iroh::endpoint::Connection,
+<a href=#521 id=521 data-nosnippet>521</a>    origin: OriginProducer,
+<a href=#522 id=522 data-nosnippet>522</a>    relay_hmac_secret: String,
+<a href=#523 id=523 data-nosnippet>523</a>    registry: SessionRegistry,
+<a href=#524 id=524 data-nosnippet>524</a>    auth_deadline: Duration,
+<a href=#525 id=525 data-nosnippet>525</a>    ingress: IngressLimits,
+<a href=#526 id=526 data-nosnippet>526</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), RelayError&gt; {
+<a href=#527 id=527 data-nosnippet>527</a>    handle_connection(
+<a href=#528 id=528 data-nosnippet>528</a>        conn,
+<a href=#529 id=529 data-nosnippet>529</a>        origin,
+<a href=#530 id=530 data-nosnippet>530</a>        relay_hmac_secret,
+<a href=#531 id=531 data-nosnippet>531</a>        registry,
+<a href=#532 id=532 data-nosnippet>532</a>        auth_deadline,
+<a href=#533 id=533 data-nosnippet>533</a>        ingress,
+<a href=#534 id=534 data-nosnippet>534</a>    )
+<a href=#535 id=535 data-nosnippet>535</a>    .<span class="kw">await
+<a href=#536 id=536 data-nosnippet>536</a></span>}
+<a href=#537 id=537 data-nosnippet>537</a>
+<a href=#538 id=538 data-nosnippet>538</a><span class="doccomment">/// Handle one incoming MoQ relay connection: authenticate, admit, scope, run
+<a href=#539 id=539 data-nosnippet>539</a>/// the moq-net server session.
+<a href=#540 id=540 data-nosnippet>540</a>///
+<a href=#541 id=541 data-nosnippet>541</a>/// ## Stream ordering (why the token stream is accepted first)
+<a href=#542 id=542 data-nosnippet>542</a>///
+<a href=#543 id=543 data-nosnippet>543</a>/// The client opens the **relay-token control bi-stream first** and awaits the
+<a href=#544 id=544 data-nosnippet>544</a>/// relay's [`AUTH_OK`] before starting its MoQ handshake. The relay accepts that
+<a href=#545 id=545 data-nosnippet>545</a>/// bi-stream (`conn.accept_bi`) before handing the connection to
+<a href=#546 id=546 data-nosnippet>546</a>/// [`moq_net::Server::accept`] (which opens *its own* control stream). QUIC
+<a href=#547 id=547 data-nosnippet>547</a>/// bi-streams are accepted in open order, so the token exchange always lands
+<a href=#548 id=548 data-nosnippet>548</a>/// before the MoQ control stream. If auth fails the connection is closed and the
+<a href=#549 id=549 data-nosnippet>549</a>/// MoQ handshake never runs.
+<a href=#550 id=550 data-nosnippet>550</a>///
+<a href=#551 id=551 data-nosnippet>551</a>/// ## Ordering of auth vs. admission vs. the verdict byte
+<a href=#552 id=552 data-nosnippet>552</a>///
+<a href=#553 id=553 data-nosnippet>553</a>/// [`authenticate`] verifies the token but deliberately does NOT write
+<a href=#554 id=554 data-nosnippet>554</a>/// [`AUTH_OK`] on success — it hands back the still-open send half instead. That
+<a href=#555 id=555 data-nosnippet>555</a>/// lets this function run the [`SessionRegistry::admit`] cap check *before*
+<a href=#556 id=556 data-nosnippet>556</a>/// committing to a verdict, so an over-cap connection still gets a clean single-
+<a href=#557 id=557 data-nosnippet>557</a>/// byte [`AUTH_REJECT`] (the same wire shape as a bad token) rather than
+<a href=#558 id=558 data-nosnippet>558</a>/// silently being admitted and then killed, or racing a verdict it already sent.
+<a href=#559 id=559 data-nosnippet>559</a></span><span class="kw">async fn </span>handle_connection(
+<a href=#560 id=560 data-nosnippet>560</a>    conn: iroh::endpoint::Connection,
+<a href=#561 id=561 data-nosnippet>561</a>    origin: OriginProducer,
+<a href=#562 id=562 data-nosnippet>562</a>    relay_hmac_secret: String,
+<a href=#563 id=563 data-nosnippet>563</a>    registry: SessionRegistry,
+<a href=#564 id=564 data-nosnippet>564</a>    auth_deadline: Duration,
+<a href=#565 id=565 data-nosnippet>565</a>    ingress: IngressLimits,
+<a href=#566 id=566 data-nosnippet>566</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), RelayError&gt; {
+<a href=#567 id=567 data-nosnippet>567</a>    <span class="kw">let </span>peer = conn.remote_id();
+<a href=#568 id=568 data-nosnippet>568</a>    <span class="macro">tracing::info!</span>(%peer, <span class="string">"relay connection accepted"</span>);
+<a href=#569 id=569 data-nosnippet>569</a>
+<a href=#570 id=570 data-nosnippet>570</a>    <span class="comment">// ── Relay-token auth (control bi-stream, bounded) ──────────────────────
+<a href=#571 id=571 data-nosnippet>571</a>    </span><span class="kw">let </span>(claims, <span class="kw-2">mut </span>auth_send) = <span class="kw">match </span>tokio::time::timeout(
+<a href=#572 id=572 data-nosnippet>572</a>        auth_deadline,
+<a href=#573 id=573 data-nosnippet>573</a>        authenticate(<span class="kw-2">&amp;</span>conn, <span class="kw-2">&amp;</span>relay_hmac_secret),
+<a href=#574 id=574 data-nosnippet>574</a>    )
+<a href=#575 id=575 data-nosnippet>575</a>    .<span class="kw">await
+<a href=#576 id=576 data-nosnippet>576</a>    </span>{
+<a href=#577 id=577 data-nosnippet>577</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(pair)) =&gt; pair,
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
+<a href=#579 id=579 data-nosnippet>579</a>            <span class="macro">tracing::warn!</span>(%peer, <span class="string">"relay auth rejected: {e}"</span>);
+<a href=#580 id=580 data-nosnippet>580</a>            <span class="comment">// Don't slam `conn.close` here: a `CONNECTION_CLOSE` frame can
+<a href=#581 id=581 data-nosnippet>581</a>            // overtake the buffered reject byte, so the client would observe
+<a href=#582 id=582 data-nosnippet>582</a>            // a generic connection error instead of the explicit reject
+<a href=#583 id=583 data-nosnippet>583</a>            // verdict. Wait (bounded) for the client to read the verdict and
+<a href=#584 id=584 data-nosnippet>584</a>            // close the connection itself, giving the reject byte a chance
+<a href=#585 id=585 data-nosnippet>585</a>            // to land.
+<a href=#586 id=586 data-nosnippet>586</a>            </span><span class="kw">let _ </span>= tokio::time::timeout(AUTH_REJECT_DRAIN, conn.closed()).<span class="kw">await</span>;
+<a href=#587 id=587 data-nosnippet>587</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(e);
+<a href=#588 id=588 data-nosnippet>588</a>        }
+<a href=#589 id=589 data-nosnippet>589</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#590 id=590 data-nosnippet>590</a>            <span class="comment">// The client completed the QUIC handshake but never opened, or
+<a href=#591 id=591 data-nosnippet>591</a>            // never finished, the token control stream — nothing was ever
+<a href=#592 id=592 data-nosnippet>592</a>            // sent to drain, so close outright rather than leave the task
+<a href=#593 id=593 data-nosnippet>593</a>            // and connection open behind QUIC's automatic keepalives.
+<a href=#594 id=594 data-nosnippet>594</a>            </span><span class="macro">tracing::warn!</span>(%peer, deadline = <span class="question-mark">?</span>auth_deadline, <span class="string">"relay auth handshake timed out — closing"</span>);
+<a href=#595 id=595 data-nosnippet>595</a>            conn.close(<span class="number">0u32</span>.into(), <span class="string">b"auth timeout"</span>);
+<a href=#596 id=596 data-nosnippet>596</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(RelayError::Auth(<span class="string">"auth handshake timed out"</span>.into()));
+<a href=#597 id=597 data-nosnippet>597</a>        }
+<a href=#598 id=598 data-nosnippet>598</a>    };
+<a href=#599 id=599 data-nosnippet>599</a>
+<a href=#600 id=600 data-nosnippet>600</a>    <span class="comment">// ── Session admission (after auth, before moq-net) ──────────────────────
+<a href=#601 id=601 data-nosnippet>601</a>    </span><span class="kw">let </span>_session_guard = <span class="kw">match </span>registry.admit(claims.user_id) {
+<a href=#602 id=602 data-nosnippet>602</a>        <span class="prelude-val">Ok</span>(guard) =&gt; guard,
+<a href=#603 id=603 data-nosnippet>603</a>        <span class="prelude-val">Err</span>(reason) =&gt; {
+<a href=#604 id=604 data-nosnippet>604</a>            <span class="macro">tracing::warn!</span>(
+<a href=#605 id=605 data-nosnippet>605</a>                %peer, %claims.user_id, %claims.space_id, <span class="question-mark">?</span>reason,
+<a href=#606 id=606 data-nosnippet>606</a>                <span class="string">"relay session rejected — over capacity"
+<a href=#607 id=607 data-nosnippet>607</a>            </span>);
+<a href=#608 id=608 data-nosnippet>608</a>            <span class="kw">let _ </span>= reject(<span class="kw-2">&amp;mut </span>auth_send).<span class="kw">await</span>;
+<a href=#609 id=609 data-nosnippet>609</a>            <span class="kw">let _ </span>= tokio::time::timeout(AUTH_REJECT_DRAIN, conn.closed()).<span class="kw">await</span>;
+<a href=#610 id=610 data-nosnippet>610</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(RelayError::Auth(<span class="macro">format!</span>(
+<a href=#611 id=611 data-nosnippet>611</a>                <span class="string">"session rejected: over capacity ({reason:?})"
+<a href=#612 id=612 data-nosnippet>612</a>            </span>)));
+<a href=#613 id=613 data-nosnippet>613</a>        }
+<a href=#614 id=614 data-nosnippet>614</a>    };
+<a href=#615 id=615 data-nosnippet>615</a>    auth_send
+<a href=#616 id=616 data-nosnippet>616</a>        .write_all(<span class="kw-2">&amp;</span>[AUTH_OK])
+<a href=#617 id=617 data-nosnippet>617</a>        .<span class="kw">await
+<a href=#618 id=618 data-nosnippet>618</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"write auth ok: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#619 id=619 data-nosnippet>619</a>    <span class="kw">let _ </span>= auth_send.finish();
+<a href=#620 id=620 data-nosnippet>620</a>
+<a href=#621 id=621 data-nosnippet>621</a>    <span class="comment">// ── Namespace scoping (the call-membership + per-user boundary) ────────
+<a href=#622 id=622 data-nosnippet>622</a>    // The two halves are scoped INDEPENDENTLY from the shared root origin (not
+<a href=#623 id=623 data-nosnippet>623</a>    // chained) because they need different prefixes:
+<a href=#624 id=624 data-nosnippet>624</a>    //   * SERVE (subscribe, `with_publish`) — `space/{id}`: a participant must
+<a href=#625 id=625 data-nosnippet>625</a>    //     be able to subscribe to anyone else in the call.
+<a href=#626 id=626 data-nosnippet>626</a>    //   * INGEST (announce, `with_consume`) — `space/{id}/peer/{user_id}`: a
+<a href=#627 id=627 data-nosnippet>627</a>    //     connection can only announce under its own authenticated identity.
+<a href=#628 id=628 data-nosnippet>628</a>    </span><span class="kw">let </span>scope = space_scope(<span class="kw-2">&amp;</span>claims);
+<a href=#629 id=629 data-nosnippet>629</a>    <span class="kw">let </span>scope_path = Path::new(<span class="kw-2">&amp;</span>scope);
+<a href=#630 id=630 data-nosnippet>630</a>    <span class="kw">let </span>scoped_serve_producer = origin
+<a href=#631 id=631 data-nosnippet>631</a>        .scope(std::slice::from_ref(<span class="kw-2">&amp;</span>scope_path))
+<a href=#632 id=632 data-nosnippet>632</a>        .ok_or_else(|| RelayError::Moq(<span class="macro">format!</span>(<span class="string">"origin scope rejected namespace {scope:?}"</span>)))<span class="question-mark">?</span>;
+<a href=#633 id=633 data-nosnippet>633</a>    <span class="comment">// `.consume()` derives an OriginConsumer inheriting the producer's scope —
+<a href=#634 id=634 data-nosnippet>634</a>    // this is the `with_publish` half, so subscribers here see any broadcast
+<a href=#635 id=635 data-nosnippet>635</a>    // announced anywhere in the space, regardless of the ingest scope below.
+<a href=#636 id=636 data-nosnippet>636</a>    </span><span class="kw">let </span>scoped_consume = scoped_serve_producer.consume();
+<a href=#637 id=637 data-nosnippet>637</a>
+<a href=#638 id=638 data-nosnippet>638</a>    <span class="kw">let </span>ingest_scope = peer_scope(<span class="kw-2">&amp;</span>claims);
+<a href=#639 id=639 data-nosnippet>639</a>    <span class="kw">let </span>ingest_path = Path::new(<span class="kw-2">&amp;</span>ingest_scope);
+<a href=#640 id=640 data-nosnippet>640</a>    <span class="kw">let </span>scoped_publish = origin
+<a href=#641 id=641 data-nosnippet>641</a>        .scope(std::slice::from_ref(<span class="kw-2">&amp;</span>ingest_path))
+<a href=#642 id=642 data-nosnippet>642</a>        .ok_or_else(|| {
+<a href=#643 id=643 data-nosnippet>643</a>            RelayError::Moq(<span class="macro">format!</span>(<span class="string">"origin scope rejected namespace {ingest_scope:?}"</span>))
+<a href=#644 id=644 data-nosnippet>644</a>        })<span class="question-mark">?</span>;
+<a href=#645 id=645 data-nosnippet>645</a>    <span class="comment">// A second cursor over the same ingest scope, dedicated to the watchdog's
+<a href=#646 id=646 data-nosnippet>646</a>    // broadcast-count budget (see `ingress_watchdog`). `consume()` takes `&amp;self`
+<a href=#647 id=647 data-nosnippet>647</a>    // so this doesn't disturb `scoped_publish`, which is still moved into
+<a href=#648 id=648 data-nosnippet>648</a>    // `with_consume` below.
+<a href=#649 id=649 data-nosnippet>649</a>    </span><span class="kw">let </span>ingest_announces = scoped_publish.consume();
+<a href=#650 id=650 data-nosnippet>650</a>
+<a href=#651 id=651 data-nosnippet>651</a>    <span class="macro">tracing::info!</span>(
+<a href=#652 id=652 data-nosnippet>652</a>        %peer, %claims.user_id, %claims.space_id,
+<a href=#653 id=653 data-nosnippet>653</a>        serve_namespace = %scope, ingest_namespace = %ingest_scope,
+<a href=#654 id=654 data-nosnippet>654</a>        <span class="string">"relay connection authorised"
+<a href=#655 id=655 data-nosnippet>655</a>    </span>);
+<a href=#656 id=656 data-nosnippet>656</a>
+<a href=#657 id=657 data-nosnippet>657</a>    <span class="comment">// ── MoQ server handshake + session ─────────────────────────────────────
+<a href=#658 id=658 data-nosnippet>658</a>    // `web-transport-iroh` raw mode: speak MoQ directly over iroh, no HTTP/3.
+<a href=#659 id=659 data-nosnippet>659</a>    </span><span class="kw">let </span>wt = web_transport_iroh::Session::raw(conn.clone());
+<a href=#660 id=660 data-nosnippet>660</a>    <span class="kw">let </span>session = moq_net::Server::new()
+<a href=#661 id=661 data-nosnippet>661</a>        .with_consume(scoped_publish)
+<a href=#662 id=662 data-nosnippet>662</a>        .with_publish(scoped_consume)
+<a href=#663 id=663 data-nosnippet>663</a>        .accept(wt)
+<a href=#664 id=664 data-nosnippet>664</a>        .<span class="kw">await
+<a href=#665 id=665 data-nosnippet>665</a>        </span>.map_err(|e| RelayError::Moq(<span class="macro">format!</span>(<span class="string">"server accept: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#666 id=666 data-nosnippet>666</a>
+<a href=#667 id=667 data-nosnippet>667</a>    <span class="comment">// Ingress watchdog: bandwidth budget + broadcast-count quota + the
+<a href=#668 id=668 data-nosnippet>668</a>    // periodic ops line, for the life of this session. Aborted the moment the
+<a href=#669 id=669 data-nosnippet>669</a>    // connection closes so it never outlives what it's watching.
+<a href=#670 id=670 data-nosnippet>670</a>    </span><span class="kw">let </span>watchdog_conn = conn.clone();
+<a href=#671 id=671 data-nosnippet>671</a>    <span class="kw">let </span>watchdog = tokio::spawn(ingress_watchdog(
+<a href=#672 id=672 data-nosnippet>672</a>        watchdog_conn,
+<a href=#673 id=673 data-nosnippet>673</a>        ingest_announces,
+<a href=#674 id=674 data-nosnippet>674</a>        claims.user_id,
+<a href=#675 id=675 data-nosnippet>675</a>        claims.space_id,
+<a href=#676 id=676 data-nosnippet>676</a>        ingress,
+<a href=#677 id=677 data-nosnippet>677</a>    ));
+<a href=#678 id=678 data-nosnippet>678</a>
+<a href=#679 id=679 data-nosnippet>679</a>    <span class="comment">// The session drives forwarding on background tasks (moq-net spawns them in
+<a href=#680 id=680 data-nosnippet>680</a>    // `lite::start`). Hold it alive until the connection closes, then drop it so
+<a href=#681 id=681 data-nosnippet>681</a>    // its broadcasts unannounce and subscribers see end-of-track.
+<a href=#682 id=682 data-nosnippet>682</a>    </span><span class="kw">let </span>_session = session;
+<a href=#683 id=683 data-nosnippet>683</a>    conn.closed().<span class="kw">await</span>;
+<a href=#684 id=684 data-nosnippet>684</a>    watchdog.abort();
+<a href=#685 id=685 data-nosnippet>685</a>    <span class="macro">tracing::info!</span>(%peer, %claims.user_id, <span class="string">"relay connection closed"</span>);
+<a href=#686 id=686 data-nosnippet>686</a>    <span class="prelude-val">Ok</span>(())
+<a href=#687 id=687 data-nosnippet>687</a>}
+<a href=#688 id=688 data-nosnippet>688</a>
+<a href=#689 id=689 data-nosnippet>689</a><span class="doccomment">/// Per-connection ops surface + policy enforcement, run for the life of one
+<a href=#690 id=690 data-nosnippet>690</a>/// authenticated relay session (spawned in [`handle_connection`], aborted the
+<a href=#691 id=691 data-nosnippet>691</a>/// instant the connection closes). Three concerns share one loop so there is
+<a href=#692 id=692 data-nosnippet>692</a>/// exactly one task watching a connection's health:
+<a href=#693 id=693 data-nosnippet>693</a>///
+<a href=#694 id=694 data-nosnippet>694</a>/// * **Ingress budget** — samples `conn.stats().udp_rx.bytes` (cumulative
+<a href=#695 id=695 data-nosnippet>695</a>///   QUIC bytes received) every [`IngressLimits::sample_interval`] and feeds
+<a href=#696 id=696 data-nosnippet>696</a>///   an [`IngressBudget`] to catch a sustained flood
+<a href=#697 id=697 data-nosnippet>697</a>///   ([`IngressLimits::max_bytes_per_sec`]).
+<a href=#698 id=698 data-nosnippet>698</a>/// * **Broadcast quota** — counts this connection's own currently-announced
+<a href=#699 id=699 data-nosnippet>699</a>///   broadcast paths from `ingest_announces`' event stream, bounding runaway
+<a href=#700 id=700 data-nosnippet>700</a>///   `space/{s}/peer/{user_id}` fan-out
+<a href=#701 id=701 data-nosnippet>701</a>///   ([`IngressLimits::max_broadcasts_per_session`]).
+<a href=#702 id=702 data-nosnippet>702</a>///
+<a href=#703 id=703 data-nosnippet>703</a>///   Why an announce-event count and not moq-net's `Stats` aggregator (the
+<a href=#704 id=704 data-nosnippet>704</a>///   module built for exactly this kind of counting): `Stats`'s per-broadcast
+<a href=#705 id=705 data-nosnippet>705</a>///   counters are private and only reach the outside world by publishing a
+<a href=#706 id=706 data-nosnippet>706</a>///   JSON snapshot onto a broadcast that a consumer must then subscribe to
+<a href=#707 id=707 data-nosnippet>707</a>///   and parse — there is no synchronous in-process accessor. Standing up a
+<a href=#708 id=708 data-nosnippet>708</a>///   scratch origin plus a self-subscribing background task just to read back
+<a href=#709 id=709 data-nosnippet>709</a>///   two integers is exactly the kind of indirection not worth adding for a
+<a href=#710 id=710 data-nosnippet>710</a>///   number this cheap to derive directly. `ingest_announces` is a consumer
+<a href=#711 id=711 data-nosnippet>711</a>///   over the SAME shared origin subtree `scoped_publish` (this connection's
+<a href=#712 id=712 data-nosnippet>712</a>///   ingest half) publishes into, via the ordinary [`OriginConsumer`] announce
+<a href=#713 id=713 data-nosnippet>713</a>///   API every other subscriber in this codebase already uses — so counting
+<a href=#714 id=714 data-nosnippet>714</a>///   its live announce/unannounce events is both cheaper and simpler.
+<a href=#715 id=715 data-nosnippet>715</a>///
+<a href=#716 id=716 data-nosnippet>716</a>///   The tradeoff: that subtree is keyed by the authenticated `(space, user)`
+<a href=#717 id=717 data-nosnippet>717</a>///   pair, not by QUIC connection identity, so if the SAME user holds more
+<a href=#718 id=718 data-nosnippet>718</a>///   than one concurrent session in the SAME space (allowed up to
+<a href=#719 id=719 data-nosnippet>719</a>///   [`SessionLimits::max_per_user`]), every one of those connections'
+<a href=#720 id=720 data-nosnippet>720</a>///   watchdogs sees the group's COMBINED broadcast count, not just its own.
+<a href=#721 id=721 data-nosnippet>721</a>///   In the common case (one session per user per space) the two coincide
+<a href=#722 id=722 data-nosnippet>722</a>///   exactly. When they don't, the quota still bounds something real — one
+<a href=#723 id=723 data-nosnippet>723</a>///   identity's total ingest fan-out into a space — just not quite what
+<a href=#724 id=724 data-nosnippet>724</a>///   "per-session" literally promises.
+<a href=#725 id=725 data-nosnippet>725</a>/// * **Ops log** — every [`OPS_LOG_INTERVAL`], one `info!` line summarising
+<a href=#726 id=726 data-nosnippet>726</a>///   both, so "which connection is the problem" is answerable by grepping one
+<a href=#727 id=727 data-nosnippet>727</a>///   connection's lines rather than reasoning about aggregate metrics.
+<a href=#728 id=728 data-nosnippet>728</a>///
+<a href=#729 id=729 data-nosnippet>729</a>/// Either policy trip closes the connection with a distinct close code
+<a href=#730 id=730 data-nosnippet>730</a>/// ([`CLOSE_INGRESS_BUDGET_EXCEEDED`] / [`CLOSE_BROADCAST_QUOTA_EXCEEDED`])
+<a href=#731 id=731 data-nosnippet>731</a>/// rather than the generic `0` other close paths use, so a client inspecting
+<a href=#732 id=732 data-nosnippet>732</a>/// the code/reason on `conn.closed()` can tell a policy close from a network
+<a href=#733 id=733 data-nosnippet>733</a>/// failure.
+<a href=#734 id=734 data-nosnippet>734</a></span><span class="kw">async fn </span>ingress_watchdog(
+<a href=#735 id=735 data-nosnippet>735</a>    conn: iroh::endpoint::Connection,
+<a href=#736 id=736 data-nosnippet>736</a>    <span class="kw-2">mut </span>ingest_announces: OriginConsumer,
+<a href=#737 id=737 data-nosnippet>737</a>    user_id: Uuid,
+<a href=#738 id=738 data-nosnippet>738</a>    space_id: Uuid,
+<a href=#739 id=739 data-nosnippet>739</a>    limits: IngressLimits,
+<a href=#740 id=740 data-nosnippet>740</a>) {
+<a href=#741 id=741 data-nosnippet>741</a>    <span class="kw">let </span><span class="kw-2">mut </span>budget = IngressBudget::new(limits.max_bytes_per_sec, limits.window);
+<a href=#742 id=742 data-nosnippet>742</a>    <span class="kw">let </span><span class="kw-2">mut </span>live_broadcasts: HashSet&lt;PathOwned&gt; = HashSet::new();
+<a href=#743 id=743 data-nosnippet>743</a>    <span class="comment">// Once the announce cursor closes (the session ended) stop polling it —
+<a href=#744 id=744 data-nosnippet>744</a>    // a closed `OriginConsumer` future resolves `None` immediately, and
+<a href=#745 id=745 data-nosnippet>745</a>    // without this guard that would spin the select loop.
+<a href=#746 id=746 data-nosnippet>746</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>announces_open = <span class="bool-val">true</span>;
+<a href=#747 id=747 data-nosnippet>747</a>
+<a href=#748 id=748 data-nosnippet>748</a>    <span class="kw">let </span><span class="kw-2">mut </span>sample_ticker = tokio::time::interval(limits.sample_interval);
+<a href=#749 id=749 data-nosnippet>749</a>    sample_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+<a href=#750 id=750 data-nosnippet>750</a>    <span class="kw">let </span><span class="kw-2">mut </span>log_ticker = tokio::time::interval(OPS_LOG_INTERVAL);
+<a href=#751 id=751 data-nosnippet>751</a>    log_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+<a href=#752 id=752 data-nosnippet>752</a>
+<a href=#753 id=753 data-nosnippet>753</a>    <span class="kw">loop </span>{
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="macro">tokio::select!</span> {
+<a href=#755 id=755 data-nosnippet>755</a>            <span class="kw">_ </span>= sample_ticker.tick() =&gt; {
+<a href=#756 id=756 data-nosnippet>756</a>                <span class="kw">let </span>bytes = conn.stats().udp_rx.bytes;
+<a href=#757 id=757 data-nosnippet>757</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(rate) = budget.sample(bytes, Instant::now()) {
+<a href=#758 id=758 data-nosnippet>758</a>                    <span class="macro">tracing::warn!</span>(
+<a href=#759 id=759 data-nosnippet>759</a>                        %user_id, %space_id, bytes_per_sec = rate, cap = limits.max_bytes_per_sec,
+<a href=#760 id=760 data-nosnippet>760</a>                        <span class="string">"relay connection exceeded its ingress budget — closing"
+<a href=#761 id=761 data-nosnippet>761</a>                    </span>);
+<a href=#762 id=762 data-nosnippet>762</a>                    conn.close(
+<a href=#763 id=763 data-nosnippet>763</a>                        CLOSE_INGRESS_BUDGET_EXCEEDED.into(),
+<a href=#764 id=764 data-nosnippet>764</a>                        <span class="string">b"ingress budget exceeded"</span>,
+<a href=#765 id=765 data-nosnippet>765</a>                    );
+<a href=#766 id=766 data-nosnippet>766</a>                    <span class="kw">return</span>;
+<a href=#767 id=767 data-nosnippet>767</a>                }
+<a href=#768 id=768 data-nosnippet>768</a>            }
+<a href=#769 id=769 data-nosnippet>769</a>            update = ingest_announces.announced(), <span class="kw">if </span>announces_open =&gt; {
+<a href=#770 id=770 data-nosnippet>770</a>                <span class="kw">match </span>update {
+<a href=#771 id=771 data-nosnippet>771</a>                    <span class="prelude-val">Some</span>((path, <span class="prelude-val">Some</span>(<span class="kw">_</span>))) =&gt; {
+<a href=#772 id=772 data-nosnippet>772</a>                        live_broadcasts.insert(path);
+<a href=#773 id=773 data-nosnippet>773</a>                    }
+<a href=#774 id=774 data-nosnippet>774</a>                    <span class="prelude-val">Some</span>((path, <span class="prelude-val">None</span>)) =&gt; {
+<a href=#775 id=775 data-nosnippet>775</a>                        live_broadcasts.remove(<span class="kw-2">&amp;</span>path);
+<a href=#776 id=776 data-nosnippet>776</a>                    }
+<a href=#777 id=777 data-nosnippet>777</a>                    <span class="prelude-val">None </span>=&gt; announces_open = <span class="bool-val">false</span>,
+<a href=#778 id=778 data-nosnippet>778</a>                }
+<a href=#779 id=779 data-nosnippet>779</a>                <span class="kw">if </span>limits.max_broadcasts_per_session &gt; <span class="number">0
+<a href=#780 id=780 data-nosnippet>780</a>                    </span>&amp;&amp; live_broadcasts.len() &gt; limits.max_broadcasts_per_session
+<a href=#781 id=781 data-nosnippet>781</a>                {
+<a href=#782 id=782 data-nosnippet>782</a>                    <span class="macro">tracing::warn!</span>(
+<a href=#783 id=783 data-nosnippet>783</a>                        %user_id, %space_id, broadcasts = live_broadcasts.len(),
+<a href=#784 id=784 data-nosnippet>784</a>                        cap = limits.max_broadcasts_per_session,
+<a href=#785 id=785 data-nosnippet>785</a>                        <span class="string">"relay connection exceeded its broadcast quota — closing"
+<a href=#786 id=786 data-nosnippet>786</a>                    </span>);
+<a href=#787 id=787 data-nosnippet>787</a>                    conn.close(
+<a href=#788 id=788 data-nosnippet>788</a>                        CLOSE_BROADCAST_QUOTA_EXCEEDED.into(),
+<a href=#789 id=789 data-nosnippet>789</a>                        <span class="string">b"broadcast quota exceeded"</span>,
+<a href=#790 id=790 data-nosnippet>790</a>                    );
+<a href=#791 id=791 data-nosnippet>791</a>                    <span class="kw">return</span>;
+<a href=#792 id=792 data-nosnippet>792</a>                }
+<a href=#793 id=793 data-nosnippet>793</a>            }
+<a href=#794 id=794 data-nosnippet>794</a>            <span class="kw">_ </span>= log_ticker.tick() =&gt; {
+<a href=#795 id=795 data-nosnippet>795</a>                <span class="macro">tracing::info!</span>(
+<a href=#796 id=796 data-nosnippet>796</a>                    %user_id, %space_id,
+<a href=#797 id=797 data-nosnippet>797</a>                    bytes_per_sec = <span class="question-mark">?</span>budget.observed_rate(),
+<a href=#798 id=798 data-nosnippet>798</a>                    broadcasts = live_broadcasts.len(),
+<a href=#799 id=799 data-nosnippet>799</a>                    <span class="string">"relay connection ingress"
+<a href=#800 id=800 data-nosnippet>800</a>                </span>);
+<a href=#801 id=801 data-nosnippet>801</a>            }
+<a href=#802 id=802 data-nosnippet>802</a>        }
+<a href=#803 id=803 data-nosnippet>803</a>    }
+<a href=#804 id=804 data-nosnippet>804</a>}
+<a href=#805 id=805 data-nosnippet>805</a>
+<a href=#806 id=806 data-nosnippet>806</a><span class="doccomment">/// Read and verify the relay token off the dedicated control bi-stream.
+<a href=#807 id=807 data-nosnippet>807</a>///
+<a href=#808 id=808 data-nosnippet>808</a>/// Wire format (client → relay): `u16 LE length` + `token bytes`. The token
+<a href=#809 id=809 data-nosnippet>809</a>/// scheme is the backend's HMAC `{user_id}:{space_id}:{expiry}:{mac}`, verified
+<a href=#810 id=810 data-nosnippet>810</a>/// by the shared [`crate::auth::verify_relay_token`].
+<a href=#811 id=811 data-nosnippet>811</a>///
+<a href=#812 id=812 data-nosnippet>812</a>/// On a format/verification failure the one-byte [`AUTH_REJECT`] reply is
+<a href=#813 id=813 data-nosnippet>813</a>/// written and the stream finished here. On success this returns the claims AND
+<a href=#814 id=814 data-nosnippet>814</a>/// the still-open send half WITHOUT writing a verdict — the caller
+<a href=#815 id=815 data-nosnippet>815</a>/// ([`handle_connection`]) still has to run the post-auth session-cap check
+<a href=#816 id=816 data-nosnippet>816</a>/// before it knows whether the final byte is [`AUTH_OK`] or [`AUTH_REJECT`];
+<a href=#817 id=817 data-nosnippet>817</a>/// writing here would foreclose that choice.
+<a href=#818 id=818 data-nosnippet>818</a></span><span class="kw">async fn </span>authenticate(
+<a href=#819 id=819 data-nosnippet>819</a>    conn: <span class="kw-2">&amp;</span>iroh::endpoint::Connection,
+<a href=#820 id=820 data-nosnippet>820</a>    secret: <span class="kw-2">&amp;</span>str,
+<a href=#821 id=821 data-nosnippet>821</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(RelayTokenClaims, iroh::endpoint::SendStream), RelayError&gt; {
+<a href=#822 id=822 data-nosnippet>822</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>send, <span class="kw-2">mut </span>recv) = conn
+<a href=#823 id=823 data-nosnippet>823</a>        .accept_bi()
+<a href=#824 id=824 data-nosnippet>824</a>        .<span class="kw">await
+<a href=#825 id=825 data-nosnippet>825</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"accept token stream: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#826 id=826 data-nosnippet>826</a>
+<a href=#827 id=827 data-nosnippet>827</a>    <span class="kw">let </span><span class="kw-2">mut </span>len_buf = [<span class="number">0u8</span>; <span class="number">2</span>];
+<a href=#828 id=828 data-nosnippet>828</a>    recv.read_exact(<span class="kw-2">&amp;mut </span>len_buf)
+<a href=#829 id=829 data-nosnippet>829</a>        .<span class="kw">await
+<a href=#830 id=830 data-nosnippet>830</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"read token len: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#831 id=831 data-nosnippet>831</a>    <span class="kw">let </span>len = u16::from_le_bytes(len_buf) <span class="kw">as </span>usize;
+<a href=#832 id=832 data-nosnippet>832</a>    <span class="kw">if </span>len == <span class="number">0 </span>|| len &gt; MAX_TOKEN_LEN {
+<a href=#833 id=833 data-nosnippet>833</a>        <span class="kw">let _ </span>= reject(<span class="kw-2">&amp;mut </span>send).<span class="kw">await</span>;
+<a href=#834 id=834 data-nosnippet>834</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(RelayError::Auth(<span class="macro">format!</span>(
+<a href=#835 id=835 data-nosnippet>835</a>            <span class="string">"token length {len} out of bounds (1..={MAX_TOKEN_LEN})"
+<a href=#836 id=836 data-nosnippet>836</a>        </span>)));
+<a href=#837 id=837 data-nosnippet>837</a>    }
+<a href=#838 id=838 data-nosnippet>838</a>
+<a href=#839 id=839 data-nosnippet>839</a>    <span class="kw">let </span><span class="kw-2">mut </span>token_buf = <span class="macro">vec!</span>[<span class="number">0u8</span>; len];
+<a href=#840 id=840 data-nosnippet>840</a>    recv.read_exact(<span class="kw-2">&amp;mut </span>token_buf)
+<a href=#841 id=841 data-nosnippet>841</a>        .<span class="kw">await
+<a href=#842 id=842 data-nosnippet>842</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"read token: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#843 id=843 data-nosnippet>843</a>    <span class="kw">let </span>token = String::from_utf8(token_buf)
+<a href=#844 id=844 data-nosnippet>844</a>        .map_err(|<span class="kw">_</span>| RelayError::Auth(<span class="string">"token is not valid UTF-8"</span>.into()))<span class="question-mark">?</span>;
+<a href=#845 id=845 data-nosnippet>845</a>
+<a href=#846 id=846 data-nosnippet>846</a>    <span class="kw">let </span>now = chrono::Utc::now().timestamp();
+<a href=#847 id=847 data-nosnippet>847</a>    <span class="kw">match </span>verify_relay_token(<span class="kw-2">&amp;</span>token, secret, now) {
+<a href=#848 id=848 data-nosnippet>848</a>        <span class="prelude-val">Ok</span>(claims) =&gt; <span class="prelude-val">Ok</span>((claims, send)),
+<a href=#849 id=849 data-nosnippet>849</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#850 id=850 data-nosnippet>850</a>            <span class="kw">let _ </span>= reject(<span class="kw-2">&amp;mut </span>send).<span class="kw">await</span>;
+<a href=#851 id=851 data-nosnippet>851</a>            <span class="prelude-val">Err</span>(RelayError::Auth(e.to_string()))
+<a href=#852 id=852 data-nosnippet>852</a>        }
+<a href=#853 id=853 data-nosnippet>853</a>    }
+<a href=#854 id=854 data-nosnippet>854</a>}
+<a href=#855 id=855 data-nosnippet>855</a>
+<a href=#856 id=856 data-nosnippet>856</a><span class="doccomment">/// Send the one-byte rejection and finish the control stream. Best-effort: the
+<a href=#857 id=857 data-nosnippet>857</a>/// caller has already decided to reject, so a write error here is not fatal.
+<a href=#858 id=858 data-nosnippet>858</a></span><span class="kw">async fn </span>reject(send: <span class="kw-2">&amp;mut </span>iroh::endpoint::SendStream) -&gt; <span class="prelude-ty">Result</span>&lt;(), RelayError&gt; {
+<a href=#859 id=859 data-nosnippet>859</a>    send.write_all(<span class="kw-2">&amp;</span>[AUTH_REJECT])
+<a href=#860 id=860 data-nosnippet>860</a>        .<span class="kw">await
+<a href=#861 id=861 data-nosnippet>861</a>        </span>.map_err(|e| RelayError::Iroh(<span class="macro">format!</span>(<span class="string">"write auth reject: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#862 id=862 data-nosnippet>862</a>    <span class="kw">let _ </span>= send.finish();
+<a href=#863 id=863 data-nosnippet>863</a>    <span class="prelude-val">Ok</span>(())
+<a href=#864 id=864 data-nosnippet>864</a>}
+<a href=#865 id=865 data-nosnippet>865</a>
+<a href=#866 id=866 data-nosnippet>866</a><span class="attr">#[cfg(test)]
+<a href=#867 id=867 data-nosnippet>867</a></span><span class="kw">mod </span>tests {
+<a href=#868 id=868 data-nosnippet>868</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#869 id=869 data-nosnippet>869</a>
+<a href=#870 id=870 data-nosnippet>870</a>    <span class="kw">fn </span>limits(max_sessions: usize, max_per_user: usize) -&gt; SessionLimits {
+<a href=#871 id=871 data-nosnippet>871</a>        SessionLimits {
+<a href=#872 id=872 data-nosnippet>872</a>            max_sessions,
+<a href=#873 id=873 data-nosnippet>873</a>            max_per_user,
+<a href=#874 id=874 data-nosnippet>874</a>        }
+<a href=#875 id=875 data-nosnippet>875</a>    }
+<a href=#876 id=876 data-nosnippet>876</a>
+<a href=#877 id=877 data-nosnippet>877</a>    <span class="attr">#[test]
+<a href=#878 id=878 data-nosnippet>878</a>    </span><span class="kw">fn </span>admits_within_caps() {
+<a href=#879 id=879 data-nosnippet>879</a>        <span class="kw">let </span>registry = SessionRegistry::new(limits(<span class="number">10</span>, <span class="number">3</span>));
+<a href=#880 id=880 data-nosnippet>880</a>        <span class="kw">let </span>guard = registry.admit(Uuid::new_v4()).expect(<span class="string">"within caps"</span>);
+<a href=#881 id=881 data-nosnippet>881</a>        <span class="macro">assert_eq!</span>(registry.active_sessions().load(Ordering::SeqCst), <span class="number">1</span>);
+<a href=#882 id=882 data-nosnippet>882</a>        drop(guard);
+<a href=#883 id=883 data-nosnippet>883</a>        <span class="macro">assert_eq!</span>(registry.active_sessions().load(Ordering::SeqCst), <span class="number">0</span>);
+<a href=#884 id=884 data-nosnippet>884</a>    }
+<a href=#885 id=885 data-nosnippet>885</a>
+<a href=#886 id=886 data-nosnippet>886</a>    <span class="attr">#[test]
+<a href=#887 id=887 data-nosnippet>887</a>    </span><span class="kw">fn </span>rejects_at_per_user_cap() {
+<a href=#888 id=888 data-nosnippet>888</a>        <span class="kw">let </span>registry = SessionRegistry::new(limits(<span class="number">10</span>, <span class="number">2</span>));
+<a href=#889 id=889 data-nosnippet>889</a>        <span class="kw">let </span>user = Uuid::new_v4();
+<a href=#890 id=890 data-nosnippet>890</a>        <span class="kw">let </span>_g1 = registry.admit(user).expect(<span class="string">"1st within per-user cap"</span>);
+<a href=#891 id=891 data-nosnippet>891</a>        <span class="kw">let </span>_g2 = registry.admit(user).expect(<span class="string">"2nd within per-user cap"</span>);
+<a href=#892 id=892 data-nosnippet>892</a>        <span class="kw">let </span>err = registry
+<a href=#893 id=893 data-nosnippet>893</a>            .admit(user)
+<a href=#894 id=894 data-nosnippet>894</a>            .err()
+<a href=#895 id=895 data-nosnippet>895</a>            .expect(<span class="string">"3rd exceeds per-user cap"</span>);
+<a href=#896 id=896 data-nosnippet>896</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, AdmitRejected::PerUser(<span class="number">2</span>)));
+<a href=#897 id=897 data-nosnippet>897</a>        <span class="comment">// The global counter still reflects only the two admitted sessions —
+<a href=#898 id=898 data-nosnippet>898</a>        // rejection must not have left a phantom increment.
+<a href=#899 id=899 data-nosnippet>899</a>        </span><span class="macro">assert_eq!</span>(registry.active_sessions().load(Ordering::SeqCst), <span class="number">2</span>);
+<a href=#900 id=900 data-nosnippet>900</a>    }
+<a href=#901 id=901 data-nosnippet>901</a>
+<a href=#902 id=902 data-nosnippet>902</a>    <span class="attr">#[test]
+<a href=#903 id=903 data-nosnippet>903</a>    </span><span class="kw">fn </span>rejects_at_global_cap() {
+<a href=#904 id=904 data-nosnippet>904</a>        <span class="kw">let </span>registry = SessionRegistry::new(limits(<span class="number">2</span>, <span class="number">10</span>));
+<a href=#905 id=905 data-nosnippet>905</a>        <span class="kw">let </span>_g1 = registry
+<a href=#906 id=906 data-nosnippet>906</a>            .admit(Uuid::new_v4())
+<a href=#907 id=907 data-nosnippet>907</a>            .expect(<span class="string">"1st within global cap"</span>);
+<a href=#908 id=908 data-nosnippet>908</a>        <span class="kw">let </span>_g2 = registry
+<a href=#909 id=909 data-nosnippet>909</a>            .admit(Uuid::new_v4())
+<a href=#910 id=910 data-nosnippet>910</a>            .expect(<span class="string">"2nd within global cap"</span>);
+<a href=#911 id=911 data-nosnippet>911</a>        <span class="kw">let </span>err = registry
+<a href=#912 id=912 data-nosnippet>912</a>            .admit(Uuid::new_v4())
+<a href=#913 id=913 data-nosnippet>913</a>            .err()
+<a href=#914 id=914 data-nosnippet>914</a>            .expect(<span class="string">"3rd exceeds global cap"</span>);
+<a href=#915 id=915 data-nosnippet>915</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, AdmitRejected::Global(<span class="number">2</span>)));
+<a href=#916 id=916 data-nosnippet>916</a>        <span class="macro">assert_eq!</span>(registry.active_sessions().load(Ordering::SeqCst), <span class="number">2</span>);
+<a href=#917 id=917 data-nosnippet>917</a>    }
+<a href=#918 id=918 data-nosnippet>918</a>
+<a href=#919 id=919 data-nosnippet>919</a>    <span class="attr">#[test]
+<a href=#920 id=920 data-nosnippet>920</a>    </span><span class="kw">fn </span>release_restores_capacity() {
+<a href=#921 id=921 data-nosnippet>921</a>        <span class="kw">let </span>registry = SessionRegistry::new(limits(<span class="number">1</span>, <span class="number">1</span>));
+<a href=#922 id=922 data-nosnippet>922</a>        <span class="kw">let </span>user = Uuid::new_v4();
+<a href=#923 id=923 data-nosnippet>923</a>        <span class="kw">let </span>guard = registry.admit(user).expect(<span class="string">"first admit"</span>);
+<a href=#924 id=924 data-nosnippet>924</a>        <span class="macro">assert!</span>(registry.admit(user).is_err(), <span class="string">"at cap"</span>);
+<a href=#925 id=925 data-nosnippet>925</a>        drop(guard);
+<a href=#926 id=926 data-nosnippet>926</a>        <span class="macro">assert!</span>(
+<a href=#927 id=927 data-nosnippet>927</a>            registry.admit(user).is_ok(),
+<a href=#928 id=928 data-nosnippet>928</a>            <span class="string">"dropping the guard must restore capacity"
+<a href=#929 id=929 data-nosnippet>929</a>        </span>);
+<a href=#930 id=930 data-nosnippet>930</a>    }
+<a href=#931 id=931 data-nosnippet>931</a>
+<a href=#932 id=932 data-nosnippet>932</a>    <span class="attr">#[test]
+<a href=#933 id=933 data-nosnippet>933</a>    </span><span class="kw">fn </span>distinct_users_are_independent() {
+<a href=#934 id=934 data-nosnippet>934</a>        <span class="kw">let </span>registry = SessionRegistry::new(limits(<span class="number">10</span>, <span class="number">1</span>));
+<a href=#935 id=935 data-nosnippet>935</a>        <span class="kw">let </span>a = Uuid::new_v4();
+<a href=#936 id=936 data-nosnippet>936</a>        <span class="kw">let </span>b = Uuid::new_v4();
+<a href=#937 id=937 data-nosnippet>937</a>        <span class="kw">let </span>_ga = registry.admit(a).expect(<span class="string">"user A admitted"</span>);
+<a href=#938 id=938 data-nosnippet>938</a>        <span class="comment">// User B has its own independent per-user budget, unaffected by A's.
+<a href=#939 id=939 data-nosnippet>939</a>        </span><span class="kw">let </span>_gb = registry
+<a href=#940 id=940 data-nosnippet>940</a>            .admit(b)
+<a href=#941 id=941 data-nosnippet>941</a>            .expect(<span class="string">"user B admitted despite A at its cap"</span>);
+<a href=#942 id=942 data-nosnippet>942</a>        <span class="macro">assert!</span>(registry.admit(a).is_err(), <span class="string">"A is at its own per-user cap"</span>);
+<a href=#943 id=943 data-nosnippet>943</a>        <span class="macro">assert!</span>(registry.admit(b).is_err(), <span class="string">"B is at its own per-user cap"</span>);
+<a href=#944 id=944 data-nosnippet>944</a>    }
+<a href=#945 id=945 data-nosnippet>945</a>}
 </code></pre></div></section></main></body></html>

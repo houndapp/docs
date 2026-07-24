@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Per-connection ops surface + policy enforcement, run for the life of one authenticated relay session (spawned in `handle_connection`, aborted the instant the connection closes). Three concerns share one loop so there is exactly one task watching a connection’s health:"><title>ingress_watchdog in hound_sfu::moq_relay - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_sfu" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">ingress_watchdog</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../hound_sfu/index.html">hound_<wbr>sfu</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><div id="rustdoc-modnav"><h2><a href="index.html">In hound_<wbr>sfu::<wbr>moq_<wbr>relay</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">hound_sfu</a>::<wbr><a href="index.html">moq_relay</a></div><h1>Function <span class="fn">ingress_<wbr>watchdog</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/hound_sfu/moq_relay.rs.html#734-804">Source</a> </span></div><pre class="rust item-decl"><code>async fn ingress_watchdog(
+    conn: Connection,
+    ingest_announces: OriginConsumer,
+    user_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
+    space_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
+    limits: <a class="struct" href="struct.IngressLimits.html" title="struct hound_sfu::moq_relay::IngressLimits">IngressLimits</a>,
+)</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Per-connection ops surface + policy enforcement, run for the life of one
+authenticated relay session (spawned in <a href="fn.handle_connection.html" title="fn hound_sfu::moq_relay::handle_connection"><code>handle_connection</code></a>, aborted the
+instant the connection closes). Three concerns share one loop so there is
+exactly one task watching a connection’s health:</p>
+<ul>
+<li>
+<p><strong>Ingress budget</strong> — samples <code>conn.stats().udp_rx.bytes</code> (cumulative
+QUIC bytes received) every <a href="struct.IngressLimits.html#structfield.sample_interval" title="field hound_sfu::moq_relay::IngressLimits::sample_interval"><code>IngressLimits::sample_interval</code></a> and feeds
+an <a href="../ingress/struct.IngressBudget.html" title="struct hound_sfu::ingress::IngressBudget"><code>IngressBudget</code></a> to catch a sustained flood
+(<a href="struct.IngressLimits.html#structfield.max_bytes_per_sec" title="field hound_sfu::moq_relay::IngressLimits::max_bytes_per_sec"><code>IngressLimits::max_bytes_per_sec</code></a>).</p>
+</li>
+<li>
+<p><strong>Broadcast quota</strong> — counts this connection’s own currently-announced
+broadcast paths from <code>ingest_announces</code>’ event stream, bounding runaway
+<code>space/{s}/peer/{user_id}</code> fan-out
+(<a href="struct.IngressLimits.html#structfield.max_broadcasts_per_session" title="field hound_sfu::moq_relay::IngressLimits::max_broadcasts_per_session"><code>IngressLimits::max_broadcasts_per_session</code></a>).</p>
+<p>Why an announce-event count and not moq-net’s <code>Stats</code> aggregator (the
+module built for exactly this kind of counting): <code>Stats</code>’s per-broadcast
+counters are private and only reach the outside world by publishing a
+JSON snapshot onto a broadcast that a consumer must then subscribe to
+and parse — there is no synchronous in-process accessor. Standing up a
+scratch origin plus a self-subscribing background task just to read back
+two integers is exactly the kind of indirection not worth adding for a
+number this cheap to derive directly. <code>ingest_announces</code> is a consumer
+over the SAME shared origin subtree <code>scoped_publish</code> (this connection’s
+ingest half) publishes into, via the ordinary [<code>OriginConsumer</code>] announce
+API every other subscriber in this codebase already uses — so counting
+its live announce/unannounce events is both cheaper and simpler.</p>
+<p>The tradeoff: that subtree is keyed by the authenticated <code>(space, user)</code>
+pair, not by QUIC connection identity, so if the SAME user holds more
+than one concurrent session in the SAME space (allowed up to
+<a href="struct.SessionLimits.html#structfield.max_per_user" title="field hound_sfu::moq_relay::SessionLimits::max_per_user"><code>SessionLimits::max_per_user</code></a>), every one of those connections’
+watchdogs sees the group’s COMBINED broadcast count, not just its own.
+In the common case (one session per user per space) the two coincide
+exactly. When they don’t, the quota still bounds something real — one
+identity’s total ingest fan-out into a space — just not quite what
+“per-session” literally promises.</p>
+</li>
+<li>
+<p><strong>Ops log</strong> — every <a href="constant.OPS_LOG_INTERVAL.html" title="constant hound_sfu::moq_relay::OPS_LOG_INTERVAL"><code>OPS_LOG_INTERVAL</code></a>, one <code>info!</code> line summarising
+both, so “which connection is the problem” is answerable by grepping one
+connection’s lines rather than reasoning about aggregate metrics.</p>
+</li>
+</ul>
+<p>Either policy trip closes the connection with a distinct close code
+(<a href="constant.CLOSE_INGRESS_BUDGET_EXCEEDED.html" title="constant hound_sfu::moq_relay::CLOSE_INGRESS_BUDGET_EXCEEDED"><code>CLOSE_INGRESS_BUDGET_EXCEEDED</code></a> / <a href="constant.CLOSE_BROADCAST_QUOTA_EXCEEDED.html" title="constant hound_sfu::moq_relay::CLOSE_BROADCAST_QUOTA_EXCEEDED"><code>CLOSE_BROADCAST_QUOTA_EXCEEDED</code></a>)
+rather than the generic <code>0</code> other close paths use, so a client inspecting
+the code/reason on <code>conn.closed()</code> can tell a policy close from a network
+failure.</p>
+</div></details></section></div></main></body></html>

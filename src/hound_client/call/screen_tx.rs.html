@@ -99,644 +99,645 @@
 <a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>spawn_screen_publish(
 <a href=#100 id=100 data-nosnippet>100</a>    relay: Arc&lt;MoqRelaySession&gt;,
 <a href=#101 id=101 data-nosnippet>101</a>    space_id: Uuid,
-<a href=#102 id=102 data-nosnippet>102</a>    self_id: PeerId,
-<a href=#103 id=103 data-nosnippet>103</a>    clock: CaptureClock,
-<a href=#104 id=104 data-nosnippet>104</a>    source: hound_engine::types::ScreenSource,
-<a href=#105 id=105 data-nosnippet>105</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
-<a href=#106 id=106 data-nosnippet>106</a>    control_outbound: tokio::sync::mpsc::UnboundedSender&lt;ClientMessage&gt;,
-<a href=#107 id=107 data-nosnippet>107</a>    rtt_conn: iroh::endpoint::Connection,
-<a href=#108 id=108 data-nosnippet>108</a>    view_rx: watch::Receiver&lt;SessionView&gt;,
-<a href=#109 id=109 data-nosnippet>109</a>    keyframe_rx: broadcast::Receiver&lt;TrackId&gt;,
-<a href=#110 id=110 data-nosnippet>110</a>    feedback_rx: broadcast::Receiver&lt;MediaFeedback&gt;,
-<a href=#111 id=111 data-nosnippet>111</a>    quality_rx: broadcast::Receiver&lt;QualityReport&gt;,
-<a href=#112 id=112 data-nosnippet>112</a>    screen_quality: SharedScreenQuality,
-<a href=#113 id=113 data-nosnippet>113</a>    notify: ScreenExitNotify,
-<a href=#114 id=114 data-nosnippet>114</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#115 id=115 data-nosnippet>115</a>    mute: Arc&lt;MuteFlags&gt;,
-<a href=#116 id=116 data-nosnippet>116</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ScreenShareHandle&gt; {
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">let </span>capture_stop = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">let </span>(vid_tx, vid_rx) = tokio::sync::mpsc::channel::&lt;WireFrame&gt;(<span class="number">8</span>);
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span>(ready_tx, ready_rx) = tokio::sync::oneshot::channel::&lt;<span class="prelude-ty">Result</span>&lt;ScreenOpened&gt;&gt;();
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a>    <span class="comment">// Negotiate the publish codec against the live roster (HW-encode ∩ all-peers
-<a href=#122 id=122 data-nosnippet>122</a>    // HW-decode): AV1 → H.265 → H.264. The capture/encode thread builds this codec's
-<a href=#123 id=123 data-nosnippet>123</a>    // encoder; we announce the same choice below. `encode_caps` is probed once (it
-<a href=#124 id=124 data-nosnippet>124</a>    // spins a throwaway VT session) and reused by the mid-call re-negotiator.
-<a href=#125 id=125 data-nosnippet>125</a>    </span><span class="kw">let </span>encode_caps = Engine::new().encode_caps();
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">let </span>codec = negotiate_codec(encode_caps, <span class="kw-2">&amp;</span>view_rx.borrow());
-<a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="comment">// The shared adaptation seam: the screen video tick (in the publish task) +
-<a href=#129 id=129 data-nosnippet>129</a>    // keyframe/feedback listeners write it; the capture/encode thread reads it.
-<a href=#130 id=130 data-nosnippet>130</a>    </span><span class="kw">let </span>adapt = Arc::new(AdaptShared::default());
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="comment">// Seed the codec slot so the encode loop's rebuild check is a no-op until a
-<a href=#132 id=132 data-nosnippet>132</a>    // roster change actually moves it.
-<a href=#133 id=133 data-nosnippet>133</a>    </span>adapt
-<a href=#134 id=134 data-nosnippet>134</a>        .target_codec
-<a href=#135 id=135 data-nosnippet>135</a>        .store(codec_rank(codec), Ordering::Relaxed);
-<a href=#136 id=136 data-nosnippet>136</a>
-<a href=#137 id=137 data-nosnippet>137</a>    <span class="comment">// Demand-driven simulcast control for the screen source + the LOW-layer channel
-<a href=#138 id=138 data-nosnippet>138</a>    // the capture thread feeds. `low_active` is the capture thread's gate; it stays
-<a href=#139 id=139 data-nosnippet>139</a>    // `None` (low path inert) until a receiver demands the low layer AND actuation is
-<a href=#140 id=140 data-nosnippet>140</a>    // on. Created here so it can be handed to the capture thread below.
-<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">let </span>layers = Arc::new(LayerControl::new(SCREEN_BITRATE.bps() <span class="kw">as </span>u64));
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">let </span>low_active = layers.low_active.subscribe();
-<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">let </span>(low_vid_tx, low_vid_rx) = tokio::sync::mpsc::channel::&lt;WireFrame&gt;(<span class="number">8</span>);
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="comment">// A low-track PLI sets this; the capture thread forces a low IDR so a receiver
-<a href=#145 id=145 data-nosnippet>145</a>    // subscribing to the low layer resyncs promptly (not on the slow safety-net IDR).
-<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="kw">let </span>low_keyframe = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
-<a href=#147 id=147 data-nosnippet>147</a>
-<a href=#148 id=148 data-nosnippet>148</a>    <span class="comment">// The `!Send` capture+encode thread owns the engine `ScreenShare` + H.264 encoder
-<a href=#149 id=149 data-nosnippet>149</a>    // for its whole life (the `!Send` contract); it reports open readiness and hands
-<a href=#150 id=150 data-nosnippet>150</a>    // back the audio leg via `ready_tx`, and classifies + reports its exit via `notify`.
-<a href=#151 id=151 data-nosnippet>151</a>    </span>{
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span>stop = capture_stop.clone();
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>adapt = adapt.clone();
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>notify = notify.clone();
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span>stats = stats.clone();
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>low_keyframe_capture = low_keyframe.clone();
-<a href=#157 id=157 data-nosnippet>157</a>        std::thread::Builder::new()
-<a href=#158 id=158 data-nosnippet>158</a>            .name(<span class="string">"call-screen-capture-encode"</span>.into())
-<a href=#159 id=159 data-nosnippet>159</a>            .spawn(<span class="kw">move </span>|| {
-<a href=#160 id=160 data-nosnippet>160</a>                screen_capture_encode_loop(
-<a href=#161 id=161 data-nosnippet>161</a>                    stop,
-<a href=#162 id=162 data-nosnippet>162</a>                    clock,
-<a href=#163 id=163 data-nosnippet>163</a>                    source,
-<a href=#164 id=164 data-nosnippet>164</a>                    self_id,
-<a href=#165 id=165 data-nosnippet>165</a>                    sink,
-<a href=#166 id=166 data-nosnippet>166</a>                    vid_tx,
-<a href=#167 id=167 data-nosnippet>167</a>                    ready_tx,
-<a href=#168 id=168 data-nosnippet>168</a>                    adapt,
-<a href=#169 id=169 data-nosnippet>169</a>                    notify,
-<a href=#170 id=170 data-nosnippet>170</a>                    stats,
-<a href=#171 id=171 data-nosnippet>171</a>                    codec,
-<a href=#172 id=172 data-nosnippet>172</a>                    low_active,
-<a href=#173 id=173 data-nosnippet>173</a>                    low_vid_tx,
-<a href=#174 id=174 data-nosnippet>174</a>                    low_keyframe_capture,
-<a href=#175 id=175 data-nosnippet>175</a>                )
-<a href=#176 id=176 data-nosnippet>176</a>            })
-<a href=#177 id=177 data-nosnippet>177</a>            .ok();
-<a href=#178 id=178 data-nosnippet>178</a>    }
-<a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="comment">// Await the open — a permission/unsupported/bad-source error surfaces to the
-<a href=#181 id=181 data-nosnippet>181</a>    // caller (so the UI can show the TCC hint) rather than failing silently.
-<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">let </span>opened = <span class="kw">match </span>ready_rx.<span class="kw">await </span>{
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(o)) =&gt; o,
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(e),
-<a href=#185 id=185 data-nosnippet>185</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-<a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(HoundError::Media(
-<a href=#187 id=187 data-nosnippet>187</a>                <span class="string">"screen capture thread exited before reporting readiness"</span>.into(),
-<a href=#188 id=188 data-nosnippet>188</a>            ));
-<a href=#189 id=189 data-nosnippet>189</a>        }
-<a href=#190 id=190 data-nosnippet>190</a>    };
-<a href=#191 id=191 data-nosnippet>191</a>
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="comment">// Announce the screen VIDEO track in the negotiated codec.
-<a href=#193 id=193 data-nosnippet>193</a>    </span>control_outbound
-<a href=#194 id=194 data-nosnippet>194</a>        .send(ClientMessage::Publish {
-<a href=#195 id=195 data-nosnippet>195</a>            track: TrackDecl {
-<a href=#196 id=196 data-nosnippet>196</a>                kind: MediaKind::Video,
-<a href=#197 id=197 data-nosnippet>197</a>                source: Source::Screen,
-<a href=#198 id=198 data-nosnippet>198</a>                codec: video_codec_to_ctl(codec),
-<a href=#199 id=199 data-nosnippet>199</a>                low: <span class="bool-val">false</span>,
-<a href=#200 id=200 data-nosnippet>200</a>            },
-<a href=#201 id=201 data-nosnippet>201</a>        })
-<a href=#202 id=202 data-nosnippet>202</a>        .map_err(|<span class="kw">_</span>| HoundError::Media(<span class="string">"control plane closed before screen publish"</span>.into()))<span class="question-mark">?</span>;
-<a href=#203 id=203 data-nosnippet>203</a>
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">let </span><span class="kw-2">mut </span>tasks: Vec&lt;JoinHandle&lt;()&gt;&gt; = <span class="macro">vec!</span>[
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="comment">// Producer-side PLI relay + receiver→producer BWE feedback, scoped to the
-<a href=#206 id=206 data-nosnippet>206</a>        // SCREEN track. Their tasks join the handle so they tear down with the share.
-<a href=#207 id=207 data-nosnippet>207</a>        </span>spawn_keyframe_listener(
-<a href=#208 id=208 data-nosnippet>208</a>            keyframe_rx,
-<a href=#209 id=209 data-nosnippet>209</a>            view_rx.clone(),
-<a href=#210 id=210 data-nosnippet>210</a>            self_id,
-<a href=#211 id=211 data-nosnippet>211</a>            Source::Screen,
-<a href=#212 id=212 data-nosnippet>212</a>            adapt.clone(),
-<a href=#213 id=213 data-nosnippet>213</a>            <span class="prelude-val">Some</span>(low_keyframe.clone()),
-<a href=#214 id=214 data-nosnippet>214</a>        ),
-<a href=#215 id=215 data-nosnippet>215</a>        spawn_feedback_listener(
-<a href=#216 id=216 data-nosnippet>216</a>            feedback_rx,
-<a href=#217 id=217 data-nosnippet>217</a>            view_rx.clone(),
-<a href=#218 id=218 data-nosnippet>218</a>            self_id,
-<a href=#219 id=219 data-nosnippet>219</a>            Source::Screen,
-<a href=#220 id=220 data-nosnippet>220</a>            adapt.clone(),
-<a href=#221 id=221 data-nosnippet>221</a>            layers.clone(),
-<a href=#222 id=222 data-nosnippet>222</a>        ),
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="comment">// Demand-driven simulcast: aggregate receiver quality requests for the screen
-<a href=#224 id=224 data-nosnippet>224</a>        // track into the layer planner (drives the low layer's `low_active` gate).
-<a href=#225 id=225 data-nosnippet>225</a>        // Dark until `SIMULCAST_ACTUATE`.
-<a href=#226 id=226 data-nosnippet>226</a>        </span>spawn_quality_listener(quality_rx, view_rx.clone(), self_id, Source::Screen, layers),
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="comment">// LOW-layer publish: drains the capture thread's low encode and publishes it
-<a href=#228 id=228 data-nosnippet>228</a>        // on the `screen_l0` track, announcing it on the first frame (so it's
-<a href=#229 id=229 data-nosnippet>229</a>        // invisible to receivers until actually producing).
-<a href=#230 id=230 data-nosnippet>230</a>        </span>spawn_low_video_publish(
-<a href=#231 id=231 data-nosnippet>231</a>            relay.clone(),
-<a href=#232 id=232 data-nosnippet>232</a>            broadcast_path(space_id, self_id, <span class="string">"screen_l0"</span>),
-<a href=#233 id=233 data-nosnippet>233</a>            <span class="string">"screen_l0"</span>,
-<a href=#234 id=234 data-nosnippet>234</a>            Source::Screen,
-<a href=#235 id=235 data-nosnippet>235</a>            video_codec_to_ctl(codec),
-<a href=#236 id=236 data-nosnippet>236</a>            low_vid_rx,
-<a href=#237 id=237 data-nosnippet>237</a>            control_outbound.clone(),
-<a href=#238 id=238 data-nosnippet>238</a>        ),
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="comment">// Re-negotiate the codec as the roster changes mid-share (a less-capable peer
-<a href=#240 id=240 data-nosnippet>240</a>        // joining forces a downgrade so they get video; one leaving lets us climb
-<a href=#241 id=241 data-nosnippet>241</a>        // back).
-<a href=#242 id=242 data-nosnippet>242</a>        </span>spawn_codec_renegotiator(view_rx, encode_caps, adapt.clone(), codec, <span class="string">"screen"</span>),
-<a href=#243 id=243 data-nosnippet>243</a>        spawn_screen_video_publish(
-<a href=#244 id=244 data-nosnippet>244</a>            relay.clone(),
-<a href=#245 id=245 data-nosnippet>245</a>            broadcast_path(space_id, self_id, SCREEN_TRACK),
-<a href=#246 id=246 data-nosnippet>246</a>            vid_rx,
-<a href=#247 id=247 data-nosnippet>247</a>            adapt,
-<a href=#248 id=248 data-nosnippet>248</a>            opened.dims,
-<a href=#249 id=249 data-nosnippet>249</a>            rtt_conn,
-<a href=#250 id=250 data-nosnippet>250</a>            screen_quality,
-<a href=#251 id=251 data-nosnippet>251</a>            stats.clone(),
-<a href=#252 id=252 data-nosnippet>252</a>            codec,
-<a href=#253 id=253 data-nosnippet>253</a>        ),
-<a href=#254 id=254 data-nosnippet>254</a>    ];
-<a href=#255 id=255 data-nosnippet>255</a>
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="comment">// App-audio leg: only when the engine returned one (window + app-audio support).
-<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(audio) = opened.audio {
-<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">let _ </span>= control_outbound.send(ClientMessage::Publish {
-<a href=#259 id=259 data-nosnippet>259</a>            track: TrackDecl {
-<a href=#260 id=260 data-nosnippet>260</a>                kind: MediaKind::Audio,
-<a href=#261 id=261 data-nosnippet>261</a>                source: Source::Screen,
-<a href=#262 id=262 data-nosnippet>262</a>                codec: CtlCodec::Opus,
-<a href=#263 id=263 data-nosnippet>263</a>                low: <span class="bool-val">false</span>,
-<a href=#264 id=264 data-nosnippet>264</a>            },
-<a href=#265 id=265 data-nosnippet>265</a>        });
-<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">let </span>(pcm_tx, pcm_rx) = tokio::sync::mpsc::channel::&lt;hound_engine::types::PcmFrame&gt;(<span class="number">8</span>);
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span>stop = capture_stop.clone();
-<a href=#268 id=268 data-nosnippet>268</a>        std::thread::Builder::new()
-<a href=#269 id=269 data-nosnippet>269</a>            .name(<span class="string">"call-screen-audio-capture"</span>.into())
-<a href=#270 id=270 data-nosnippet>270</a>            .spawn(<span class="kw">move </span>|| screen_audio_capture_loop(stop, audio, pcm_tx))
-<a href=#271 id=271 data-nosnippet>271</a>            .ok();
-<a href=#272 id=272 data-nosnippet>272</a>        tasks.push(spawn_screen_audio_publish(
-<a href=#273 id=273 data-nosnippet>273</a>            relay,
-<a href=#274 id=274 data-nosnippet>274</a>            broadcast_path(space_id, self_id, SCREEN_AUDIO_TRACK),
-<a href=#275 id=275 data-nosnippet>275</a>            self_id.<span class="number">0 </span><span class="kw">as </span>u16,
-<a href=#276 id=276 data-nosnippet>276</a>            pcm_rx,
-<a href=#277 id=277 data-nosnippet>277</a>            stats.clone(),
-<a href=#278 id=278 data-nosnippet>278</a>            mute,
-<a href=#279 id=279 data-nosnippet>279</a>        ));
-<a href=#280 id=280 data-nosnippet>280</a>    }
-<a href=#281 id=281 data-nosnippet>281</a>
-<a href=#282 id=282 data-nosnippet>282</a>    <span class="prelude-val">Ok</span>(ScreenShareHandle {
-<a href=#283 id=283 data-nosnippet>283</a>        capture_stop,
-<a href=#284 id=284 data-nosnippet>284</a>        tasks,
-<a href=#285 id=285 data-nosnippet>285</a>    })
-<a href=#286 id=286 data-nosnippet>286</a>}
-<a href=#287 id=287 data-nosnippet>287</a>
-<a href=#288 id=288 data-nosnippet>288</a><span class="doccomment">/// The `!Send` screen capture+encode thread: open the engine `ScreenShare` (+ maybe
-<a href=#289 id=289 data-nosnippet>289</a>/// `ScreenAudio`) and the H.264 encoder HERE (so neither crosses a thread boundary),
-<a href=#290 id=290 data-nosnippet>290</a>/// report readiness (handing back the audio leg), then pull → self-preview tee →
-<a href=#291 id=291 data-nosnippet>291</a>/// encode → forward. A static source produces no frames, so on an idle poll the last
-<a href=#292 id=292 data-nosnippet>292</a>/// frame is re-emitted (timestamp advanced) at the static-refresh cadence so a fresh
-<a href=#293 id=293 data-nosnippet>293</a>/// subscriber isn't stuck on a black tile.
-<a href=#294 id=294 data-nosnippet>294</a>///
-<a href=#295 id=295 data-nosnippet>295</a>/// The loop classifies its exit and reports it via `notify`:
-<a href=#296 id=296 data-nosnippet>296</a>/// * a window CLOSE / OS "stop sharing" / source gone (`next_frame` errs cleanly) →
-<a href=#297 id=297 data-nosnippet>297</a>///   [`ScreenCaptureExit::Ended`];
-<a href=#298 id=298 data-nosnippet>298</a>/// * a window RESIZE that holds past [`SCREEN_RESIZE_DEBOUNCE`] (the captured content
-<a href=#299 id=299 data-nosnippet>299</a>///   size departs its baseline and stays) → [`ScreenCaptureExit::Resized`];
-<a href=#300 id=300 data-nosnippet>300</a>/// * a transient `next_frame` error/panic → [`ScreenCaptureExit::Retry`] (after a brief
-<a href=#301 id=301 data-nosnippet>301</a>///   [`SCREEN_RETRY_BACKOFF`]).
-<a href=#302 id=302 data-nosnippet>302</a>///
-<a href=#303 id=303 data-nosnippet>303</a>/// NB the engine exposes ONE `next_frame_timeout` result for both "ended" and a
-<a href=#304 id=304 data-nosnippet>304</a>/// transient error (a `CaptureError`), so we conservatively treat an error as a
-<a href=#305 id=305 data-nosnippet>305</a>/// transient `Retry`: the supervisor's restart re-opens cleanly, and a re-open that then
-<a href=#306 id=306 data-nosnippet>306</a>/// fails (the source is truly gone) degrades to a clean `Ended` there. `notify` is NOT
-<a href=#307 id=307 data-nosnippet>307</a>/// fired when `stop` was latched (a deliberate stop/leave/reconnect — the supervisor
-<a href=#308 id=308 data-nosnippet>308</a>/// already owns that transition).
-<a href=#309 id=309 data-nosnippet>309</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#310 id=310 data-nosnippet>310</a></span><span class="kw">fn </span>screen_capture_encode_loop(
-<a href=#311 id=311 data-nosnippet>311</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#312 id=312 data-nosnippet>312</a>    clock: CaptureClock,
-<a href=#313 id=313 data-nosnippet>313</a>    source: hound_engine::types::ScreenSource,
-<a href=#314 id=314 data-nosnippet>314</a>    self_id: PeerId,
-<a href=#315 id=315 data-nosnippet>315</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
-<a href=#316 id=316 data-nosnippet>316</a>    vid_tx: tokio::sync::mpsc::Sender&lt;WireFrame&gt;,
-<a href=#317 id=317 data-nosnippet>317</a>    ready_tx: tokio::sync::oneshot::Sender&lt;<span class="prelude-ty">Result</span>&lt;ScreenOpened&gt;&gt;,
-<a href=#318 id=318 data-nosnippet>318</a>    adapt: Arc&lt;AdaptShared&gt;,
-<a href=#319 id=319 data-nosnippet>319</a>    notify: ScreenExitNotify,
-<a href=#320 id=320 data-nosnippet>320</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#321 id=321 data-nosnippet>321</a>    codec: VideoCodec,
-<a href=#322 id=322 data-nosnippet>322</a>    <span class="comment">// Demand-driven LOW simulcast layer: `Some(bps)` ⇒ also downscale + encode this
-<a href=#323 id=323 data-nosnippet>323</a>    // capture at `LOW_SCREEN_DIMS` and forward on `low_vid_tx` (the `screen_l0`
-<a href=#324 id=324 data-nosnippet>324</a>    // track). Stays `None` (inert, source path byte-identical) until a receiver
-<a href=#325 id=325 data-nosnippet>325</a>    // demands it AND `SIMULCAST_ACTUATE` is on.
-<a href=#326 id=326 data-nosnippet>326</a>    </span>low_active: watch::Receiver&lt;<span class="prelude-ty">Option</span>&lt;u64&gt;&gt;,
-<a href=#327 id=327 data-nosnippet>327</a>    low_vid_tx: tokio::sync::mpsc::Sender&lt;WireFrame&gt;,
-<a href=#328 id=328 data-nosnippet>328</a>    low_keyframe: Arc&lt;AtomicBool&gt;,
-<a href=#329 id=329 data-nosnippet>329</a>) {
-<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">use </span>hound_engine::types::{ScreenCaptureConfig, TimestampUs};
-<a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="comment">// Capture native, scaled to the 1080p-class cap preserving aspect; request app
-<a href=#333 id=333 data-nosnippet>333</a>    // audio (the engine ignores it for a display / unsupported platform → `None`).
-<a href=#334 id=334 data-nosnippet>334</a>    </span><span class="kw">let </span>config = ScreenCaptureConfig {
-<a href=#335 id=335 data-nosnippet>335</a>        dimensions: Dimensions::even_clamped(SCREEN_MAX_W, SCREEN_MAX_H),
-<a href=#336 id=336 data-nosnippet>336</a>        fps: SCREEN_FPS,
-<a href=#337 id=337 data-nosnippet>337</a>        capture_audio: <span class="bool-val">true</span>,
-<a href=#338 id=338 data-nosnippet>338</a>    };
-<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>screen, screen_audio) = <span class="kw">match </span>Engine::new().open_screen_capture(<span class="kw-2">&amp;</span>source, config, clock)
-<a href=#340 id=340 data-nosnippet>340</a>    {
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="prelude-val">Ok</span>(v) =&gt; v,
-<a href=#342 id=342 data-nosnippet>342</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#343 id=343 data-nosnippet>343</a>            <span class="kw">let _ </span>= ready_tx.send(<span class="prelude-val">Err</span>(map_screen_capture_error(e)));
-<a href=#344 id=344 data-nosnippet>344</a>            <span class="kw">return</span>;
-<a href=#345 id=345 data-nosnippet>345</a>        }
-<a href=#346 id=346 data-nosnippet>346</a>    };
-<a href=#347 id=347 data-nosnippet>347</a>    <span class="comment">// Build the encoder for the delivered geometry (post native→target scale), in
-<a href=#348 id=348 data-nosnippet>348</a>    // the negotiated codec, descending the ladder if it won't open. The wire-codec
-<a href=#349 id=349 data-nosnippet>349</a>    // byte is taken from the encoder actually built, so frames stay correctly tagged.
-<a href=#350 id=350 data-nosnippet>350</a>    </span><span class="kw">let </span>(neg_dims, _fmt) = screen.negotiated();
-<a href=#351 id=351 data-nosnippet>351</a>    <span class="comment">// The low simulcast layer's geometry at the SOURCE aspect (not a fixed 16:9 rung).
-<a href=#352 id=352 data-nosnippet>352</a>    </span><span class="kw">let </span>low_dims = low_screen_dims(neg_dims);
-<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">let </span><span class="kw-2">mut </span>encoder = <span class="kw">match </span>open_encoder_laddered(
-<a href=#354 id=354 data-nosnippet>354</a>        codec,
-<a href=#355 id=355 data-nosnippet>355</a>        neg_dims,
-<a href=#356 id=356 data-nosnippet>356</a>        SCREEN_FPS,
-<a href=#357 id=357 data-nosnippet>357</a>        SCREEN_BITRATE,
-<a href=#358 id=358 data-nosnippet>358</a>        SCREEN_KEYFRAME_CADENCE,
-<a href=#359 id=359 data-nosnippet>359</a>    ) {
-<a href=#360 id=360 data-nosnippet>360</a>        <span class="prelude-val">Some</span>(e) =&gt; e,
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="prelude-val">None </span>=&gt; {
-<a href=#362 id=362 data-nosnippet>362</a>            <span class="kw">let _ </span>= ready_tx.send(<span class="prelude-val">Err</span>(HoundError::Media(
-<a href=#363 id=363 data-nosnippet>363</a>                <span class="string">"no usable video encoder (even H.264 failed to open)"</span>.into(),
-<a href=#364 id=364 data-nosnippet>364</a>            )));
-<a href=#365 id=365 data-nosnippet>365</a>            <span class="kw">return</span>;
-<a href=#366 id=366 data-nosnippet>366</a>        }
-<a href=#367 id=367 data-nosnippet>367</a>    };
-<a href=#368 id=368 data-nosnippet>368</a>    <span class="comment">// The codec the encoder is actually producing (may be a lower rung than `codec`
-<a href=#369 id=369 data-nosnippet>369</a>    // if the ladder fell through) — used for the log/stat label. `last_target` is the
-<a href=#370 id=370 data-nosnippet>370</a>    // negotiated *target* we last rebuilt for; the rebuild check keys off it changing,
-<a href=#371 id=371 data-nosnippet>371</a>    // NOT off `current_codec`, so a target the device can't build (AV1 → built H.265)
-<a href=#372 id=372 data-nosnippet>372</a>    // doesn't re-trigger a rebuild every frame.
-<a href=#373 id=373 data-nosnippet>373</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>current_codec = {
-<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">use </span>hound_engine::backend::VideoEncode;
-<a href=#375 id=375 data-nosnippet>375</a>        encoder.codec()
-<a href=#376 id=376 data-nosnippet>376</a>    };
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_target = codec;
-<a href=#378 id=378 data-nosnippet>378</a>    <span class="comment">// The geometry the live `encoder` was actually built at — starts at `neg_dims`
-<a href=#379 id=379 data-nosnippet>379</a>    // (the negotiated capture geometry) and only moves when the adaptation's
-<a href=#380 id=380 data-nosnippet>380</a>    // dwelled rung geometry (`adapt.encoder_w/h`) settles on something different.
-<a href=#381 id=381 data-nosnippet>381</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>enc_dims = neg_dims;
-<a href=#382 id=382 data-nosnippet>382</a>    {
-<a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">use </span>hound_engine::backend::VideoEncode;
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="macro">tracing::info!</span>(
-<a href=#385 id=385 data-nosnippet>385</a>            target: <span class="string">"video_encode"</span>,
-<a href=#386 id=386 data-nosnippet>386</a>            track = <span class="string">"screen"</span>,
-<a href=#387 id=387 data-nosnippet>387</a>            codec = <span class="question-mark">?</span>encoder.codec(),
-<a href=#388 id=388 data-nosnippet>388</a>            backend = encoder.backend(),
-<a href=#389 id=389 data-nosnippet>389</a>            width = neg_dims.width(),
-<a href=#390 id=390 data-nosnippet>390</a>            height = neg_dims.height(),
-<a href=#391 id=391 data-nosnippet>391</a>            <span class="string">"video: encode path selected"
-<a href=#392 id=392 data-nosnippet>392</a>        </span>);
-<a href=#393 id=393 data-nosnippet>393</a>    }
-<a href=#394 id=394 data-nosnippet>394</a>    <span class="comment">// Hand the audio leg out (for its own thread) and report a successful open.
-<a href=#395 id=395 data-nosnippet>395</a>    </span><span class="kw">let _ </span>= ready_tx.send(<span class="prelude-val">Ok</span>(ScreenOpened {
-<a href=#396 id=396 data-nosnippet>396</a>        audio: screen_audio,
-<a href=#397 id=397 data-nosnippet>397</a>        dims: neg_dims,
-<a href=#398 id=398 data-nosnippet>398</a>    }));
-<a href=#399 id=399 data-nosnippet>399</a>
-<a href=#400 id=400 data-nosnippet>400</a>    <span class="comment">// RTC-debug: the screen pipeline is publishing at this geometry (sets enabled).
-<a href=#401 id=401 data-nosnippet>401</a>    </span>stats.set_screen_dims(neg_dims.width(), neg_dims.height());
-<a href=#402 id=402 data-nosnippet>402</a>
-<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">let </span>key = screen_key(self_id);
-<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">let </span>sender = self_id.<span class="number">0 </span><span class="kw">as </span>u16;
-<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">let </span><span class="kw-2">mut </span>frame_seq = <span class="number">0u32</span>;
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_frame: <span class="prelude-ty">Option</span>&lt;hound_engine::types::RawFrame&gt; = <span class="prelude-val">None</span>;
-<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_emit = std::time::Instant::now();
-<a href=#408 id=408 data-nosnippet>408</a>    <span class="comment">// The encoder bitrate we last applied (a steady target costs no syscall).
-<a href=#409 id=409 data-nosnippet>409</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>applied_bps = SCREEN_BITRATE.bps();
-<a href=#410 id=410 data-nosnippet>410</a>    <span class="comment">// Downsamples capture to the chosen rung's fps; the static-refresh re-emit rides
-<a href=#411 id=411 data-nosnippet>411</a>    // the forced-keyframe bypass in `encode_and_publish_adaptive` so an idle share
-<a href=#412 id=412 data-nosnippet>412</a>    // never freezes the gate.
-<a href=#413 id=413 data-nosnippet>413</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>fps_gate = hound_media::FrameRateGate::new();
-<a href=#414 id=414 data-nosnippet>414</a>    <span class="kw">let </span><span class="kw-2">mut </span>fail_streak = EncodeFailStreak::default();
-<a href=#415 id=415 data-nosnippet>415</a>
-<a href=#416 id=416 data-nosnippet>416</a>    <span class="comment">// LOW simulcast layer state — mirrors the source's, at `LOW_SCREEN_DIMS`. Built
-<a href=#417 id=417 data-nosnippet>417</a>    // lazily the first frame `low_active` is `Some`, torn down when it goes `None`,
-<a href=#418 id=418 data-nosnippet>418</a>    // rebuilt on a codec switch (tracks the same `target_codec` as the source).
-<a href=#419 id=419 data-nosnippet>419</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>low_encoder: <span class="prelude-ty">Option</span>&lt;hound_engine::api::VideoEncoder&gt; = <span class="prelude-val">None</span>;
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_last_target: <span class="prelude-ty">Option</span>&lt;VideoCodec&gt; = <span class="prelude-val">None</span>;
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_applied_bps = <span class="number">0u32</span>;
-<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_frame_seq = <span class="number">0u32</span>;
-<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_fps_gate = hound_media::FrameRateGate::new();
-<a href=#424 id=424 data-nosnippet>424</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_fail_streak = EncodeFailStreak::default();
-<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">let </span>low_adapt = Arc::new(AdaptShared::default());
-<a href=#426 id=426 data-nosnippet>426</a>    low_adapt
-<a href=#427 id=427 data-nosnippet>427</a>        .target_fps
-<a href=#428 id=428 data-nosnippet>428</a>        .store(SCREEN_FPS.get(), Ordering::Relaxed);
-<a href=#429 id=429 data-nosnippet>429</a>
-<a href=#430 id=430 data-nosnippet>430</a>    <span class="comment">// How this loop exits: classified for the supervisor. Defaults to `Ended` (a clean
-<a href=#431 id=431 data-nosnippet>431</a>    // capture end) and is upgraded to `Resized`/`Retry` at the break that detected it.
-<a href=#432 id=432 data-nosnippet>432</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>exit = ScreenCaptureExit::Ended;
-<a href=#433 id=433 data-nosnippet>433</a>    <span class="comment">// Resize watch: the capture's pixel geometry is fixed at open, so when the per-frame
-<a href=#434 id=434 data-nosnippet>434</a>    // content size departs its baseline and HOLDS (debounced past live drag-resizes) we
-<a href=#435 id=435 data-nosnippet>435</a>    // exit with `Resized` and the supervisor restarts at the new geometry.
-<a href=#436 id=436 data-nosnippet>436</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>resize = ResizeWatch::default();
-<a href=#437 id=437 data-nosnippet>437</a>    <span class="comment">// Source liveness: damage-driven capture goes SILENT (not errored) when the
-<a href=#438 id=438 data-nosnippet>438</a>    // shared window's app terminates — indistinguishable from static content by
-<a href=#439 id=439 data-nosnippet>439</a>    // frame flow alone, so the static-refresh would re-emit the last frame forever.
-<a href=#440 id=440 data-nosnippet>440</a>    // While idle past SOURCE_LIVENESS_IDLE, probe (throttled) that the source still
-<a href=#441 id=441 data-nosnippet>441</a>    // exists and END the share when it is gone.
-<a href=#442 id=442 data-nosnippet>442</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>last_real_frame = std::time::Instant::now();
-<a href=#443 id=443 data-nosnippet>443</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_probe = std::time::Instant::now();
-<a href=#444 id=444 data-nosnippet>444</a>
-<a href=#445 id=445 data-nosnippet>445</a>    <span class="lifetime">'capture</span>: <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#446 id=446 data-nosnippet>446</a>        <span class="comment">// A held window resize → restart the share at the new geometry.
-<a href=#447 id=447 data-nosnippet>447</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(cur) = screen.content_size()
-<a href=#448 id=448 data-nosnippet>448</a>            &amp;&amp; resize.observe(cur, std::time::Instant::now(), SCREEN_RESIZE_DEBOUNCE)
-<a href=#449 id=449 data-nosnippet>449</a>        {
-<a href=#450 id=450 data-nosnippet>450</a>            <span class="macro">tracing::info!</span>(<span class="string">"call: shared window resized — restarting share at new geometry"</span>);
-<a href=#451 id=451 data-nosnippet>451</a>            exit = ScreenCaptureExit::Resized;
-<a href=#452 id=452 data-nosnippet>452</a>            <span class="kw">break </span><span class="lifetime">'capture</span>;
-<a href=#453 id=453 data-nosnippet>453</a>        }
-<a href=#454 id=454 data-nosnippet>454</a>
-<a href=#455 id=455 data-nosnippet>455</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-<a href=#456 id=456 data-nosnippet>456</a>            screen.next_frame_timeout(SCREEN_IDLE_POLL)
-<a href=#457 id=457 data-nosnippet>457</a>        }));
-<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">match </span>pulled {
-<a href=#459 id=459 data-nosnippet>459</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(f))) =&gt; {
-<a href=#460 id=460 data-nosnippet>460</a>                <span class="comment">// RTC-debug: one real screen frame captured (not a static re-emit).
-<a href=#461 id=461 data-nosnippet>461</a>                </span>stats.screen_captured();
-<a href=#462 id=462 data-nosnippet>462</a>                last_frame = <span class="prelude-val">Some</span>(f);
-<a href=#463 id=463 data-nosnippet>463</a>                last_real_frame = std::time::Instant::now();
-<a href=#464 id=464 data-nosnippet>464</a>            }
-<a href=#465 id=465 data-nosnippet>465</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)) =&gt; {
-<a href=#466 id=466 data-nosnippet>466</a>                <span class="comment">// Idle: first make sure the source still EXISTS — a terminated
-<a href=#467 id=467 data-nosnippet>467</a>                // window delivers no frames and no error, and re-emitting its last
-<a href=#468 id=468 data-nosnippet>468</a>                // frame forever would freeze every receiver's tile on stale content.
-<a href=#469 id=469 data-nosnippet>469</a>                // Gone ⇒ clean end (the supervisor unpublishes; every tile drops).
-<a href=#470 id=470 data-nosnippet>470</a>                </span><span class="kw">if </span>source_probe_due(last_real_frame.elapsed(), last_probe.elapsed()) {
-<a href=#471 id=471 data-nosnippet>471</a>                    last_probe = std::time::Instant::now();
-<a href=#472 id=472 data-nosnippet>472</a>                    <span class="kw">if </span>!screen.source_alive() {
-<a href=#473 id=473 data-nosnippet>473</a>                        <span class="macro">tracing::info!</span>(<span class="string">"call: shared source no longer exists — ending share"</span>);
-<a href=#474 id=474 data-nosnippet>474</a>                        exit = ScreenCaptureExit::Ended;
-<a href=#475 id=475 data-nosnippet>475</a>                        <span class="kw">break </span><span class="lifetime">'capture</span>;
-<a href=#476 id=476 data-nosnippet>476</a>                    }
-<a href=#477 id=477 data-nosnippet>477</a>                }
-<a href=#478 id=478 data-nosnippet>478</a>                <span class="comment">// Idle (static source): re-emit the cached frame when a keyframe is
-<a href=#479 id=479 data-nosnippet>479</a>                // owed (new subscriber / PLI) or the static-refresh cadence lapsed,
-<a href=#480 id=480 data-nosnippet>480</a>                // with an advanced timestamp so playout stays monotonic.
-<a href=#481 id=481 data-nosnippet>481</a>                </span><span class="kw">let </span>owed_keyframe = adapt.force_keyframe.load(Ordering::Relaxed);
-<a href=#482 id=482 data-nosnippet>482</a>                <span class="kw">if </span>!owed_keyframe &amp;&amp; last_emit.elapsed() &lt; SCREEN_STATIC_REFRESH {
-<a href=#483 id=483 data-nosnippet>483</a>                    <span class="kw">continue</span>;
-<a href=#484 id=484 data-nosnippet>484</a>                }
-<a href=#485 id=485 data-nosnippet>485</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(cached) = last_frame.as_mut() <span class="kw">else </span>{
-<a href=#486 id=486 data-nosnippet>486</a>                    <span class="kw">continue</span>; <span class="comment">// nothing captured yet
-<a href=#487 id=487 data-nosnippet>487</a>                </span>};
-<a href=#488 id=488 data-nosnippet>488</a>                <span class="kw">let </span>advance = cached
-<a href=#489 id=489 data-nosnippet>489</a>                    .captured_at
-<a href=#490 id=490 data-nosnippet>490</a>                    .elapsed()
-<a href=#491 id=491 data-nosnippet>491</a>                    .as_micros()
-<a href=#492 id=492 data-nosnippet>492</a>                    .min(i64::MAX <span class="kw">as </span>u128) <span class="kw">as </span>i64;
-<a href=#493 id=493 data-nosnippet>493</a>                cached.timestamp_us =
-<a href=#494 id=494 data-nosnippet>494</a>                    TimestampUs::from_micros(cached.timestamp_us.micros() + advance);
-<a href=#495 id=495 data-nosnippet>495</a>                cached.captured_at = std::time::Instant::now();
-<a href=#496 id=496 data-nosnippet>496</a>            }
-<a href=#497 id=497 data-nosnippet>497</a>            <span class="comment">// SCK reported the stream STOPPED (window closed / OS "Stop Sharing"):
-<a href=#498 id=498 data-nosnippet>498</a>            // a clean, typed end — never a retry, which would either fail to reopen
-<a href=#499 id=499 data-nosnippet>499</a>            // or freeze on the last frame.
-<a href=#500 id=500 data-nosnippet>500</a>            </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(hound_engine::error::CaptureError::SourceEnded)) =&gt; {
-<a href=#501 id=501 data-nosnippet>501</a>                <span class="macro">tracing::info!</span>(<span class="string">"call: capture source ended — ending share"</span>);
-<a href=#502 id=502 data-nosnippet>502</a>                exit = ScreenCaptureExit::Ended;
-<a href=#503 id=503 data-nosnippet>503</a>                <span class="kw">break </span><span class="lifetime">'capture</span>;
-<a href=#504 id=504 data-nosnippet>504</a>            }
-<a href=#505 id=505 data-nosnippet>505</a>            <span class="comment">// Any other `next_frame` error or a pull-callback panic is a TRANSIENT
-<a href=#506 id=506 data-nosnippet>506</a>            // capture fault (a mid-stream disconnect, a poisoned lock). Don't
-<a href=#507 id=507 data-nosnippet>507</a>            // permanently end the share — signal `Retry` so the supervisor restarts it
-<a href=#508 id=508 data-nosnippet>508</a>            // in place; a restart whose re-open then fails (the source is genuinely
-<a href=#509 id=509 data-nosnippet>509</a>            // gone) degrades to a clean `Ended` there. A brief backoff bounds the
-<a href=#510 id=510 data-nosnippet>510</a>            // restart rate on a repeated fault.
-<a href=#511 id=511 data-nosnippet>511</a>            </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
-<a href=#512 id=512 data-nosnippet>512</a>                <span class="macro">tracing::warn!</span>(%e, <span class="string">"call: screen capture error — restarting share"</span>);
-<a href=#513 id=513 data-nosnippet>513</a>                exit = ScreenCaptureExit::Retry;
-<a href=#514 id=514 data-nosnippet>514</a>                std::thread::sleep(SCREEN_RETRY_BACKOFF);
-<a href=#515 id=515 data-nosnippet>515</a>                <span class="kw">break </span><span class="lifetime">'capture</span>;
-<a href=#516 id=516 data-nosnippet>516</a>            }
-<a href=#517 id=517 data-nosnippet>517</a>            <span class="prelude-val">Err</span>(_panic) =&gt; {
-<a href=#518 id=518 data-nosnippet>518</a>                <span class="macro">tracing::warn!</span>(<span class="string">"call: screen capture panicked — restarting share"</span>);
-<a href=#519 id=519 data-nosnippet>519</a>                exit = ScreenCaptureExit::Retry;
-<a href=#520 id=520 data-nosnippet>520</a>                std::thread::sleep(SCREEN_RETRY_BACKOFF);
-<a href=#521 id=521 data-nosnippet>521</a>                <span class="kw">break </span><span class="lifetime">'capture</span>;
-<a href=#522 id=522 data-nosnippet>522</a>            }
-<a href=#523 id=523 data-nosnippet>523</a>        }
-<a href=#524 id=524 data-nosnippet>524</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(frame) = last_frame.as_ref() <span class="kw">else </span>{
-<a href=#525 id=525 data-nosnippet>525</a>            <span class="kw">continue</span>;
-<a href=#526 id=526 data-nosnippet>526</a>        };
-<a href=#527 id=527 data-nosnippet>527</a>        last_emit = std::time::Instant::now();
-<a href=#528 id=528 data-nosnippet>528</a>
-<a href=#529 id=529 data-nosnippet>529</a>        <span class="comment">// Self-preview tee (keyed `screen:{self}`, matching the subscribe key
-<a href=#530 id=530 data-nosnippet>530</a>        // scheme). Runs even while paused so the sharer always sees what they're
-<a href=#531 id=531 data-nosnippet>531</a>        // sharing. Surface-first: SCK frames are NV12 IOSurfaces, so the preview
-<a href=#532 id=532 data-nosnippet>532</a>        // renders zero-copy — an always-I420 path would convert + copy ~3 MB per
-<a href=#533 id=533 data-nosnippet>533</a>        // frame (~90 MB/s at 1080p30) just for the sharer's own preview.
-<a href=#534 id=534 data-nosnippet>534</a>        </span>push_preview(sink.as_ref(), <span class="kw-2">&amp;</span>key, frame);
-<a href=#535 id=535 data-nosnippet>535</a>
-<a href=#536 id=536 data-nosnippet>536</a>        <span class="comment">// AudioOnly: the ladder dropped screen video under pressure. Keep pulling the
-<a href=#537 id=537 data-nosnippet>537</a>        // source (resume is instant) but skip encode/publish. Screen audio (if any)
-<a href=#538 id=538 data-nosnippet>538</a>        // keeps flowing underneath.
-<a href=#539 id=539 data-nosnippet>539</a>        </span><span class="kw">if </span>adapt.paused.load(Ordering::Relaxed) {
-<a href=#540 id=540 data-nosnippet>540</a>            <span class="kw">continue</span>;
-<a href=#541 id=541 data-nosnippet>541</a>        }
-<a href=#542 id=542 data-nosnippet>542</a>
-<a href=#543 id=543 data-nosnippet>543</a>        <span class="comment">// Mid-call codec switch (the re-negotiator moved the target — a peer joined
-<a href=#544 id=544 data-nosnippet>544</a>        // who can't decode us → downgrade; or one left → upgrade) AND/OR mid-share
-<a href=#545 id=545 data-nosnippet>545</a>        // resolution-rung change (the adaptation tick's DWELLED geometry —
-<a href=#546 id=546 data-nosnippet>546</a>        // `adapt.encoder_w/h`, see `hound_media::GeometryDwell` — settled on
-<a href=#547 id=547 data-nosnippet>547</a>        // something different from what's built). Rebuild the encoder to match
-<a href=#548 id=548 data-nosnippet>548</a>        // either, at the live bitrate; `0` on the geometry atomics means "no
-<a href=#549 id=549 data-nosnippet>549</a>        // adaptation decision yet", so fall back to the current `enc_dims` rather
-<a href=#550 id=550 data-nosnippet>550</a>        // than a bogus 0×0 rebuild. Either change forces a fresh IDR
-<a href=#551 id=551 data-nosnippet>551</a>        // (force_keyframe) so every receiver re-syncs — a decoder can't switch
-<a href=#552 id=552 data-nosnippet>552</a>        // codec OR resolution mid-GOP. On failure, keep the current encoder and
-<a href=#553 id=553 data-nosnippet>553</a>        // retry next frame.
-<a href=#554 id=554 data-nosnippet>554</a>        </span><span class="kw">let </span>want_codec = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
-<a href=#555 id=555 data-nosnippet>555</a>        <span class="kw">let </span>(want_w, want_h) = (
-<a href=#556 id=556 data-nosnippet>556</a>            adapt.encoder_w.load(Ordering::Relaxed),
-<a href=#557 id=557 data-nosnippet>557</a>            adapt.encoder_h.load(Ordering::Relaxed),
-<a href=#558 id=558 data-nosnippet>558</a>        );
-<a href=#559 id=559 data-nosnippet>559</a>        <span class="kw">let </span>want_dims = <span class="kw">if </span>want_w &gt; <span class="number">0 </span>&amp;&amp; want_h &gt; <span class="number">0 </span>{
-<a href=#560 id=560 data-nosnippet>560</a>            Dimensions::even_clamped(want_w, want_h)
-<a href=#561 id=561 data-nosnippet>561</a>        } <span class="kw">else </span>{
-<a href=#562 id=562 data-nosnippet>562</a>            enc_dims
-<a href=#563 id=563 data-nosnippet>563</a>        };
-<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw">if </span><span class="macro">want_codec !</span>= last_target || <span class="macro">want_dims !</span>= enc_dims {
-<a href=#565 id=565 data-nosnippet>565</a>            last_target = want_codec;
-<a href=#566 id=566 data-nosnippet>566</a>            <span class="kw">match </span>open_encoder_laddered(
-<a href=#567 id=567 data-nosnippet>567</a>                want_codec,
-<a href=#568 id=568 data-nosnippet>568</a>                want_dims,
-<a href=#569 id=569 data-nosnippet>569</a>                SCREEN_FPS,
-<a href=#570 id=570 data-nosnippet>570</a>                Bitrate::from_bps(applied_bps),
-<a href=#571 id=571 data-nosnippet>571</a>                SCREEN_KEYFRAME_CADENCE,
-<a href=#572 id=572 data-nosnippet>572</a>            ) {
-<a href=#573 id=573 data-nosnippet>573</a>                <span class="prelude-val">Some</span>(e) =&gt; {
-<a href=#574 id=574 data-nosnippet>574</a>                    <span class="kw">use </span>hound_engine::backend::VideoEncode;
-<a href=#575 id=575 data-nosnippet>575</a>                    <span class="kw">let </span>got = e.codec();
-<a href=#576 id=576 data-nosnippet>576</a>                    <span class="macro">tracing::info!</span>(
-<a href=#577 id=577 data-nosnippet>577</a>                        track = <span class="string">"screen"</span>,
-<a href=#578 id=578 data-nosnippet>578</a>                        from_codec = <span class="question-mark">?</span>current_codec,
-<a href=#579 id=579 data-nosnippet>579</a>                        to_codec = <span class="question-mark">?</span>got,
-<a href=#580 id=580 data-nosnippet>580</a>                        from_dims = %enc_dims,
-<a href=#581 id=581 data-nosnippet>581</a>                        to_dims = %want_dims,
-<a href=#582 id=582 data-nosnippet>582</a>                        <span class="string">"call: rebuilding encoder mid-share (codec/geometry)"
-<a href=#583 id=583 data-nosnippet>583</a>                    </span>);
-<a href=#584 id=584 data-nosnippet>584</a>                    encoder = e;
-<a href=#585 id=585 data-nosnippet>585</a>                    current_codec = got;
-<a href=#586 id=586 data-nosnippet>586</a>                    enc_dims = want_dims;
-<a href=#587 id=587 data-nosnippet>587</a>                    adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#588 id=588 data-nosnippet>588</a>                    stats.set_screen_codec(video_codec_to_ctl(got).label());
-<a href=#589 id=589 data-nosnippet>589</a>                }
-<a href=#590 id=590 data-nosnippet>590</a>                <span class="prelude-val">None </span>=&gt; {
-<a href=#591 id=591 data-nosnippet>591</a>                    <span class="macro">tracing::warn!</span>(track = <span class="string">"screen"</span>, codec = <span class="question-mark">?</span>want_codec, <span class="string">"call: mid-share encoder rebuild found no usable encoder; keeping current"</span>);
-<a href=#592 id=592 data-nosnippet>592</a>                }
-<a href=#593 id=593 data-nosnippet>593</a>            }
-<a href=#594 id=594 data-nosnippet>594</a>        }
-<a href=#595 id=595 data-nosnippet>595</a>
-<a href=#596 id=596 data-nosnippet>596</a>        encode_and_publish_adaptive(
-<a href=#597 id=597 data-nosnippet>597</a>            frame,
-<a href=#598 id=598 data-nosnippet>598</a>            <span class="kw-2">&amp;mut </span>encoder,
-<a href=#599 id=599 data-nosnippet>599</a>            <span class="kw-2">&amp;</span>adapt,
-<a href=#600 id=600 data-nosnippet>600</a>            <span class="kw-2">&amp;mut </span>applied_bps,
-<a href=#601 id=601 data-nosnippet>601</a>            <span class="kw-2">&amp;mut </span>fps_gate,
-<a href=#602 id=602 data-nosnippet>602</a>            enc_dims,
-<a href=#603 id=603 data-nosnippet>603</a>            |wire| vid_tx.try_send(wire).is_ok(),
-<a href=#604 id=604 data-nosnippet>604</a>            <span class="kw-2">&amp;mut </span>frame_seq,
-<a href=#605 id=605 data-nosnippet>605</a>            sender,
-<a href=#606 id=606 data-nosnippet>606</a>            TrackKind::ScrVideo,
-<a href=#607 id=607 data-nosnippet>607</a>            <span class="kw-2">&amp;</span>stats,
-<a href=#608 id=608 data-nosnippet>608</a>            <span class="kw-2">&amp;mut </span>fail_streak,
-<a href=#609 id=609 data-nosnippet>609</a>        );
-<a href=#610 id=610 data-nosnippet>610</a>
-<a href=#611 id=611 data-nosnippet>611</a>        <span class="comment">// LOW simulcast layer: when a constrained / small-tile receiver demands it,
-<a href=#612 id=612 data-nosnippet>612</a>        // downscale this same capture frame and encode + forward it on the screen_l0
-<a href=#613 id=613 data-nosnippet>613</a>        // track. Inert while `low_active` is `None` (dark until SIMULCAST_ACTUATE),
-<a href=#614 id=614 data-nosnippet>614</a>        // so the source path above is byte-identical to a no-simulcast build.
-<a href=#615 id=615 data-nosnippet>615</a>        </span><span class="kw">match </span><span class="kw-2">*</span>low_active.borrow() {
-<a href=#616 id=616 data-nosnippet>616</a>            <span class="prelude-val">Some</span>(low_bps) =&gt; {
-<a href=#617 id=617 data-nosnippet>617</a>                low_adapt.target_bps.store(low_bps, Ordering::Relaxed);
-<a href=#618 id=618 data-nosnippet>618</a>                <span class="comment">// A low-track PLI (new/recovering low subscriber) → force a low IDR.
-<a href=#619 id=619 data-nosnippet>619</a>                </span><span class="kw">if </span>low_keyframe.swap(<span class="bool-val">false</span>, Ordering::Relaxed) {
-<a href=#620 id=620 data-nosnippet>620</a>                    low_adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#621 id=621 data-nosnippet>621</a>                }
-<a href=#622 id=622 data-nosnippet>622</a>                <span class="comment">// (Re)build the low encoder at LOW geometry, tracking the source codec.
-<a href=#623 id=623 data-nosnippet>623</a>                </span><span class="kw">let </span>low_want = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
-<a href=#624 id=624 data-nosnippet>624</a>                <span class="kw">if </span>low_encoder.is_none() || <span class="macro">low_last_target !</span>= <span class="prelude-val">Some</span>(low_want) {
-<a href=#625 id=625 data-nosnippet>625</a>                    low_last_target = <span class="prelude-val">Some</span>(low_want);
-<a href=#626 id=626 data-nosnippet>626</a>                    low_encoder = open_encoder_laddered(
-<a href=#627 id=627 data-nosnippet>627</a>                        low_want,
-<a href=#628 id=628 data-nosnippet>628</a>                        low_dims,
-<a href=#629 id=629 data-nosnippet>629</a>                        SCREEN_FPS,
-<a href=#630 id=630 data-nosnippet>630</a>                        Bitrate::from_bps(low_bps.min(u32::MAX <span class="kw">as </span>u64) <span class="kw">as </span>u32),
-<a href=#631 id=631 data-nosnippet>631</a>                        SCREEN_KEYFRAME_CADENCE,
-<a href=#632 id=632 data-nosnippet>632</a>                    );
-<a href=#633 id=633 data-nosnippet>633</a>                    <span class="kw">if </span>low_encoder.is_some() {
-<a href=#634 id=634 data-nosnippet>634</a>                        low_adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#635 id=635 data-nosnippet>635</a>                    }
-<a href=#636 id=636 data-nosnippet>636</a>                }
-<a href=#637 id=637 data-nosnippet>637</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(low_enc) = low_encoder.as_mut()
-<a href=#638 id=638 data-nosnippet>638</a>                    &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(low_frame) = frame.scaled_to(low_dims)
-<a href=#639 id=639 data-nosnippet>639</a>                {
-<a href=#640 id=640 data-nosnippet>640</a>                    encode_and_publish_adaptive(
-<a href=#641 id=641 data-nosnippet>641</a>                        <span class="kw-2">&amp;</span>low_frame,
-<a href=#642 id=642 data-nosnippet>642</a>                        low_enc,
-<a href=#643 id=643 data-nosnippet>643</a>                        <span class="kw-2">&amp;</span>low_adapt,
-<a href=#644 id=644 data-nosnippet>644</a>                        <span class="kw-2">&amp;mut </span>low_applied_bps,
-<a href=#645 id=645 data-nosnippet>645</a>                        <span class="kw-2">&amp;mut </span>low_fps_gate,
-<a href=#646 id=646 data-nosnippet>646</a>                        low_dims,
-<a href=#647 id=647 data-nosnippet>647</a>                        |wire| low_vid_tx.try_send(wire).is_ok(),
-<a href=#648 id=648 data-nosnippet>648</a>                        <span class="kw-2">&amp;mut </span>low_frame_seq,
-<a href=#649 id=649 data-nosnippet>649</a>                        sender,
-<a href=#650 id=650 data-nosnippet>650</a>                        TrackKind::ScrVideoLow,
-<a href=#651 id=651 data-nosnippet>651</a>                        <span class="kw-2">&amp;</span>stats,
-<a href=#652 id=652 data-nosnippet>652</a>                        <span class="kw-2">&amp;mut </span>low_fail_streak,
-<a href=#653 id=653 data-nosnippet>653</a>                    );
-<a href=#654 id=654 data-nosnippet>654</a>                }
-<a href=#655 id=655 data-nosnippet>655</a>            }
-<a href=#656 id=656 data-nosnippet>656</a>            <span class="comment">// Demand gone — release the low encoder (resumes instantly on re-demand).
-<a href=#657 id=657 data-nosnippet>657</a>            </span><span class="prelude-val">None </span>=&gt; {
-<a href=#658 id=658 data-nosnippet>658</a>                low_encoder = <span class="prelude-val">None</span>;
-<a href=#659 id=659 data-nosnippet>659</a>            }
-<a href=#660 id=660 data-nosnippet>660</a>        }
-<a href=#661 id=661 data-nosnippet>661</a>    }
-<a href=#662 id=662 data-nosnippet>662</a>    <span class="comment">// RTC-debug: the screen pipeline is no longer publishing (clears the section).
-<a href=#663 id=663 data-nosnippet>663</a>    </span>stats.set_screen_disabled();
-<a href=#664 id=664 data-nosnippet>664</a>    <span class="comment">// Drop the `!Send` video handle on this owning thread (the `!Send` contract).
-<a href=#665 id=665 data-nosnippet>665</a>    </span>drop(screen);
-<a href=#666 id=666 data-nosnippet>666</a>
-<a href=#667 id=667 data-nosnippet>667</a>    <span class="comment">// Report the classified exit to the supervisor — UNLESS this was a deliberate stop
-<a href=#668 id=668 data-nosnippet>668</a>    // (stop/leave/reconnect already torn down by the supervisor, which owns that
-<a href=#669 id=669 data-nosnippet>669</a>    // transition; firing would be a redundant no-op the command handler de-dups anyway).
-<a href=#670 id=670 data-nosnippet>670</a>    </span><span class="kw">if </span>!stop.load(Ordering::Relaxed) {
-<a href=#671 id=671 data-nosnippet>671</a>        notify(exit);
-<a href=#672 id=672 data-nosnippet>672</a>    }
-<a href=#673 id=673 data-nosnippet>673</a>    <span class="macro">tracing::info!</span>(
-<a href=#674 id=674 data-nosnippet>674</a>        <span class="question-mark">?</span>exit,
-<a href=#675 id=675 data-nosnippet>675</a>        stop = stop.load(Ordering::Relaxed),
-<a href=#676 id=676 data-nosnippet>676</a>        <span class="string">"call: screen capture loop exiting"
-<a href=#677 id=677 data-nosnippet>677</a>    </span>);
-<a href=#678 id=678 data-nosnippet>678</a>}
-<a href=#679 id=679 data-nosnippet>679</a>
-<a href=#680 id=680 data-nosnippet>680</a><span class="doccomment">/// The async screen VIDEO publish task: acquire the `screen` track, gate on a live
-<a href=#681 id=681 data-nosnippet>681</a>/// subscriber, then forward each encoded AU while running the 1 s adaptation tick
-<a href=#682 id=682 data-nosnippet>682</a>/// (screen ladder). Mirrors the camera publish task. Reads `screen_quality` each tick
-<a href=#683 id=683 data-nosnippet>683</a>/// and reconfigures its ladder live (`set_screen_quality`) when the sharer changes it —
-<a href=#684 id=684 data-nosnippet>684</a>/// no restart.
-<a href=#685 id=685 data-nosnippet>685</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#686 id=686 data-nosnippet>686</a></span><span class="kw">fn </span>spawn_screen_video_publish(
-<a href=#687 id=687 data-nosnippet>687</a>    relay: Arc&lt;MoqRelaySession&gt;,
-<a href=#688 id=688 data-nosnippet>688</a>    path: String,
-<a href=#689 id=689 data-nosnippet>689</a>    <span class="kw-2">mut </span>enc_rx: tokio::sync::mpsc::Receiver&lt;WireFrame&gt;,
-<a href=#690 id=690 data-nosnippet>690</a>    adapt: Arc&lt;AdaptShared&gt;,
-<a href=#691 id=691 data-nosnippet>691</a>    neg_dims: Dimensions,
-<a href=#692 id=692 data-nosnippet>692</a>    rtt_conn: iroh::endpoint::Connection,
-<a href=#693 id=693 data-nosnippet>693</a>    screen_quality: SharedScreenQuality,
-<a href=#694 id=694 data-nosnippet>694</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#695 id=695 data-nosnippet>695</a>    codec: VideoCodec,
-<a href=#696 id=696 data-nosnippet>696</a>) -&gt; JoinHandle&lt;()&gt; {
-<a href=#697 id=697 data-nosnippet>697</a>    call_runtime().spawn(<span class="kw">async move </span>{
-<a href=#698 id=698 data-nosnippet>698</a>        <span class="kw">let </span><span class="kw-2">mut </span>publisher = <span class="kw">match </span>relay.publish_track(<span class="kw-2">&amp;</span>path, SCREEN_TRACK, VIDEO_PRIORITY) {
-<a href=#699 id=699 data-nosnippet>699</a>            <span class="prelude-val">Ok</span>(p) =&gt; p,
-<a href=#700 id=700 data-nosnippet>700</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#701 id=701 data-nosnippet>701</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to publish video track"</span>);
-<a href=#702 id=702 data-nosnippet>702</a>                <span class="kw">return</span>;
-<a href=#703 id=703 data-nosnippet>703</a>            }
-<a href=#704 id=704 data-nosnippet>704</a>        };
-<a href=#705 id=705 data-nosnippet>705</a>        <span class="comment">// RTC-debug: the negotiated screen track codec, set once at publish.
-<a href=#706 id=706 data-nosnippet>706</a>        </span>stats.set_screen_codec(video_codec_to_ctl(codec).label());
-<a href=#707 id=707 data-nosnippet>707</a>
-<a href=#708 id=708 data-nosnippet>708</a>        <span class="comment">// Sender-side adaptation core (sans-IO) seeded at the screen launch bitrate,
-<a href=#709 id=709 data-nosnippet>709</a>        // using the sharer's CURRENT quality preference; the before-tick hook applies
-<a href=#710 id=710 data-nosnippet>710</a>        // a mid-share change (the `call_set_screen_quality` command) so the ladder is
-<a href=#711 id=711 data-nosnippet>711</a>        // live-reconfigured without a restart. The preference lives on
-<a href=#712 id=712 data-nosnippet>712</a>        // `ConnectionParams`, so this re-seeds from it across reconnects too.
-<a href=#713 id=713 data-nosnippet>713</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>applied_quality = <span class="kw-2">**</span>screen_quality.load();
-<a href=#714 id=714 data-nosnippet>714</a>        <span class="kw">let </span><span class="kw-2">mut </span>adaptation =
-<a href=#715 id=715 data-nosnippet>715</a>            VideoAdaptation::screen_with(SCREEN_BITRATE.bps() <span class="kw">as </span>u64, applied_quality);
-<a href=#716 id=716 data-nosnippet>716</a>        <span class="comment">// The encoder-rebuild geometry dwell, seeded at the negotiated capture
-<a href=#717 id=717 data-nosnippet>717</a>        // geometry — exactly what the capture thread's encoder is already built at
-<a href=#718 id=718 data-nosnippet>718</a>        // before any tick runs, so a healthy share at the top rung never rebuilds.
-<a href=#719 id=719 data-nosnippet>719</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>geometry = hound_media::GeometryDwell::new((neg_dims.width(), neg_dims.height()));
-<a href=#720 id=720 data-nosnippet>720</a>        drive_video_publish(
-<a href=#721 id=721 data-nosnippet>721</a>            <span class="kw-2">&amp;mut </span>publisher,
-<a href=#722 id=722 data-nosnippet>722</a>            <span class="kw-2">&amp;mut </span>enc_rx,
-<a href=#723 id=723 data-nosnippet>723</a>            <span class="kw-2">&amp;</span>adapt,
-<a href=#724 id=724 data-nosnippet>724</a>            <span class="kw-2">&amp;mut </span>adaptation,
-<a href=#725 id=725 data-nosnippet>725</a>            <span class="kw-2">&amp;mut </span>geometry,
-<a href=#726 id=726 data-nosnippet>726</a>            <span class="kw-2">&amp;</span>rtt_conn,
-<a href=#727 id=727 data-nosnippet>727</a>            <span class="kw-2">&amp;</span>stats,
-<a href=#728 id=728 data-nosnippet>728</a>            <span class="bool-val">true</span>,
-<a href=#729 id=729 data-nosnippet>729</a>            <span class="string">"screen"</span>,
-<a href=#730 id=730 data-nosnippet>730</a>            |adaptation| {
-<a href=#731 id=731 data-nosnippet>731</a>                <span class="kw">let </span>want = <span class="kw-2">**</span>screen_quality.load();
-<a href=#732 id=732 data-nosnippet>732</a>                <span class="kw">if </span><span class="macro">want !</span>= applied_quality {
-<a href=#733 id=733 data-nosnippet>733</a>                    adaptation.set_screen_quality(want);
-<a href=#734 id=734 data-nosnippet>734</a>                    applied_quality = want;
-<a href=#735 id=735 data-nosnippet>735</a>                    <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>want, <span class="string">"call: screen quality changed — ladder reconfigured"</span>);
-<a href=#736 id=736 data-nosnippet>736</a>                }
-<a href=#737 id=737 data-nosnippet>737</a>            },
-<a href=#738 id=738 data-nosnippet>738</a>        )
-<a href=#739 id=739 data-nosnippet>739</a>        .<span class="kw">await</span>;
-<a href=#740 id=740 data-nosnippet>740</a>    })
-<a href=#741 id=741 data-nosnippet>741</a>}
+<a href=#102 id=102 data-nosnippet>102</a>    self_user_id: Uuid,
+<a href=#103 id=103 data-nosnippet>103</a>    self_id: PeerId,
+<a href=#104 id=104 data-nosnippet>104</a>    clock: CaptureClock,
+<a href=#105 id=105 data-nosnippet>105</a>    source: hound_engine::types::ScreenSource,
+<a href=#106 id=106 data-nosnippet>106</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
+<a href=#107 id=107 data-nosnippet>107</a>    control_outbound: tokio::sync::mpsc::UnboundedSender&lt;ClientMessage&gt;,
+<a href=#108 id=108 data-nosnippet>108</a>    rtt_conn: iroh::endpoint::Connection,
+<a href=#109 id=109 data-nosnippet>109</a>    view_rx: watch::Receiver&lt;SessionView&gt;,
+<a href=#110 id=110 data-nosnippet>110</a>    keyframe_rx: broadcast::Receiver&lt;TrackId&gt;,
+<a href=#111 id=111 data-nosnippet>111</a>    feedback_rx: broadcast::Receiver&lt;MediaFeedback&gt;,
+<a href=#112 id=112 data-nosnippet>112</a>    quality_rx: broadcast::Receiver&lt;QualityReport&gt;,
+<a href=#113 id=113 data-nosnippet>113</a>    screen_quality: SharedScreenQuality,
+<a href=#114 id=114 data-nosnippet>114</a>    notify: ScreenExitNotify,
+<a href=#115 id=115 data-nosnippet>115</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#116 id=116 data-nosnippet>116</a>    mute: Arc&lt;MuteFlags&gt;,
+<a href=#117 id=117 data-nosnippet>117</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ScreenShareHandle&gt; {
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">let </span>capture_stop = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span>(vid_tx, vid_rx) = tokio::sync::mpsc::channel::&lt;WireFrame&gt;(<span class="number">8</span>);
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span>(ready_tx, ready_rx) = tokio::sync::oneshot::channel::&lt;<span class="prelude-ty">Result</span>&lt;ScreenOpened&gt;&gt;();
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="comment">// Negotiate the publish codec against the live roster (HW-encode ∩ all-peers
+<a href=#123 id=123 data-nosnippet>123</a>    // HW-decode): AV1 → H.265 → H.264. The capture/encode thread builds this codec's
+<a href=#124 id=124 data-nosnippet>124</a>    // encoder; we announce the same choice below. `encode_caps` is probed once (it
+<a href=#125 id=125 data-nosnippet>125</a>    // spins a throwaway VT session) and reused by the mid-call re-negotiator.
+<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="kw">let </span>encode_caps = Engine::new().encode_caps();
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">let </span>codec = negotiate_codec(encode_caps, <span class="kw-2">&amp;</span>view_rx.borrow());
+<a href=#128 id=128 data-nosnippet>128</a>
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="comment">// The shared adaptation seam: the screen video tick (in the publish task) +
+<a href=#130 id=130 data-nosnippet>130</a>    // keyframe/feedback listeners write it; the capture/encode thread reads it.
+<a href=#131 id=131 data-nosnippet>131</a>    </span><span class="kw">let </span>adapt = Arc::new(AdaptShared::default());
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="comment">// Seed the codec slot so the encode loop's rebuild check is a no-op until a
+<a href=#133 id=133 data-nosnippet>133</a>    // roster change actually moves it.
+<a href=#134 id=134 data-nosnippet>134</a>    </span>adapt
+<a href=#135 id=135 data-nosnippet>135</a>        .target_codec
+<a href=#136 id=136 data-nosnippet>136</a>        .store(codec_rank(codec), Ordering::Relaxed);
+<a href=#137 id=137 data-nosnippet>137</a>
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="comment">// Demand-driven simulcast control for the screen source + the LOW-layer channel
+<a href=#139 id=139 data-nosnippet>139</a>    // the capture thread feeds. `low_active` is the capture thread's gate; it stays
+<a href=#140 id=140 data-nosnippet>140</a>    // `None` (low path inert) until a receiver demands the low layer AND actuation is
+<a href=#141 id=141 data-nosnippet>141</a>    // on. Created here so it can be handed to the capture thread below.
+<a href=#142 id=142 data-nosnippet>142</a>    </span><span class="kw">let </span>layers = Arc::new(LayerControl::new(SCREEN_BITRATE.bps() <span class="kw">as </span>u64));
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">let </span>low_active = layers.low_active.subscribe();
+<a href=#144 id=144 data-nosnippet>144</a>    <span class="kw">let </span>(low_vid_tx, low_vid_rx) = tokio::sync::mpsc::channel::&lt;WireFrame&gt;(<span class="number">8</span>);
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="comment">// A low-track PLI sets this; the capture thread forces a low IDR so a receiver
+<a href=#146 id=146 data-nosnippet>146</a>    // subscribing to the low layer resyncs promptly (not on the slow safety-net IDR).
+<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="kw">let </span>low_keyframe = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="comment">// The `!Send` capture+encode thread owns the engine `ScreenShare` + H.264 encoder
+<a href=#150 id=150 data-nosnippet>150</a>    // for its whole life (the `!Send` contract); it reports open readiness and hands
+<a href=#151 id=151 data-nosnippet>151</a>    // back the audio leg via `ready_tx`, and classifies + reports its exit via `notify`.
+<a href=#152 id=152 data-nosnippet>152</a>    </span>{
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>stop = capture_stop.clone();
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>adapt = adapt.clone();
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span>notify = notify.clone();
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>stats = stats.clone();
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">let </span>low_keyframe_capture = low_keyframe.clone();
+<a href=#158 id=158 data-nosnippet>158</a>        std::thread::Builder::new()
+<a href=#159 id=159 data-nosnippet>159</a>            .name(<span class="string">"call-screen-capture-encode"</span>.into())
+<a href=#160 id=160 data-nosnippet>160</a>            .spawn(<span class="kw">move </span>|| {
+<a href=#161 id=161 data-nosnippet>161</a>                screen_capture_encode_loop(
+<a href=#162 id=162 data-nosnippet>162</a>                    stop,
+<a href=#163 id=163 data-nosnippet>163</a>                    clock,
+<a href=#164 id=164 data-nosnippet>164</a>                    source,
+<a href=#165 id=165 data-nosnippet>165</a>                    self_id,
+<a href=#166 id=166 data-nosnippet>166</a>                    sink,
+<a href=#167 id=167 data-nosnippet>167</a>                    vid_tx,
+<a href=#168 id=168 data-nosnippet>168</a>                    ready_tx,
+<a href=#169 id=169 data-nosnippet>169</a>                    adapt,
+<a href=#170 id=170 data-nosnippet>170</a>                    notify,
+<a href=#171 id=171 data-nosnippet>171</a>                    stats,
+<a href=#172 id=172 data-nosnippet>172</a>                    codec,
+<a href=#173 id=173 data-nosnippet>173</a>                    low_active,
+<a href=#174 id=174 data-nosnippet>174</a>                    low_vid_tx,
+<a href=#175 id=175 data-nosnippet>175</a>                    low_keyframe_capture,
+<a href=#176 id=176 data-nosnippet>176</a>                )
+<a href=#177 id=177 data-nosnippet>177</a>            })
+<a href=#178 id=178 data-nosnippet>178</a>            .ok();
+<a href=#179 id=179 data-nosnippet>179</a>    }
+<a href=#180 id=180 data-nosnippet>180</a>
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="comment">// Await the open — a permission/unsupported/bad-source error surfaces to the
+<a href=#182 id=182 data-nosnippet>182</a>    // caller (so the UI can show the TCC hint) rather than failing silently.
+<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="kw">let </span>opened = <span class="kw">match </span>ready_rx.<span class="kw">await </span>{
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(o)) =&gt; o,
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(e),
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#187 id=187 data-nosnippet>187</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(HoundError::Media(
+<a href=#188 id=188 data-nosnippet>188</a>                <span class="string">"screen capture thread exited before reporting readiness"</span>.into(),
+<a href=#189 id=189 data-nosnippet>189</a>            ));
+<a href=#190 id=190 data-nosnippet>190</a>        }
+<a href=#191 id=191 data-nosnippet>191</a>    };
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="comment">// Announce the screen VIDEO track in the negotiated codec.
+<a href=#194 id=194 data-nosnippet>194</a>    </span>control_outbound
+<a href=#195 id=195 data-nosnippet>195</a>        .send(ClientMessage::Publish {
+<a href=#196 id=196 data-nosnippet>196</a>            track: TrackDecl {
+<a href=#197 id=197 data-nosnippet>197</a>                kind: MediaKind::Video,
+<a href=#198 id=198 data-nosnippet>198</a>                source: Source::Screen,
+<a href=#199 id=199 data-nosnippet>199</a>                codec: video_codec_to_ctl(codec),
+<a href=#200 id=200 data-nosnippet>200</a>                low: <span class="bool-val">false</span>,
+<a href=#201 id=201 data-nosnippet>201</a>            },
+<a href=#202 id=202 data-nosnippet>202</a>        })
+<a href=#203 id=203 data-nosnippet>203</a>        .map_err(|<span class="kw">_</span>| HoundError::Media(<span class="string">"control plane closed before screen publish"</span>.into()))<span class="question-mark">?</span>;
+<a href=#204 id=204 data-nosnippet>204</a>
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">let </span><span class="kw-2">mut </span>tasks: Vec&lt;JoinHandle&lt;()&gt;&gt; = <span class="macro">vec!</span>[
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="comment">// Producer-side PLI relay + receiver→producer BWE feedback, scoped to the
+<a href=#207 id=207 data-nosnippet>207</a>        // SCREEN track. Their tasks join the handle so they tear down with the share.
+<a href=#208 id=208 data-nosnippet>208</a>        </span>spawn_keyframe_listener(
+<a href=#209 id=209 data-nosnippet>209</a>            keyframe_rx,
+<a href=#210 id=210 data-nosnippet>210</a>            view_rx.clone(),
+<a href=#211 id=211 data-nosnippet>211</a>            self_id,
+<a href=#212 id=212 data-nosnippet>212</a>            Source::Screen,
+<a href=#213 id=213 data-nosnippet>213</a>            adapt.clone(),
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="prelude-val">Some</span>(low_keyframe.clone()),
+<a href=#215 id=215 data-nosnippet>215</a>        ),
+<a href=#216 id=216 data-nosnippet>216</a>        spawn_feedback_listener(
+<a href=#217 id=217 data-nosnippet>217</a>            feedback_rx,
+<a href=#218 id=218 data-nosnippet>218</a>            view_rx.clone(),
+<a href=#219 id=219 data-nosnippet>219</a>            self_id,
+<a href=#220 id=220 data-nosnippet>220</a>            Source::Screen,
+<a href=#221 id=221 data-nosnippet>221</a>            adapt.clone(),
+<a href=#222 id=222 data-nosnippet>222</a>            layers.clone(),
+<a href=#223 id=223 data-nosnippet>223</a>        ),
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="comment">// Demand-driven simulcast: aggregate receiver quality requests for the screen
+<a href=#225 id=225 data-nosnippet>225</a>        // track into the layer planner (drives the low layer's `low_active` gate).
+<a href=#226 id=226 data-nosnippet>226</a>        // Dark until `SIMULCAST_ACTUATE`.
+<a href=#227 id=227 data-nosnippet>227</a>        </span>spawn_quality_listener(quality_rx, view_rx.clone(), self_id, Source::Screen, layers),
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="comment">// LOW-layer publish: drains the capture thread's low encode and publishes it
+<a href=#229 id=229 data-nosnippet>229</a>        // on the `screen_l0` track, announcing it on the first frame (so it's
+<a href=#230 id=230 data-nosnippet>230</a>        // invisible to receivers until actually producing).
+<a href=#231 id=231 data-nosnippet>231</a>        </span>spawn_low_video_publish(
+<a href=#232 id=232 data-nosnippet>232</a>            relay.clone(),
+<a href=#233 id=233 data-nosnippet>233</a>            broadcast_path(space_id, self_user_id, self_id, <span class="string">"screen_l0"</span>),
+<a href=#234 id=234 data-nosnippet>234</a>            <span class="string">"screen_l0"</span>,
+<a href=#235 id=235 data-nosnippet>235</a>            Source::Screen,
+<a href=#236 id=236 data-nosnippet>236</a>            video_codec_to_ctl(codec),
+<a href=#237 id=237 data-nosnippet>237</a>            low_vid_rx,
+<a href=#238 id=238 data-nosnippet>238</a>            control_outbound.clone(),
+<a href=#239 id=239 data-nosnippet>239</a>        ),
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="comment">// Re-negotiate the codec as the roster changes mid-share (a less-capable peer
+<a href=#241 id=241 data-nosnippet>241</a>        // joining forces a downgrade so they get video; one leaving lets us climb
+<a href=#242 id=242 data-nosnippet>242</a>        // back).
+<a href=#243 id=243 data-nosnippet>243</a>        </span>spawn_codec_renegotiator(view_rx, encode_caps, adapt.clone(), codec, <span class="string">"screen"</span>),
+<a href=#244 id=244 data-nosnippet>244</a>        spawn_screen_video_publish(
+<a href=#245 id=245 data-nosnippet>245</a>            relay.clone(),
+<a href=#246 id=246 data-nosnippet>246</a>            broadcast_path(space_id, self_user_id, self_id, SCREEN_TRACK),
+<a href=#247 id=247 data-nosnippet>247</a>            vid_rx,
+<a href=#248 id=248 data-nosnippet>248</a>            adapt,
+<a href=#249 id=249 data-nosnippet>249</a>            opened.dims,
+<a href=#250 id=250 data-nosnippet>250</a>            rtt_conn,
+<a href=#251 id=251 data-nosnippet>251</a>            screen_quality,
+<a href=#252 id=252 data-nosnippet>252</a>            stats.clone(),
+<a href=#253 id=253 data-nosnippet>253</a>            codec,
+<a href=#254 id=254 data-nosnippet>254</a>        ),
+<a href=#255 id=255 data-nosnippet>255</a>    ];
+<a href=#256 id=256 data-nosnippet>256</a>
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="comment">// App-audio leg: only when the engine returned one (window + app-audio support).
+<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(audio) = opened.audio {
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">let _ </span>= control_outbound.send(ClientMessage::Publish {
+<a href=#260 id=260 data-nosnippet>260</a>            track: TrackDecl {
+<a href=#261 id=261 data-nosnippet>261</a>                kind: MediaKind::Audio,
+<a href=#262 id=262 data-nosnippet>262</a>                source: Source::Screen,
+<a href=#263 id=263 data-nosnippet>263</a>                codec: CtlCodec::Opus,
+<a href=#264 id=264 data-nosnippet>264</a>                low: <span class="bool-val">false</span>,
+<a href=#265 id=265 data-nosnippet>265</a>            },
+<a href=#266 id=266 data-nosnippet>266</a>        });
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span>(pcm_tx, pcm_rx) = tokio::sync::mpsc::channel::&lt;hound_engine::types::PcmFrame&gt;(<span class="number">8</span>);
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>stop = capture_stop.clone();
+<a href=#269 id=269 data-nosnippet>269</a>        std::thread::Builder::new()
+<a href=#270 id=270 data-nosnippet>270</a>            .name(<span class="string">"call-screen-audio-capture"</span>.into())
+<a href=#271 id=271 data-nosnippet>271</a>            .spawn(<span class="kw">move </span>|| screen_audio_capture_loop(stop, audio, pcm_tx))
+<a href=#272 id=272 data-nosnippet>272</a>            .ok();
+<a href=#273 id=273 data-nosnippet>273</a>        tasks.push(spawn_screen_audio_publish(
+<a href=#274 id=274 data-nosnippet>274</a>            relay,
+<a href=#275 id=275 data-nosnippet>275</a>            broadcast_path(space_id, self_user_id, self_id, SCREEN_AUDIO_TRACK),
+<a href=#276 id=276 data-nosnippet>276</a>            self_id.<span class="number">0 </span><span class="kw">as </span>u16,
+<a href=#277 id=277 data-nosnippet>277</a>            pcm_rx,
+<a href=#278 id=278 data-nosnippet>278</a>            stats.clone(),
+<a href=#279 id=279 data-nosnippet>279</a>            mute,
+<a href=#280 id=280 data-nosnippet>280</a>        ));
+<a href=#281 id=281 data-nosnippet>281</a>    }
+<a href=#282 id=282 data-nosnippet>282</a>
+<a href=#283 id=283 data-nosnippet>283</a>    <span class="prelude-val">Ok</span>(ScreenShareHandle {
+<a href=#284 id=284 data-nosnippet>284</a>        capture_stop,
+<a href=#285 id=285 data-nosnippet>285</a>        tasks,
+<a href=#286 id=286 data-nosnippet>286</a>    })
+<a href=#287 id=287 data-nosnippet>287</a>}
+<a href=#288 id=288 data-nosnippet>288</a>
+<a href=#289 id=289 data-nosnippet>289</a><span class="doccomment">/// The `!Send` screen capture+encode thread: open the engine `ScreenShare` (+ maybe
+<a href=#290 id=290 data-nosnippet>290</a>/// `ScreenAudio`) and the H.264 encoder HERE (so neither crosses a thread boundary),
+<a href=#291 id=291 data-nosnippet>291</a>/// report readiness (handing back the audio leg), then pull → self-preview tee →
+<a href=#292 id=292 data-nosnippet>292</a>/// encode → forward. A static source produces no frames, so on an idle poll the last
+<a href=#293 id=293 data-nosnippet>293</a>/// frame is re-emitted (timestamp advanced) at the static-refresh cadence so a fresh
+<a href=#294 id=294 data-nosnippet>294</a>/// subscriber isn't stuck on a black tile.
+<a href=#295 id=295 data-nosnippet>295</a>///
+<a href=#296 id=296 data-nosnippet>296</a>/// The loop classifies its exit and reports it via `notify`:
+<a href=#297 id=297 data-nosnippet>297</a>/// * a window CLOSE / OS "stop sharing" / source gone (`next_frame` errs cleanly) →
+<a href=#298 id=298 data-nosnippet>298</a>///   [`ScreenCaptureExit::Ended`];
+<a href=#299 id=299 data-nosnippet>299</a>/// * a window RESIZE that holds past [`SCREEN_RESIZE_DEBOUNCE`] (the captured content
+<a href=#300 id=300 data-nosnippet>300</a>///   size departs its baseline and stays) → [`ScreenCaptureExit::Resized`];
+<a href=#301 id=301 data-nosnippet>301</a>/// * a transient `next_frame` error/panic → [`ScreenCaptureExit::Retry`] (after a brief
+<a href=#302 id=302 data-nosnippet>302</a>///   [`SCREEN_RETRY_BACKOFF`]).
+<a href=#303 id=303 data-nosnippet>303</a>///
+<a href=#304 id=304 data-nosnippet>304</a>/// NB the engine exposes ONE `next_frame_timeout` result for both "ended" and a
+<a href=#305 id=305 data-nosnippet>305</a>/// transient error (a `CaptureError`), so we conservatively treat an error as a
+<a href=#306 id=306 data-nosnippet>306</a>/// transient `Retry`: the supervisor's restart re-opens cleanly, and a re-open that then
+<a href=#307 id=307 data-nosnippet>307</a>/// fails (the source is truly gone) degrades to a clean `Ended` there. `notify` is NOT
+<a href=#308 id=308 data-nosnippet>308</a>/// fired when `stop` was latched (a deliberate stop/leave/reconnect — the supervisor
+<a href=#309 id=309 data-nosnippet>309</a>/// already owns that transition).
+<a href=#310 id=310 data-nosnippet>310</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#311 id=311 data-nosnippet>311</a></span><span class="kw">fn </span>screen_capture_encode_loop(
+<a href=#312 id=312 data-nosnippet>312</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#313 id=313 data-nosnippet>313</a>    clock: CaptureClock,
+<a href=#314 id=314 data-nosnippet>314</a>    source: hound_engine::types::ScreenSource,
+<a href=#315 id=315 data-nosnippet>315</a>    self_id: PeerId,
+<a href=#316 id=316 data-nosnippet>316</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
+<a href=#317 id=317 data-nosnippet>317</a>    vid_tx: tokio::sync::mpsc::Sender&lt;WireFrame&gt;,
+<a href=#318 id=318 data-nosnippet>318</a>    ready_tx: tokio::sync::oneshot::Sender&lt;<span class="prelude-ty">Result</span>&lt;ScreenOpened&gt;&gt;,
+<a href=#319 id=319 data-nosnippet>319</a>    adapt: Arc&lt;AdaptShared&gt;,
+<a href=#320 id=320 data-nosnippet>320</a>    notify: ScreenExitNotify,
+<a href=#321 id=321 data-nosnippet>321</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#322 id=322 data-nosnippet>322</a>    codec: VideoCodec,
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="comment">// Demand-driven LOW simulcast layer: `Some(bps)` ⇒ also downscale + encode this
+<a href=#324 id=324 data-nosnippet>324</a>    // capture at `LOW_SCREEN_DIMS` and forward on `low_vid_tx` (the `screen_l0`
+<a href=#325 id=325 data-nosnippet>325</a>    // track). Stays `None` (inert, source path byte-identical) until a receiver
+<a href=#326 id=326 data-nosnippet>326</a>    // demands it AND `SIMULCAST_ACTUATE` is on.
+<a href=#327 id=327 data-nosnippet>327</a>    </span>low_active: watch::Receiver&lt;<span class="prelude-ty">Option</span>&lt;u64&gt;&gt;,
+<a href=#328 id=328 data-nosnippet>328</a>    low_vid_tx: tokio::sync::mpsc::Sender&lt;WireFrame&gt;,
+<a href=#329 id=329 data-nosnippet>329</a>    low_keyframe: Arc&lt;AtomicBool&gt;,
+<a href=#330 id=330 data-nosnippet>330</a>) {
+<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">use </span>hound_engine::types::{ScreenCaptureConfig, TimestampUs};
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="comment">// Capture native, scaled to the 1080p-class cap preserving aspect; request app
+<a href=#334 id=334 data-nosnippet>334</a>    // audio (the engine ignores it for a display / unsupported platform → `None`).
+<a href=#335 id=335 data-nosnippet>335</a>    </span><span class="kw">let </span>config = ScreenCaptureConfig {
+<a href=#336 id=336 data-nosnippet>336</a>        dimensions: Dimensions::even_clamped(SCREEN_MAX_W, SCREEN_MAX_H),
+<a href=#337 id=337 data-nosnippet>337</a>        fps: SCREEN_FPS,
+<a href=#338 id=338 data-nosnippet>338</a>        capture_audio: <span class="bool-val">true</span>,
+<a href=#339 id=339 data-nosnippet>339</a>    };
+<a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>screen, screen_audio) = <span class="kw">match </span>Engine::new().open_screen_capture(<span class="kw-2">&amp;</span>source, config, clock)
+<a href=#341 id=341 data-nosnippet>341</a>    {
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="prelude-val">Ok</span>(v) =&gt; v,
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#344 id=344 data-nosnippet>344</a>            <span class="kw">let _ </span>= ready_tx.send(<span class="prelude-val">Err</span>(map_screen_capture_error(e)));
+<a href=#345 id=345 data-nosnippet>345</a>            <span class="kw">return</span>;
+<a href=#346 id=346 data-nosnippet>346</a>        }
+<a href=#347 id=347 data-nosnippet>347</a>    };
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="comment">// Build the encoder for the delivered geometry (post native→target scale), in
+<a href=#349 id=349 data-nosnippet>349</a>    // the negotiated codec, descending the ladder if it won't open. The wire-codec
+<a href=#350 id=350 data-nosnippet>350</a>    // byte is taken from the encoder actually built, so frames stay correctly tagged.
+<a href=#351 id=351 data-nosnippet>351</a>    </span><span class="kw">let </span>(neg_dims, _fmt) = screen.negotiated();
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="comment">// The low simulcast layer's geometry at the SOURCE aspect (not a fixed 16:9 rung).
+<a href=#353 id=353 data-nosnippet>353</a>    </span><span class="kw">let </span>low_dims = low_screen_dims(neg_dims);
+<a href=#354 id=354 data-nosnippet>354</a>    <span class="kw">let </span><span class="kw-2">mut </span>encoder = <span class="kw">match </span>open_encoder_laddered(
+<a href=#355 id=355 data-nosnippet>355</a>        codec,
+<a href=#356 id=356 data-nosnippet>356</a>        neg_dims,
+<a href=#357 id=357 data-nosnippet>357</a>        SCREEN_FPS,
+<a href=#358 id=358 data-nosnippet>358</a>        SCREEN_BITRATE,
+<a href=#359 id=359 data-nosnippet>359</a>        SCREEN_KEYFRAME_CADENCE,
+<a href=#360 id=360 data-nosnippet>360</a>    ) {
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="prelude-val">Some</span>(e) =&gt; e,
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="prelude-val">None </span>=&gt; {
+<a href=#363 id=363 data-nosnippet>363</a>            <span class="kw">let _ </span>= ready_tx.send(<span class="prelude-val">Err</span>(HoundError::Media(
+<a href=#364 id=364 data-nosnippet>364</a>                <span class="string">"no usable video encoder (even H.264 failed to open)"</span>.into(),
+<a href=#365 id=365 data-nosnippet>365</a>            )));
+<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw">return</span>;
+<a href=#367 id=367 data-nosnippet>367</a>        }
+<a href=#368 id=368 data-nosnippet>368</a>    };
+<a href=#369 id=369 data-nosnippet>369</a>    <span class="comment">// The codec the encoder is actually producing (may be a lower rung than `codec`
+<a href=#370 id=370 data-nosnippet>370</a>    // if the ladder fell through) — used for the log/stat label. `last_target` is the
+<a href=#371 id=371 data-nosnippet>371</a>    // negotiated *target* we last rebuilt for; the rebuild check keys off it changing,
+<a href=#372 id=372 data-nosnippet>372</a>    // NOT off `current_codec`, so a target the device can't build (AV1 → built H.265)
+<a href=#373 id=373 data-nosnippet>373</a>    // doesn't re-trigger a rebuild every frame.
+<a href=#374 id=374 data-nosnippet>374</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>current_codec = {
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">use </span>hound_engine::backend::VideoEncode;
+<a href=#376 id=376 data-nosnippet>376</a>        encoder.codec()
+<a href=#377 id=377 data-nosnippet>377</a>    };
+<a href=#378 id=378 data-nosnippet>378</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_target = codec;
+<a href=#379 id=379 data-nosnippet>379</a>    <span class="comment">// The geometry the live `encoder` was actually built at — starts at `neg_dims`
+<a href=#380 id=380 data-nosnippet>380</a>    // (the negotiated capture geometry) and only moves when the adaptation's
+<a href=#381 id=381 data-nosnippet>381</a>    // dwelled rung geometry (`adapt.encoder_w/h`) settles on something different.
+<a href=#382 id=382 data-nosnippet>382</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>enc_dims = neg_dims;
+<a href=#383 id=383 data-nosnippet>383</a>    {
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">use </span>hound_engine::backend::VideoEncode;
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="macro">tracing::info!</span>(
+<a href=#386 id=386 data-nosnippet>386</a>            target: <span class="string">"video_encode"</span>,
+<a href=#387 id=387 data-nosnippet>387</a>            track = <span class="string">"screen"</span>,
+<a href=#388 id=388 data-nosnippet>388</a>            codec = <span class="question-mark">?</span>encoder.codec(),
+<a href=#389 id=389 data-nosnippet>389</a>            backend = encoder.backend(),
+<a href=#390 id=390 data-nosnippet>390</a>            width = neg_dims.width(),
+<a href=#391 id=391 data-nosnippet>391</a>            height = neg_dims.height(),
+<a href=#392 id=392 data-nosnippet>392</a>            <span class="string">"video: encode path selected"
+<a href=#393 id=393 data-nosnippet>393</a>        </span>);
+<a href=#394 id=394 data-nosnippet>394</a>    }
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="comment">// Hand the audio leg out (for its own thread) and report a successful open.
+<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="kw">let _ </span>= ready_tx.send(<span class="prelude-val">Ok</span>(ScreenOpened {
+<a href=#397 id=397 data-nosnippet>397</a>        audio: screen_audio,
+<a href=#398 id=398 data-nosnippet>398</a>        dims: neg_dims,
+<a href=#399 id=399 data-nosnippet>399</a>    }));
+<a href=#400 id=400 data-nosnippet>400</a>
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="comment">// RTC-debug: the screen pipeline is publishing at this geometry (sets enabled).
+<a href=#402 id=402 data-nosnippet>402</a>    </span>stats.set_screen_dims(neg_dims.width(), neg_dims.height());
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">let </span>key = screen_key(self_id);
+<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">let </span>sender = self_id.<span class="number">0 </span><span class="kw">as </span>u16;
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span><span class="kw-2">mut </span>frame_seq = <span class="number">0u32</span>;
+<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_frame: <span class="prelude-ty">Option</span>&lt;hound_engine::types::RawFrame&gt; = <span class="prelude-val">None</span>;
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_emit = std::time::Instant::now();
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="comment">// The encoder bitrate we last applied (a steady target costs no syscall).
+<a href=#410 id=410 data-nosnippet>410</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>applied_bps = SCREEN_BITRATE.bps();
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="comment">// Downsamples capture to the chosen rung's fps; the static-refresh re-emit rides
+<a href=#412 id=412 data-nosnippet>412</a>    // the forced-keyframe bypass in `encode_and_publish_adaptive` so an idle share
+<a href=#413 id=413 data-nosnippet>413</a>    // never freezes the gate.
+<a href=#414 id=414 data-nosnippet>414</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>fps_gate = hound_media::FrameRateGate::new();
+<a href=#415 id=415 data-nosnippet>415</a>    <span class="kw">let </span><span class="kw-2">mut </span>fail_streak = EncodeFailStreak::default();
+<a href=#416 id=416 data-nosnippet>416</a>
+<a href=#417 id=417 data-nosnippet>417</a>    <span class="comment">// LOW simulcast layer state — mirrors the source's, at `LOW_SCREEN_DIMS`. Built
+<a href=#418 id=418 data-nosnippet>418</a>    // lazily the first frame `low_active` is `Some`, torn down when it goes `None`,
+<a href=#419 id=419 data-nosnippet>419</a>    // rebuilt on a codec switch (tracks the same `target_codec` as the source).
+<a href=#420 id=420 data-nosnippet>420</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>low_encoder: <span class="prelude-ty">Option</span>&lt;hound_engine::api::VideoEncoder&gt; = <span class="prelude-val">None</span>;
+<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_last_target: <span class="prelude-ty">Option</span>&lt;VideoCodec&gt; = <span class="prelude-val">None</span>;
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_applied_bps = <span class="number">0u32</span>;
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_frame_seq = <span class="number">0u32</span>;
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_fps_gate = hound_media::FrameRateGate::new();
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_fail_streak = EncodeFailStreak::default();
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span>low_adapt = Arc::new(AdaptShared::default());
+<a href=#427 id=427 data-nosnippet>427</a>    low_adapt
+<a href=#428 id=428 data-nosnippet>428</a>        .target_fps
+<a href=#429 id=429 data-nosnippet>429</a>        .store(SCREEN_FPS.get(), Ordering::Relaxed);
+<a href=#430 id=430 data-nosnippet>430</a>
+<a href=#431 id=431 data-nosnippet>431</a>    <span class="comment">// How this loop exits: classified for the supervisor. Defaults to `Ended` (a clean
+<a href=#432 id=432 data-nosnippet>432</a>    // capture end) and is upgraded to `Resized`/`Retry` at the break that detected it.
+<a href=#433 id=433 data-nosnippet>433</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>exit = ScreenCaptureExit::Ended;
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="comment">// Resize watch: the capture's pixel geometry is fixed at open, so when the per-frame
+<a href=#435 id=435 data-nosnippet>435</a>    // content size departs its baseline and HOLDS (debounced past live drag-resizes) we
+<a href=#436 id=436 data-nosnippet>436</a>    // exit with `Resized` and the supervisor restarts at the new geometry.
+<a href=#437 id=437 data-nosnippet>437</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>resize = ResizeWatch::default();
+<a href=#438 id=438 data-nosnippet>438</a>    <span class="comment">// Source liveness: damage-driven capture goes SILENT (not errored) when the
+<a href=#439 id=439 data-nosnippet>439</a>    // shared window's app terminates — indistinguishable from static content by
+<a href=#440 id=440 data-nosnippet>440</a>    // frame flow alone, so the static-refresh would re-emit the last frame forever.
+<a href=#441 id=441 data-nosnippet>441</a>    // While idle past SOURCE_LIVENESS_IDLE, probe (throttled) that the source still
+<a href=#442 id=442 data-nosnippet>442</a>    // exists and END the share when it is gone.
+<a href=#443 id=443 data-nosnippet>443</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>last_real_frame = std::time::Instant::now();
+<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">let </span><span class="kw-2">mut </span>last_probe = std::time::Instant::now();
+<a href=#445 id=445 data-nosnippet>445</a>
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="lifetime">'capture</span>: <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="comment">// A held window resize → restart the share at the new geometry.
+<a href=#448 id=448 data-nosnippet>448</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(cur) = screen.content_size()
+<a href=#449 id=449 data-nosnippet>449</a>            &amp;&amp; resize.observe(cur, std::time::Instant::now(), SCREEN_RESIZE_DEBOUNCE)
+<a href=#450 id=450 data-nosnippet>450</a>        {
+<a href=#451 id=451 data-nosnippet>451</a>            <span class="macro">tracing::info!</span>(<span class="string">"call: shared window resized — restarting share at new geometry"</span>);
+<a href=#452 id=452 data-nosnippet>452</a>            exit = ScreenCaptureExit::Resized;
+<a href=#453 id=453 data-nosnippet>453</a>            <span class="kw">break </span><span class="lifetime">'capture</span>;
+<a href=#454 id=454 data-nosnippet>454</a>        }
+<a href=#455 id=455 data-nosnippet>455</a>
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+<a href=#457 id=457 data-nosnippet>457</a>            screen.next_frame_timeout(SCREEN_IDLE_POLL)
+<a href=#458 id=458 data-nosnippet>458</a>        }));
+<a href=#459 id=459 data-nosnippet>459</a>        <span class="kw">match </span>pulled {
+<a href=#460 id=460 data-nosnippet>460</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(f))) =&gt; {
+<a href=#461 id=461 data-nosnippet>461</a>                <span class="comment">// RTC-debug: one real screen frame captured (not a static re-emit).
+<a href=#462 id=462 data-nosnippet>462</a>                </span>stats.screen_captured();
+<a href=#463 id=463 data-nosnippet>463</a>                last_frame = <span class="prelude-val">Some</span>(f);
+<a href=#464 id=464 data-nosnippet>464</a>                last_real_frame = std::time::Instant::now();
+<a href=#465 id=465 data-nosnippet>465</a>            }
+<a href=#466 id=466 data-nosnippet>466</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)) =&gt; {
+<a href=#467 id=467 data-nosnippet>467</a>                <span class="comment">// Idle: first make sure the source still EXISTS — a terminated
+<a href=#468 id=468 data-nosnippet>468</a>                // window delivers no frames and no error, and re-emitting its last
+<a href=#469 id=469 data-nosnippet>469</a>                // frame forever would freeze every receiver's tile on stale content.
+<a href=#470 id=470 data-nosnippet>470</a>                // Gone ⇒ clean end (the supervisor unpublishes; every tile drops).
+<a href=#471 id=471 data-nosnippet>471</a>                </span><span class="kw">if </span>source_probe_due(last_real_frame.elapsed(), last_probe.elapsed()) {
+<a href=#472 id=472 data-nosnippet>472</a>                    last_probe = std::time::Instant::now();
+<a href=#473 id=473 data-nosnippet>473</a>                    <span class="kw">if </span>!screen.source_alive() {
+<a href=#474 id=474 data-nosnippet>474</a>                        <span class="macro">tracing::info!</span>(<span class="string">"call: shared source no longer exists — ending share"</span>);
+<a href=#475 id=475 data-nosnippet>475</a>                        exit = ScreenCaptureExit::Ended;
+<a href=#476 id=476 data-nosnippet>476</a>                        <span class="kw">break </span><span class="lifetime">'capture</span>;
+<a href=#477 id=477 data-nosnippet>477</a>                    }
+<a href=#478 id=478 data-nosnippet>478</a>                }
+<a href=#479 id=479 data-nosnippet>479</a>                <span class="comment">// Idle (static source): re-emit the cached frame when a keyframe is
+<a href=#480 id=480 data-nosnippet>480</a>                // owed (new subscriber / PLI) or the static-refresh cadence lapsed,
+<a href=#481 id=481 data-nosnippet>481</a>                // with an advanced timestamp so playout stays monotonic.
+<a href=#482 id=482 data-nosnippet>482</a>                </span><span class="kw">let </span>owed_keyframe = adapt.force_keyframe.load(Ordering::Relaxed);
+<a href=#483 id=483 data-nosnippet>483</a>                <span class="kw">if </span>!owed_keyframe &amp;&amp; last_emit.elapsed() &lt; SCREEN_STATIC_REFRESH {
+<a href=#484 id=484 data-nosnippet>484</a>                    <span class="kw">continue</span>;
+<a href=#485 id=485 data-nosnippet>485</a>                }
+<a href=#486 id=486 data-nosnippet>486</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(cached) = last_frame.as_mut() <span class="kw">else </span>{
+<a href=#487 id=487 data-nosnippet>487</a>                    <span class="kw">continue</span>; <span class="comment">// nothing captured yet
+<a href=#488 id=488 data-nosnippet>488</a>                </span>};
+<a href=#489 id=489 data-nosnippet>489</a>                <span class="kw">let </span>advance = cached
+<a href=#490 id=490 data-nosnippet>490</a>                    .captured_at
+<a href=#491 id=491 data-nosnippet>491</a>                    .elapsed()
+<a href=#492 id=492 data-nosnippet>492</a>                    .as_micros()
+<a href=#493 id=493 data-nosnippet>493</a>                    .min(i64::MAX <span class="kw">as </span>u128) <span class="kw">as </span>i64;
+<a href=#494 id=494 data-nosnippet>494</a>                cached.timestamp_us =
+<a href=#495 id=495 data-nosnippet>495</a>                    TimestampUs::from_micros(cached.timestamp_us.micros() + advance);
+<a href=#496 id=496 data-nosnippet>496</a>                cached.captured_at = std::time::Instant::now();
+<a href=#497 id=497 data-nosnippet>497</a>            }
+<a href=#498 id=498 data-nosnippet>498</a>            <span class="comment">// SCK reported the stream STOPPED (window closed / OS "Stop Sharing"):
+<a href=#499 id=499 data-nosnippet>499</a>            // a clean, typed end — never a retry, which would either fail to reopen
+<a href=#500 id=500 data-nosnippet>500</a>            // or freeze on the last frame.
+<a href=#501 id=501 data-nosnippet>501</a>            </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(hound_engine::error::CaptureError::SourceEnded)) =&gt; {
+<a href=#502 id=502 data-nosnippet>502</a>                <span class="macro">tracing::info!</span>(<span class="string">"call: capture source ended — ending share"</span>);
+<a href=#503 id=503 data-nosnippet>503</a>                exit = ScreenCaptureExit::Ended;
+<a href=#504 id=504 data-nosnippet>504</a>                <span class="kw">break </span><span class="lifetime">'capture</span>;
+<a href=#505 id=505 data-nosnippet>505</a>            }
+<a href=#506 id=506 data-nosnippet>506</a>            <span class="comment">// Any other `next_frame` error or a pull-callback panic is a TRANSIENT
+<a href=#507 id=507 data-nosnippet>507</a>            // capture fault (a mid-stream disconnect, a poisoned lock). Don't
+<a href=#508 id=508 data-nosnippet>508</a>            // permanently end the share — signal `Retry` so the supervisor restarts it
+<a href=#509 id=509 data-nosnippet>509</a>            // in place; a restart whose re-open then fails (the source is genuinely
+<a href=#510 id=510 data-nosnippet>510</a>            // gone) degrades to a clean `Ended` there. A brief backoff bounds the
+<a href=#511 id=511 data-nosnippet>511</a>            // restart rate on a repeated fault.
+<a href=#512 id=512 data-nosnippet>512</a>            </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
+<a href=#513 id=513 data-nosnippet>513</a>                <span class="macro">tracing::warn!</span>(%e, <span class="string">"call: screen capture error — restarting share"</span>);
+<a href=#514 id=514 data-nosnippet>514</a>                exit = ScreenCaptureExit::Retry;
+<a href=#515 id=515 data-nosnippet>515</a>                std::thread::sleep(SCREEN_RETRY_BACKOFF);
+<a href=#516 id=516 data-nosnippet>516</a>                <span class="kw">break </span><span class="lifetime">'capture</span>;
+<a href=#517 id=517 data-nosnippet>517</a>            }
+<a href=#518 id=518 data-nosnippet>518</a>            <span class="prelude-val">Err</span>(_panic) =&gt; {
+<a href=#519 id=519 data-nosnippet>519</a>                <span class="macro">tracing::warn!</span>(<span class="string">"call: screen capture panicked — restarting share"</span>);
+<a href=#520 id=520 data-nosnippet>520</a>                exit = ScreenCaptureExit::Retry;
+<a href=#521 id=521 data-nosnippet>521</a>                std::thread::sleep(SCREEN_RETRY_BACKOFF);
+<a href=#522 id=522 data-nosnippet>522</a>                <span class="kw">break </span><span class="lifetime">'capture</span>;
+<a href=#523 id=523 data-nosnippet>523</a>            }
+<a href=#524 id=524 data-nosnippet>524</a>        }
+<a href=#525 id=525 data-nosnippet>525</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(frame) = last_frame.as_ref() <span class="kw">else </span>{
+<a href=#526 id=526 data-nosnippet>526</a>            <span class="kw">continue</span>;
+<a href=#527 id=527 data-nosnippet>527</a>        };
+<a href=#528 id=528 data-nosnippet>528</a>        last_emit = std::time::Instant::now();
+<a href=#529 id=529 data-nosnippet>529</a>
+<a href=#530 id=530 data-nosnippet>530</a>        <span class="comment">// Self-preview tee (keyed `screen:{self}`, matching the subscribe key
+<a href=#531 id=531 data-nosnippet>531</a>        // scheme). Runs even while paused so the sharer always sees what they're
+<a href=#532 id=532 data-nosnippet>532</a>        // sharing. Surface-first: SCK frames are NV12 IOSurfaces, so the preview
+<a href=#533 id=533 data-nosnippet>533</a>        // renders zero-copy — an always-I420 path would convert + copy ~3 MB per
+<a href=#534 id=534 data-nosnippet>534</a>        // frame (~90 MB/s at 1080p30) just for the sharer's own preview.
+<a href=#535 id=535 data-nosnippet>535</a>        </span>push_preview(sink.as_ref(), <span class="kw-2">&amp;</span>key, frame);
+<a href=#536 id=536 data-nosnippet>536</a>
+<a href=#537 id=537 data-nosnippet>537</a>        <span class="comment">// AudioOnly: the ladder dropped screen video under pressure. Keep pulling the
+<a href=#538 id=538 data-nosnippet>538</a>        // source (resume is instant) but skip encode/publish. Screen audio (if any)
+<a href=#539 id=539 data-nosnippet>539</a>        // keeps flowing underneath.
+<a href=#540 id=540 data-nosnippet>540</a>        </span><span class="kw">if </span>adapt.paused.load(Ordering::Relaxed) {
+<a href=#541 id=541 data-nosnippet>541</a>            <span class="kw">continue</span>;
+<a href=#542 id=542 data-nosnippet>542</a>        }
+<a href=#543 id=543 data-nosnippet>543</a>
+<a href=#544 id=544 data-nosnippet>544</a>        <span class="comment">// Mid-call codec switch (the re-negotiator moved the target — a peer joined
+<a href=#545 id=545 data-nosnippet>545</a>        // who can't decode us → downgrade; or one left → upgrade) AND/OR mid-share
+<a href=#546 id=546 data-nosnippet>546</a>        // resolution-rung change (the adaptation tick's DWELLED geometry —
+<a href=#547 id=547 data-nosnippet>547</a>        // `adapt.encoder_w/h`, see `hound_media::GeometryDwell` — settled on
+<a href=#548 id=548 data-nosnippet>548</a>        // something different from what's built). Rebuild the encoder to match
+<a href=#549 id=549 data-nosnippet>549</a>        // either, at the live bitrate; `0` on the geometry atomics means "no
+<a href=#550 id=550 data-nosnippet>550</a>        // adaptation decision yet", so fall back to the current `enc_dims` rather
+<a href=#551 id=551 data-nosnippet>551</a>        // than a bogus 0×0 rebuild. Either change forces a fresh IDR
+<a href=#552 id=552 data-nosnippet>552</a>        // (force_keyframe) so every receiver re-syncs — a decoder can't switch
+<a href=#553 id=553 data-nosnippet>553</a>        // codec OR resolution mid-GOP. On failure, keep the current encoder and
+<a href=#554 id=554 data-nosnippet>554</a>        // retry next frame.
+<a href=#555 id=555 data-nosnippet>555</a>        </span><span class="kw">let </span>want_codec = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
+<a href=#556 id=556 data-nosnippet>556</a>        <span class="kw">let </span>(want_w, want_h) = (
+<a href=#557 id=557 data-nosnippet>557</a>            adapt.encoder_w.load(Ordering::Relaxed),
+<a href=#558 id=558 data-nosnippet>558</a>            adapt.encoder_h.load(Ordering::Relaxed),
+<a href=#559 id=559 data-nosnippet>559</a>        );
+<a href=#560 id=560 data-nosnippet>560</a>        <span class="kw">let </span>want_dims = <span class="kw">if </span>want_w &gt; <span class="number">0 </span>&amp;&amp; want_h &gt; <span class="number">0 </span>{
+<a href=#561 id=561 data-nosnippet>561</a>            Dimensions::even_clamped(want_w, want_h)
+<a href=#562 id=562 data-nosnippet>562</a>        } <span class="kw">else </span>{
+<a href=#563 id=563 data-nosnippet>563</a>            enc_dims
+<a href=#564 id=564 data-nosnippet>564</a>        };
+<a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">if </span><span class="macro">want_codec !</span>= last_target || <span class="macro">want_dims !</span>= enc_dims {
+<a href=#566 id=566 data-nosnippet>566</a>            last_target = want_codec;
+<a href=#567 id=567 data-nosnippet>567</a>            <span class="kw">match </span>open_encoder_laddered(
+<a href=#568 id=568 data-nosnippet>568</a>                want_codec,
+<a href=#569 id=569 data-nosnippet>569</a>                want_dims,
+<a href=#570 id=570 data-nosnippet>570</a>                SCREEN_FPS,
+<a href=#571 id=571 data-nosnippet>571</a>                Bitrate::from_bps(applied_bps),
+<a href=#572 id=572 data-nosnippet>572</a>                SCREEN_KEYFRAME_CADENCE,
+<a href=#573 id=573 data-nosnippet>573</a>            ) {
+<a href=#574 id=574 data-nosnippet>574</a>                <span class="prelude-val">Some</span>(e) =&gt; {
+<a href=#575 id=575 data-nosnippet>575</a>                    <span class="kw">use </span>hound_engine::backend::VideoEncode;
+<a href=#576 id=576 data-nosnippet>576</a>                    <span class="kw">let </span>got = e.codec();
+<a href=#577 id=577 data-nosnippet>577</a>                    <span class="macro">tracing::info!</span>(
+<a href=#578 id=578 data-nosnippet>578</a>                        track = <span class="string">"screen"</span>,
+<a href=#579 id=579 data-nosnippet>579</a>                        from_codec = <span class="question-mark">?</span>current_codec,
+<a href=#580 id=580 data-nosnippet>580</a>                        to_codec = <span class="question-mark">?</span>got,
+<a href=#581 id=581 data-nosnippet>581</a>                        from_dims = %enc_dims,
+<a href=#582 id=582 data-nosnippet>582</a>                        to_dims = %want_dims,
+<a href=#583 id=583 data-nosnippet>583</a>                        <span class="string">"call: rebuilding encoder mid-share (codec/geometry)"
+<a href=#584 id=584 data-nosnippet>584</a>                    </span>);
+<a href=#585 id=585 data-nosnippet>585</a>                    encoder = e;
+<a href=#586 id=586 data-nosnippet>586</a>                    current_codec = got;
+<a href=#587 id=587 data-nosnippet>587</a>                    enc_dims = want_dims;
+<a href=#588 id=588 data-nosnippet>588</a>                    adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#589 id=589 data-nosnippet>589</a>                    stats.set_screen_codec(video_codec_to_ctl(got).label());
+<a href=#590 id=590 data-nosnippet>590</a>                }
+<a href=#591 id=591 data-nosnippet>591</a>                <span class="prelude-val">None </span>=&gt; {
+<a href=#592 id=592 data-nosnippet>592</a>                    <span class="macro">tracing::warn!</span>(track = <span class="string">"screen"</span>, codec = <span class="question-mark">?</span>want_codec, <span class="string">"call: mid-share encoder rebuild found no usable encoder; keeping current"</span>);
+<a href=#593 id=593 data-nosnippet>593</a>                }
+<a href=#594 id=594 data-nosnippet>594</a>            }
+<a href=#595 id=595 data-nosnippet>595</a>        }
+<a href=#596 id=596 data-nosnippet>596</a>
+<a href=#597 id=597 data-nosnippet>597</a>        encode_and_publish_adaptive(
+<a href=#598 id=598 data-nosnippet>598</a>            frame,
+<a href=#599 id=599 data-nosnippet>599</a>            <span class="kw-2">&amp;mut </span>encoder,
+<a href=#600 id=600 data-nosnippet>600</a>            <span class="kw-2">&amp;</span>adapt,
+<a href=#601 id=601 data-nosnippet>601</a>            <span class="kw-2">&amp;mut </span>applied_bps,
+<a href=#602 id=602 data-nosnippet>602</a>            <span class="kw-2">&amp;mut </span>fps_gate,
+<a href=#603 id=603 data-nosnippet>603</a>            enc_dims,
+<a href=#604 id=604 data-nosnippet>604</a>            |wire| vid_tx.try_send(wire).is_ok(),
+<a href=#605 id=605 data-nosnippet>605</a>            <span class="kw-2">&amp;mut </span>frame_seq,
+<a href=#606 id=606 data-nosnippet>606</a>            sender,
+<a href=#607 id=607 data-nosnippet>607</a>            TrackKind::ScrVideo,
+<a href=#608 id=608 data-nosnippet>608</a>            <span class="kw-2">&amp;</span>stats,
+<a href=#609 id=609 data-nosnippet>609</a>            <span class="kw-2">&amp;mut </span>fail_streak,
+<a href=#610 id=610 data-nosnippet>610</a>        );
+<a href=#611 id=611 data-nosnippet>611</a>
+<a href=#612 id=612 data-nosnippet>612</a>        <span class="comment">// LOW simulcast layer: when a constrained / small-tile receiver demands it,
+<a href=#613 id=613 data-nosnippet>613</a>        // downscale this same capture frame and encode + forward it on the screen_l0
+<a href=#614 id=614 data-nosnippet>614</a>        // track. Inert while `low_active` is `None` (dark until SIMULCAST_ACTUATE),
+<a href=#615 id=615 data-nosnippet>615</a>        // so the source path above is byte-identical to a no-simulcast build.
+<a href=#616 id=616 data-nosnippet>616</a>        </span><span class="kw">match </span><span class="kw-2">*</span>low_active.borrow() {
+<a href=#617 id=617 data-nosnippet>617</a>            <span class="prelude-val">Some</span>(low_bps) =&gt; {
+<a href=#618 id=618 data-nosnippet>618</a>                low_adapt.target_bps.store(low_bps, Ordering::Relaxed);
+<a href=#619 id=619 data-nosnippet>619</a>                <span class="comment">// A low-track PLI (new/recovering low subscriber) → force a low IDR.
+<a href=#620 id=620 data-nosnippet>620</a>                </span><span class="kw">if </span>low_keyframe.swap(<span class="bool-val">false</span>, Ordering::Relaxed) {
+<a href=#621 id=621 data-nosnippet>621</a>                    low_adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#622 id=622 data-nosnippet>622</a>                }
+<a href=#623 id=623 data-nosnippet>623</a>                <span class="comment">// (Re)build the low encoder at LOW geometry, tracking the source codec.
+<a href=#624 id=624 data-nosnippet>624</a>                </span><span class="kw">let </span>low_want = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
+<a href=#625 id=625 data-nosnippet>625</a>                <span class="kw">if </span>low_encoder.is_none() || <span class="macro">low_last_target !</span>= <span class="prelude-val">Some</span>(low_want) {
+<a href=#626 id=626 data-nosnippet>626</a>                    low_last_target = <span class="prelude-val">Some</span>(low_want);
+<a href=#627 id=627 data-nosnippet>627</a>                    low_encoder = open_encoder_laddered(
+<a href=#628 id=628 data-nosnippet>628</a>                        low_want,
+<a href=#629 id=629 data-nosnippet>629</a>                        low_dims,
+<a href=#630 id=630 data-nosnippet>630</a>                        SCREEN_FPS,
+<a href=#631 id=631 data-nosnippet>631</a>                        Bitrate::from_bps(low_bps.min(u32::MAX <span class="kw">as </span>u64) <span class="kw">as </span>u32),
+<a href=#632 id=632 data-nosnippet>632</a>                        SCREEN_KEYFRAME_CADENCE,
+<a href=#633 id=633 data-nosnippet>633</a>                    );
+<a href=#634 id=634 data-nosnippet>634</a>                    <span class="kw">if </span>low_encoder.is_some() {
+<a href=#635 id=635 data-nosnippet>635</a>                        low_adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#636 id=636 data-nosnippet>636</a>                    }
+<a href=#637 id=637 data-nosnippet>637</a>                }
+<a href=#638 id=638 data-nosnippet>638</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(low_enc) = low_encoder.as_mut()
+<a href=#639 id=639 data-nosnippet>639</a>                    &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(low_frame) = frame.scaled_to(low_dims)
+<a href=#640 id=640 data-nosnippet>640</a>                {
+<a href=#641 id=641 data-nosnippet>641</a>                    encode_and_publish_adaptive(
+<a href=#642 id=642 data-nosnippet>642</a>                        <span class="kw-2">&amp;</span>low_frame,
+<a href=#643 id=643 data-nosnippet>643</a>                        low_enc,
+<a href=#644 id=644 data-nosnippet>644</a>                        <span class="kw-2">&amp;</span>low_adapt,
+<a href=#645 id=645 data-nosnippet>645</a>                        <span class="kw-2">&amp;mut </span>low_applied_bps,
+<a href=#646 id=646 data-nosnippet>646</a>                        <span class="kw-2">&amp;mut </span>low_fps_gate,
+<a href=#647 id=647 data-nosnippet>647</a>                        low_dims,
+<a href=#648 id=648 data-nosnippet>648</a>                        |wire| low_vid_tx.try_send(wire).is_ok(),
+<a href=#649 id=649 data-nosnippet>649</a>                        <span class="kw-2">&amp;mut </span>low_frame_seq,
+<a href=#650 id=650 data-nosnippet>650</a>                        sender,
+<a href=#651 id=651 data-nosnippet>651</a>                        TrackKind::ScrVideoLow,
+<a href=#652 id=652 data-nosnippet>652</a>                        <span class="kw-2">&amp;</span>stats,
+<a href=#653 id=653 data-nosnippet>653</a>                        <span class="kw-2">&amp;mut </span>low_fail_streak,
+<a href=#654 id=654 data-nosnippet>654</a>                    );
+<a href=#655 id=655 data-nosnippet>655</a>                }
+<a href=#656 id=656 data-nosnippet>656</a>            }
+<a href=#657 id=657 data-nosnippet>657</a>            <span class="comment">// Demand gone — release the low encoder (resumes instantly on re-demand).
+<a href=#658 id=658 data-nosnippet>658</a>            </span><span class="prelude-val">None </span>=&gt; {
+<a href=#659 id=659 data-nosnippet>659</a>                low_encoder = <span class="prelude-val">None</span>;
+<a href=#660 id=660 data-nosnippet>660</a>            }
+<a href=#661 id=661 data-nosnippet>661</a>        }
+<a href=#662 id=662 data-nosnippet>662</a>    }
+<a href=#663 id=663 data-nosnippet>663</a>    <span class="comment">// RTC-debug: the screen pipeline is no longer publishing (clears the section).
+<a href=#664 id=664 data-nosnippet>664</a>    </span>stats.set_screen_disabled();
+<a href=#665 id=665 data-nosnippet>665</a>    <span class="comment">// Drop the `!Send` video handle on this owning thread (the `!Send` contract).
+<a href=#666 id=666 data-nosnippet>666</a>    </span>drop(screen);
+<a href=#667 id=667 data-nosnippet>667</a>
+<a href=#668 id=668 data-nosnippet>668</a>    <span class="comment">// Report the classified exit to the supervisor — UNLESS this was a deliberate stop
+<a href=#669 id=669 data-nosnippet>669</a>    // (stop/leave/reconnect already torn down by the supervisor, which owns that
+<a href=#670 id=670 data-nosnippet>670</a>    // transition; firing would be a redundant no-op the command handler de-dups anyway).
+<a href=#671 id=671 data-nosnippet>671</a>    </span><span class="kw">if </span>!stop.load(Ordering::Relaxed) {
+<a href=#672 id=672 data-nosnippet>672</a>        notify(exit);
+<a href=#673 id=673 data-nosnippet>673</a>    }
+<a href=#674 id=674 data-nosnippet>674</a>    <span class="macro">tracing::info!</span>(
+<a href=#675 id=675 data-nosnippet>675</a>        <span class="question-mark">?</span>exit,
+<a href=#676 id=676 data-nosnippet>676</a>        stop = stop.load(Ordering::Relaxed),
+<a href=#677 id=677 data-nosnippet>677</a>        <span class="string">"call: screen capture loop exiting"
+<a href=#678 id=678 data-nosnippet>678</a>    </span>);
+<a href=#679 id=679 data-nosnippet>679</a>}
+<a href=#680 id=680 data-nosnippet>680</a>
+<a href=#681 id=681 data-nosnippet>681</a><span class="doccomment">/// The async screen VIDEO publish task: acquire the `screen` track, gate on a live
+<a href=#682 id=682 data-nosnippet>682</a>/// subscriber, then forward each encoded AU while running the 1 s adaptation tick
+<a href=#683 id=683 data-nosnippet>683</a>/// (screen ladder). Mirrors the camera publish task. Reads `screen_quality` each tick
+<a href=#684 id=684 data-nosnippet>684</a>/// and reconfigures its ladder live (`set_screen_quality`) when the sharer changes it —
+<a href=#685 id=685 data-nosnippet>685</a>/// no restart.
+<a href=#686 id=686 data-nosnippet>686</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#687 id=687 data-nosnippet>687</a></span><span class="kw">fn </span>spawn_screen_video_publish(
+<a href=#688 id=688 data-nosnippet>688</a>    relay: Arc&lt;MoqRelaySession&gt;,
+<a href=#689 id=689 data-nosnippet>689</a>    path: String,
+<a href=#690 id=690 data-nosnippet>690</a>    <span class="kw-2">mut </span>enc_rx: tokio::sync::mpsc::Receiver&lt;WireFrame&gt;,
+<a href=#691 id=691 data-nosnippet>691</a>    adapt: Arc&lt;AdaptShared&gt;,
+<a href=#692 id=692 data-nosnippet>692</a>    neg_dims: Dimensions,
+<a href=#693 id=693 data-nosnippet>693</a>    rtt_conn: iroh::endpoint::Connection,
+<a href=#694 id=694 data-nosnippet>694</a>    screen_quality: SharedScreenQuality,
+<a href=#695 id=695 data-nosnippet>695</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#696 id=696 data-nosnippet>696</a>    codec: VideoCodec,
+<a href=#697 id=697 data-nosnippet>697</a>) -&gt; JoinHandle&lt;()&gt; {
+<a href=#698 id=698 data-nosnippet>698</a>    call_runtime().spawn(<span class="kw">async move </span>{
+<a href=#699 id=699 data-nosnippet>699</a>        <span class="kw">let </span><span class="kw-2">mut </span>publisher = <span class="kw">match </span>relay.publish_track(<span class="kw-2">&amp;</span>path, SCREEN_TRACK, VIDEO_PRIORITY) {
+<a href=#700 id=700 data-nosnippet>700</a>            <span class="prelude-val">Ok</span>(p) =&gt; p,
+<a href=#701 id=701 data-nosnippet>701</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#702 id=702 data-nosnippet>702</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to publish video track"</span>);
+<a href=#703 id=703 data-nosnippet>703</a>                <span class="kw">return</span>;
+<a href=#704 id=704 data-nosnippet>704</a>            }
+<a href=#705 id=705 data-nosnippet>705</a>        };
+<a href=#706 id=706 data-nosnippet>706</a>        <span class="comment">// RTC-debug: the negotiated screen track codec, set once at publish.
+<a href=#707 id=707 data-nosnippet>707</a>        </span>stats.set_screen_codec(video_codec_to_ctl(codec).label());
+<a href=#708 id=708 data-nosnippet>708</a>
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="comment">// Sender-side adaptation core (sans-IO) seeded at the screen launch bitrate,
+<a href=#710 id=710 data-nosnippet>710</a>        // using the sharer's CURRENT quality preference; the before-tick hook applies
+<a href=#711 id=711 data-nosnippet>711</a>        // a mid-share change (the `call_set_screen_quality` command) so the ladder is
+<a href=#712 id=712 data-nosnippet>712</a>        // live-reconfigured without a restart. The preference lives on
+<a href=#713 id=713 data-nosnippet>713</a>        // `ConnectionParams`, so this re-seeds from it across reconnects too.
+<a href=#714 id=714 data-nosnippet>714</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>applied_quality = <span class="kw-2">**</span>screen_quality.load();
+<a href=#715 id=715 data-nosnippet>715</a>        <span class="kw">let </span><span class="kw-2">mut </span>adaptation =
+<a href=#716 id=716 data-nosnippet>716</a>            VideoAdaptation::screen_with(SCREEN_BITRATE.bps() <span class="kw">as </span>u64, applied_quality);
+<a href=#717 id=717 data-nosnippet>717</a>        <span class="comment">// The encoder-rebuild geometry dwell, seeded at the negotiated capture
+<a href=#718 id=718 data-nosnippet>718</a>        // geometry — exactly what the capture thread's encoder is already built at
+<a href=#719 id=719 data-nosnippet>719</a>        // before any tick runs, so a healthy share at the top rung never rebuilds.
+<a href=#720 id=720 data-nosnippet>720</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>geometry = hound_media::GeometryDwell::new((neg_dims.width(), neg_dims.height()));
+<a href=#721 id=721 data-nosnippet>721</a>        drive_video_publish(
+<a href=#722 id=722 data-nosnippet>722</a>            <span class="kw-2">&amp;mut </span>publisher,
+<a href=#723 id=723 data-nosnippet>723</a>            <span class="kw-2">&amp;mut </span>enc_rx,
+<a href=#724 id=724 data-nosnippet>724</a>            <span class="kw-2">&amp;</span>adapt,
+<a href=#725 id=725 data-nosnippet>725</a>            <span class="kw-2">&amp;mut </span>adaptation,
+<a href=#726 id=726 data-nosnippet>726</a>            <span class="kw-2">&amp;mut </span>geometry,
+<a href=#727 id=727 data-nosnippet>727</a>            <span class="kw-2">&amp;</span>rtt_conn,
+<a href=#728 id=728 data-nosnippet>728</a>            <span class="kw-2">&amp;</span>stats,
+<a href=#729 id=729 data-nosnippet>729</a>            <span class="bool-val">true</span>,
+<a href=#730 id=730 data-nosnippet>730</a>            <span class="string">"screen"</span>,
+<a href=#731 id=731 data-nosnippet>731</a>            |adaptation| {
+<a href=#732 id=732 data-nosnippet>732</a>                <span class="kw">let </span>want = <span class="kw-2">**</span>screen_quality.load();
+<a href=#733 id=733 data-nosnippet>733</a>                <span class="kw">if </span><span class="macro">want !</span>= applied_quality {
+<a href=#734 id=734 data-nosnippet>734</a>                    adaptation.set_screen_quality(want);
+<a href=#735 id=735 data-nosnippet>735</a>                    applied_quality = want;
+<a href=#736 id=736 data-nosnippet>736</a>                    <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>want, <span class="string">"call: screen quality changed — ladder reconfigured"</span>);
+<a href=#737 id=737 data-nosnippet>737</a>                }
+<a href=#738 id=738 data-nosnippet>738</a>            },
+<a href=#739 id=739 data-nosnippet>739</a>        )
+<a href=#740 id=740 data-nosnippet>740</a>        .<span class="kw">await</span>;
+<a href=#741 id=741 data-nosnippet>741</a>    })
+<a href=#742 id=742 data-nosnippet>742</a>}
 </code></pre></div></section></main></body></html>

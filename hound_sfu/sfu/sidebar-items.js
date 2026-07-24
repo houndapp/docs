@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["drain_complete"],"struct":["SessionGuard","Sfu"]};
+window.SIDEBAR_ITEMS = {"fn":["drain_complete"],"struct":["Sfu"]};

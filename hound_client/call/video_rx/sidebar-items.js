@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["FIRST_KEYFRAME_DEADLINE","VIDEO_STALL"],"fn":["push_preview","video_decode_loop","video_pipeline"]};
+window.SIDEBAR_ITEMS = {"constant":["FIRST_KEYFRAME_DEADLINE","RETRY_AFTER","VIDEO_STALL"],"enum":["RetryLog"],"fn":["push_preview","video_decode_loop","video_pipeline"],"struct":["DecoderRetry"]};
