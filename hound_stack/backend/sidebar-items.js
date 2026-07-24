@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["spawn"],"struct":["BackendProcess"]};
+window.SIDEBAR_ITEMS = {"constant":["RELAY_SECRET_DEV"],"fn":["spawn"],"struct":["BackendProcess"]};

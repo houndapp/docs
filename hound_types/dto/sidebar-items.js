@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["MergedProfile","RefreshTokenRequest","RefreshTokenResponse","RelayTokenResponse","VoiceJoinEvent","VoiceJoinResponse","VoiceLeaveEvent","VoicePeerInfo","VoiceScreenShareEvent"]};
+window.SIDEBAR_ITEMS = {"struct":["MergedProfile","RefreshTokenRequest","RefreshTokenResponse","RelayTokenResponse","SfuNodeStatus","SfuNodesResponse","VoiceJoinEvent","VoiceJoinResponse","VoiceLeaveEvent","VoicePeerInfo","VoiceScreenShareEvent"]};

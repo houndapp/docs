@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["post_sfu_register","router"],"struct":["SfuRegisterRequest"]};
+window.SIDEBAR_ITEMS = {"fn":["authorized","get_sfu_nodes","post_sfu_register","router"],"struct":["SfuRegisterRequest"]};

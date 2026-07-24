@@ -62,13 +62,14 @@ its full output to a per-concern artifact file, the console gets one
 progress line per lifecycle step, and a failure surfaces the relevant
 log’s tail inline — never the whole stream.</dd><dt><a class="mod" href="ports/index.html" title="mod hound_stack::ports">ports</a></dt><dd>Port preflight: fail fast if this run’s fixed host ports are already
 taken by a leftover/concurrent stack, instead of racing it through
-<code>compose up</code>/backend-startup timeouts.</dd><dt><a class="mod" href="sfu/index.html" title="mod hound_stack::sfu">sfu</a></dt><dd>SFU (re-)registration: the SFU registers its node ID with the backend via
-a one-shot POST at ITS OWN startup — <code>compose up -d</code> only (re)creates
-containers whose config changed, so a <code>hound-sfu</code> container left running
-from a previous invocation never re-POSTs against a freshly
-<code>MIGRATE=fresh</code>’d backend (whose <code>instance</code> row has no <code>sfu_node_id</code>
-yet). Restarting it once the backend is reachable forces that POST to
-land (see MEMORY.md “SFU registration fragility” / <code>services/sfu/src/main.rs</code>).</dd><dt><a class="mod" href="tee/index.html" title="mod hound_stack::tee">tee</a></dt><dd>Run a child process, teeing its stdout/stderr to both this process’s own
+<code>compose up</code>/backend-startup timeouts.</dd><dt><a class="mod" href="sfu/index.html" title="mod hound_stack::sfu">sfu</a></dt><dd>SFU (re-)registration: the SFU registers its node ID with the backend at
+ITS OWN startup — <code>compose up -d</code> only (re)creates containers whose config
+changed, so a <code>hound-sfu</code> container left running from a previous invocation
+may be mid-interval against a freshly <code>MIGRATE=fresh</code>’d backend. Restarting
+it forces an immediate registration, then we poll the backend’s registry
+endpoint until a live node appears — the typed contract for “is voice
+routable”, never a log-line scrape (see MEMORY.md “SFU registration
+fragility” / <code>services/backend/src/api/internal.rs</code>).</dd><dt><a class="mod" href="tee/index.html" title="mod hound_stack::tee">tee</a></dt><dd>Run a child process, teeing its stdout/stderr to both this process’s own
 stdout/stderr and a log file — the Rust equivalent of the shell scripts’
 <code>cmd 2&gt;&amp;1 | tee "$LOG"</code>.</dd><dt><a class="mod" href="updown/index.html" title="mod hound_stack::updown">updown</a></dt><dd><code>hound-stack up</code>/<code>down</code>: manual dev convenience — bring the stack up and
 hold it open (Ctrl-C tears it down), or force a standalone teardown when

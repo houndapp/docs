@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["INFRA_FAILURE","OUT_DIR_ENV"],"fn":["run"]};
+window.SIDEBAR_ITEMS = {"constant":["INFRA_FAILURE","OUT_DIR_ENV","RELAY_URL_DEV"],"fn":["run"]};
