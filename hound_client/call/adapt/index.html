@@ -53,7 +53,7 @@ geometry-rebuild note below), encodes, and forwards each access unit via
 full); the caller’s drop bumps <code>dropped</code>, which the adaptation tick reads as
 the congestion signal. A forced keyframe is re-armed when it is dropped, so
 the next captured frame re-emits it.</dd><dt><a class="fn" href="fn.open_encoder_laddered.html" title="fn hound_client::call::adapt::open_encoder_laddered">open_<wbr>encoder_<wbr>laddered</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Open an encoder at <code>target</code>, falling back DOWN the ladder
-([<code>hound_engine::types::ENCODE_PRIORITY</code>]: AV1 → H.265 → H.264) to the first codec
+(<a href="../../../hound_engine/types/constant.ENCODE_PRIORITY.html" title="constant hound_engine::types::ENCODE_PRIORITY"><code>hound_engine::types::ENCODE_PRIORITY</code></a>: AV1 → H.265 → H.264) to the first codec
 that opens. Safe to descend without re-checking decode caps: the negotiated
 <code>target</code> means every peer decodes it, and real decode hardware is monotonic
 (AV1-capable ⇒ H.265-capable ⇒ H.264), so every lower rung is decodable too.
