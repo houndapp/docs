@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Commands","DbCommands","Environment","LogFormats","StorageBackend"],"fn":["init_sentry","openapi_yaml"],"mod":["api"],"struct":["Cli"]};
+window.SIDEBAR_ITEMS = {"constant":["PYROSCOPE_SAMPLE_HZ"],"enum":["Commands","DbCommands","Environment","LogFormats","StorageBackend"],"fn":["init_pyroscope","init_sentry","openapi_yaml"],"mod":["api"],"struct":["Cli"]};
