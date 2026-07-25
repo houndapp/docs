@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle","track_http_requests"]};
+window.SIDEBAR_ITEMS = {"constant":["HTTP_DURATION_BUCKETS"],"fn":["handle","init_series","track_http_requests"]};
