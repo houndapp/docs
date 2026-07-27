@@ -10,6 +10,6 @@ are the exact same formula).</p>
 loading, the health HTTP endpoint, and the backend self-registration client.
 Nothing in <code>lib.rs</code> and its modules touches a CLI flag, an env var, or the
 filesystem.</p>
-</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="auth/index.html" title="mod hound_sfu::auth">auth</a></dt><dd>Relay-token verification.</dd><dt><a class="mod" href="ingress/index.html" title="mod hound_sfu::ingress">ingress</a></dt><dd>Sustained-rate ingress budget: a pure, synchronous policy answering “has
-this connection’s ingress rate stayed over the cap across the whole
-sliding window?” from periodic cumulative-byte samples.</dd><dt><a class="mod" href="moq_relay/index.html" title="mod hound_sfu::moq_relay">moq_<wbr>relay</a></dt><dd>MoQ relay — the native forward plane</dd><dt><a class="mod" href="sfu/index.html" title="mod hound_sfu::sfu">sfu</a></dt><dd>SFU service endpoint</dd></dl></section></div></main></body></html>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="auth/index.html" title="mod hound_sfu::auth">auth</a></dt><dd>Relay-token verification.</dd><dt><a class="mod" href="ingress/index.html" title="mod hound_sfu::ingress">ingress</a></dt><dd>The pure, synchronous policies <a href="moq_relay/index.html" title="mod hound_sfu::moq_relay"><code>crate::moq_relay</code></a>’s per-connection
+ingress watchdog drives — both free of any iroh/tokio/moq-net dependency so
+they are unit-testable with synthetic inputs:</dd><dt><a class="mod" href="moq_relay/index.html" title="mod hound_sfu::moq_relay">moq_<wbr>relay</a></dt><dd>MoQ relay — the native forward plane</dd><dt><a class="mod" href="sfu/index.html" title="mod hound_sfu::sfu">sfu</a></dt><dd>SFU service endpoint</dd></dl></section></div></main></body></html>

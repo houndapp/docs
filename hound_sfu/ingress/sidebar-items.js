@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["IngressBudget"]};
+window.SIDEBAR_ITEMS = {"constant":["UNATTRIBUTED"],"enum":["QuotaTrip"],"fn":["session_key"],"struct":["BroadcastQuota","IngressBudget"]};

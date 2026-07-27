@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BACKOFF_FACTOR","BACKOFF_INITIAL","BACKOFF_JITTER_FRAC","BACKOFF_MAX"],"enum":["Disposition","ReconnectOutcome"],"fn":["classify","reconnect_loop","rng_jitter"],"struct":["Backoff"]};
+window.SIDEBAR_ITEMS = {"constant":["BACKOFF_FACTOR","BACKOFF_INITIAL","BACKOFF_JITTER_FRAC","BACKOFF_MAX","DURABLE_SESSION"],"enum":["Disposition","ReconnectOutcome"],"fn":["classify","reconnect_loop","retry_establish","rng_jitter"],"struct":["Backoff"]};

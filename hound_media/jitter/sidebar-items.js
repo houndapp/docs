@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_BUFFER_AHEAD_US","PEAK_WINDOW_US"],"struct":["AdaptiveJitter","JitterEstimator","PlayoutBuffer"],"trait":["Timestamped"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_ADAPTIVE_DEPTH_US","MAX_BUFFER_AHEAD_US","PEAK_WINDOW_US","SHALLOW_RESYNC_HOLD_US","SHALLOW_RESYNC_MIN_RUN"],"struct":["AdaptiveJitter","JitterEstimator","PlayoutBuffer"],"trait":["Timestamped"]};
