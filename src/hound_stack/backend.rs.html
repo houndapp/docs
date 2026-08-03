@@ -50,24 +50,29 @@
 <a href=#50 id=50 data-nosnippet>50</a>        .env(<span class="string">"RP_ID"</span>, <span class="string">"localhost"</span>)
 <a href=#51 id=51 data-nosnippet>51</a>        .env(<span class="string">"RP_ORIGIN"</span>, <span class="string">"http://localhost:5173"</span>)
 <a href=#52 id=52 data-nosnippet>52</a>        .env(<span class="string">"MIGRATE"</span>, <span class="string">"fresh"</span>)
-<a href=#53 id=53 data-nosnippet>53</a>        .env(<span class="string">"SMTP_URL"</span>, <span class="string">"smtp://localhost:1025"</span>)
-<a href=#54 id=54 data-nosnippet>54</a>        .env(<span class="string">"EMAIL_FROM"</span>, <span class="string">"Hound &lt;dev@localhost&gt;"</span>)
-<a href=#55 id=55 data-nosnippet>55</a>        .env(<span class="string">"MAGIC_BASE_URL"</span>, <span class="string">"http://localhost:3100"</span>)
-<a href=#56 id=56 data-nosnippet>56</a>        <span class="comment">// Must match `compose.dev.yaml`'s `hound-sfu.RELAY_SECRET` — see
-<a href=#57 id=57 data-nosnippet>57</a>        // `services/sfu/src/main.rs`'s `RELAY_SECRET` doc: "must match the
-<a href=#58 id=58 data-nosnippet>58</a>        // backend's RELAY_HMAC_SECRET".
-<a href=#59 id=59 data-nosnippet>59</a>        </span>.env(<span class="string">"RELAY_HMAC_SECRET"</span>, RELAY_SECRET_DEV)
-<a href=#60 id=60 data-nosnippet>60</a>        .env(<span class="string">"RELAY_URL"</span>, <span class="string">"http://localhost:3340"</span>)
-<a href=#61 id=61 data-nosnippet>61</a>        .env(<span class="string">"STORAGE_LOCAL_DIR"</span>, storage_dir)
-<a href=#62 id=62 data-nosnippet>62</a>        .env(<span class="string">"RUST_LOG"</span>, <span class="string">"info"</span>)
-<a href=#63 id=63 data-nosnippet>63</a>        .stdout(Stdio::from(log_file))
-<a href=#64 id=64 data-nosnippet>64</a>        .stderr(Stdio::from(stderr_file))
-<a href=#65 id=65 data-nosnippet>65</a>        .spawn()
-<a href=#66 id=66 data-nosnippet>66</a>        .with_context(|| <span class="macro">format!</span>(<span class="string">"spawning backend ({})"</span>, binary.display()))<span class="question-mark">?</span>;
-<a href=#67 id=67 data-nosnippet>67</a>
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="prelude-val">Ok</span>(BackendProcess {
-<a href=#69 id=69 data-nosnippet>69</a>        child,
-<a href=#70 id=70 data-nosnippet>70</a>        log_path: log_path.to_owned(),
-<a href=#71 id=71 data-nosnippet>71</a>    })
-<a href=#72 id=72 data-nosnippet>72</a>}
+<a href=#53 id=53 data-nosnippet>53</a>        <span class="comment">// The name the backend gives the community it provisions on this
+<a href=#54 id=54 data-nosnippet>54</a>        // freshly-migrated DB. Pinned to what `hound-testkit`'s bootstrap used
+<a href=#55 id=55 data-nosnippet>55</a>        // to create by hand, so the community name a visual baseline has
+<a href=#56 id=56 data-nosnippet>56</a>        // rendered in the left nav doesn't move under it.
+<a href=#57 id=57 data-nosnippet>57</a>        </span>.env(<span class="string">"DEFAULT_COMMUNITY_NAME"</span>, <span class="string">"e2e"</span>)
+<a href=#58 id=58 data-nosnippet>58</a>        .env(<span class="string">"SMTP_URL"</span>, <span class="string">"smtp://localhost:1025"</span>)
+<a href=#59 id=59 data-nosnippet>59</a>        .env(<span class="string">"EMAIL_FROM"</span>, <span class="string">"Hound &lt;dev@localhost&gt;"</span>)
+<a href=#60 id=60 data-nosnippet>60</a>        .env(<span class="string">"MAGIC_BASE_URL"</span>, <span class="string">"http://localhost:3100"</span>)
+<a href=#61 id=61 data-nosnippet>61</a>        <span class="comment">// Must match `compose.dev.yaml`'s `hound-sfu.RELAY_SECRET` — see
+<a href=#62 id=62 data-nosnippet>62</a>        // `services/sfu/src/main.rs`'s `RELAY_SECRET` doc: "must match the
+<a href=#63 id=63 data-nosnippet>63</a>        // backend's RELAY_HMAC_SECRET".
+<a href=#64 id=64 data-nosnippet>64</a>        </span>.env(<span class="string">"RELAY_HMAC_SECRET"</span>, RELAY_SECRET_DEV)
+<a href=#65 id=65 data-nosnippet>65</a>        .env(<span class="string">"RELAY_URL"</span>, <span class="string">"http://localhost:3340"</span>)
+<a href=#66 id=66 data-nosnippet>66</a>        .env(<span class="string">"STORAGE_LOCAL_DIR"</span>, storage_dir)
+<a href=#67 id=67 data-nosnippet>67</a>        .env(<span class="string">"RUST_LOG"</span>, <span class="string">"info"</span>)
+<a href=#68 id=68 data-nosnippet>68</a>        .stdout(Stdio::from(log_file))
+<a href=#69 id=69 data-nosnippet>69</a>        .stderr(Stdio::from(stderr_file))
+<a href=#70 id=70 data-nosnippet>70</a>        .spawn()
+<a href=#71 id=71 data-nosnippet>71</a>        .with_context(|| <span class="macro">format!</span>(<span class="string">"spawning backend ({})"</span>, binary.display()))<span class="question-mark">?</span>;
+<a href=#72 id=72 data-nosnippet>72</a>
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="prelude-val">Ok</span>(BackendProcess {
+<a href=#74 id=74 data-nosnippet>74</a>        child,
+<a href=#75 id=75 data-nosnippet>75</a>        log_path: log_path.to_owned(),
+<a href=#76 id=76 data-nosnippet>76</a>    })
+<a href=#77 id=77 data-nosnippet>77</a>}
 </code></pre></div></section></main></body></html>
