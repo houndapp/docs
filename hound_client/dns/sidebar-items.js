@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply","overrides","set_overrides"],"static":["OVERRIDES"]};

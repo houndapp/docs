@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>
 <a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// Poll Mailpit for the code a prior [`request_code`] triggered.
 <a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">pub async fn </span>wait_for_code(mailpit_url: <span class="kw-2">&amp;</span>str, email: <span class="kw-2">&amp;</span>str) -&gt; eyre::Result&lt;String&gt; {
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">let </span>http = reqwest::Client::new();
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">let </span>http = <span class="kw">crate</span>::remote::http_client();
 <a href=#41 id=41 data-nosnippet>41</a>    mailpit::wait_for_code(<span class="kw-2">&amp;</span>http, mailpit_url, email, MAIL_WAIT_TIMEOUT)
 <a href=#42 id=42 data-nosnippet>42</a>        .<span class="kw">await
 <a href=#43 id=43 data-nosnippet>43</a>        </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"mailpit poll failed: {e}"</span>))
@@ -52,24 +52,28 @@
 <a href=#52 id=52 data-nosnippet>52</a>    email: <span class="kw-2">&amp;</span>str,
 <a href=#53 id=53 data-nosnippet>53</a>    display_name: <span class="kw-2">&amp;</span>str,
 <a href=#54 id=54 data-nosnippet>54</a>) -&gt; eyre::Result&lt;Arc&lt;HoundClient&gt;&gt; {
-<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">let </span>client = fresh_client(backend_url)<span class="question-mark">?</span>;
-<a href=#56 id=56 data-nosnippet>56</a>    request_code(backend_url, email).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">let </span>code = wait_for_code(mailpit_url, email).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#58 id=58 data-nosnippet>58</a>
-<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>outcome = client
-<a href=#60 id=60 data-nosnippet>60</a>        .magic_login_code(<span class="kw-2">&amp;</span>code)
-<a href=#61 id=61 data-nosnippet>61</a>        .<span class="kw">await
-<a href=#62 id=62 data-nosnippet>62</a>        </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"magic/verify failed: {e}"</span>))<span class="question-mark">?</span>;
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">match </span>outcome {
-<a href=#64 id=64 data-nosnippet>64</a>        AuthFlowOutcome::SignedIn(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(client),
-<a href=#65 id=65 data-nosnippet>65</a>        AuthFlowOutcome::EmailUnknown { .. } =&gt; {
-<a href=#66 id=66 data-nosnippet>66</a>            client
-<a href=#67 id=67 data-nosnippet>67</a>                .magic_register(display_name)
-<a href=#68 id=68 data-nosnippet>68</a>                .<span class="kw">await
-<a href=#69 id=69 data-nosnippet>69</a>                </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"magic/register failed: {e}"</span>))<span class="question-mark">?</span>;
-<a href=#70 id=70 data-nosnippet>70</a>            <span class="prelude-val">Ok</span>(client)
-<a href=#71 id=71 data-nosnippet>71</a>        }
-<a href=#72 id=72 data-nosnippet>72</a>        other =&gt; <span class="macro">eyre::bail!</span>(<span class="string">"unexpected magic-link auth outcome: {other:?}"</span>),
-<a href=#73 id=73 data-nosnippet>73</a>    }
-<a href=#74 id=74 data-nosnippet>74</a>}
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="comment">// Also the entry point `hound-bot` uses (it never builds an `Env`), so the
+<a href=#56 id=56 data-nosnippet>56</a>    // remote-target DNS pins get installed here too — a no-op when unset, and
+<a href=#57 id=57 data-nosnippet>57</a>    // write-once, so the `Env` path installing them first is fine.
+<a href=#58 id=58 data-nosnippet>58</a>    </span><span class="kw">crate</span>::remote::install_dns_overrides();
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>client = fresh_client(backend_url)<span class="question-mark">?</span>;
+<a href=#60 id=60 data-nosnippet>60</a>    request_code(backend_url, email).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">let </span>code = wait_for_code(mailpit_url, email).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#62 id=62 data-nosnippet>62</a>
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span>outcome = client
+<a href=#64 id=64 data-nosnippet>64</a>        .magic_login_code(<span class="kw-2">&amp;</span>code)
+<a href=#65 id=65 data-nosnippet>65</a>        .<span class="kw">await
+<a href=#66 id=66 data-nosnippet>66</a>        </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"magic/verify failed: {e}"</span>))<span class="question-mark">?</span>;
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">match </span>outcome {
+<a href=#68 id=68 data-nosnippet>68</a>        AuthFlowOutcome::SignedIn(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(client),
+<a href=#69 id=69 data-nosnippet>69</a>        AuthFlowOutcome::EmailUnknown { .. } =&gt; {
+<a href=#70 id=70 data-nosnippet>70</a>            client
+<a href=#71 id=71 data-nosnippet>71</a>                .magic_register(display_name)
+<a href=#72 id=72 data-nosnippet>72</a>                .<span class="kw">await
+<a href=#73 id=73 data-nosnippet>73</a>                </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"magic/register failed: {e}"</span>))<span class="question-mark">?</span>;
+<a href=#74 id=74 data-nosnippet>74</a>            <span class="prelude-val">Ok</span>(client)
+<a href=#75 id=75 data-nosnippet>75</a>        }
+<a href=#76 id=76 data-nosnippet>76</a>        other =&gt; <span class="macro">eyre::bail!</span>(<span class="string">"unexpected magic-link auth outcome: {other:?}"</span>),
+<a href=#77 id=77 data-nosnippet>77</a>    }
+<a href=#78 id=78 data-nosnippet>78</a>}
 </code></pre></div></section></main></body></html>

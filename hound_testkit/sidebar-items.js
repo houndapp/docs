@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["auth","call","env","mailpit","messaging","participant","sample","sfu_process"]};
+window.SIDEBAR_ITEMS = {"mod":["auth","call","env","mailpit","messaging","participant","remote","sample","sfu_process"]};

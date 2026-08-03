@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["REMOTE_ENV","RESOLVE_ENV"],"fn":["http_client","install_dns_overrides","is_remote","parse_resolve","resolve_overrides","skip_local_only"]};
