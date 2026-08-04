@@ -477,58 +477,63 @@
 <a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">crate</span>::LogFormats::Pretty.init_tracing_subscriber(<span class="bool-val">false</span>, <span class="prelude-val">None</span>);
 <a href=#478 id=478 data-nosnippet>478</a>    });
 <a href=#479 id=479 data-nosnippet>479</a>
-<a href=#480 id=480 data-nosnippet>480</a>    <span class="kw">const </span>TIMEOUT: std::time::Duration = std::time::Duration::from_millis(<span class="number">100</span>);
-<a href=#481 id=481 data-nosnippet>481</a>    <span class="kw">let </span>(socket_io_layer, socket_io) = socket_io();
-<a href=#482 id=482 data-nosnippet>482</a>
-<a href=#483 id=483 data-nosnippet>483</a>    <span class="kw">let </span>test_storage_dir = tempfile::tempdir().unwrap();
-<a href=#484 id=484 data-nosnippet>484</a>
-<a href=#485 id=485 data-nosnippet>485</a>    <span class="kw">let </span>api = Api {
-<a href=#486 id=486 data-nosnippet>486</a>        inner: Arc::new(Inner {
-<a href=#487 id=487 data-nosnippet>487</a>            auth: auth::test(),
-<a href=#488 id=488 data-nosnippet>488</a>            storage: storage::Storage::local_test(test_storage_dir.path().to_owned()),
-<a href=#489 id=489 data-nosnippet>489</a>            upload_max_bytes: <span class="number">8 </span>* <span class="number">1024 </span>* <span class="number">1024</span>,
-<a href=#490 id=490 data-nosnippet>490</a>            relay_url: <span class="string">"http://localhost:3340"</span>.into(),
-<a href=#491 id=491 data-nosnippet>491</a>            relay_hmac_secret: <span class="string">"test-relay-secret"</span>.into(),
-<a href=#492 id=492 data-nosnippet>492</a>            metrics_import_url,
-<a href=#493 id=493 data-nosnippet>493</a>            metrics_import_client: reqwest::Client::new(),
-<a href=#494 id=494 data-nosnippet>494</a>            sfu_nodes: RwLock::new(HashMap::new()),
-<a href=#495 id=495 data-nosnippet>495</a>            advertised_sfu: RwLock::new(<span class="prelude-val">None</span>),
-<a href=#496 id=496 data-nosnippet>496</a>            voice_participants: RwLock::new(HashMap::new()),
-<a href=#497 id=497 data-nosnippet>497</a>            voice_eviction_generations: RwLock::new(HashMap::new()),
-<a href=#498 id=498 data-nosnippet>498</a>            control_calls: RwLock::new(HashMap::new()),
-<a href=#499 id=499 data-nosnippet>499</a>            metrics_handle: metrics::handle(),
-<a href=#500 id=500 data-nosnippet>500</a>            db: sea_orm::Database::connect(
-<a href=#501 id=501 data-nosnippet>501</a>                sea_orm::ConnectOptions::new(<span class="string">"sqlite::memory:"</span>)
-<a href=#502 id=502 data-nosnippet>502</a>                    .min_connections(<span class="number">10</span>)
-<a href=#503 id=503 data-nosnippet>503</a>                    .max_connections(<span class="number">10</span>)
-<a href=#504 id=504 data-nosnippet>504</a>                    .connect_timeout(TIMEOUT)
-<a href=#505 id=505 data-nosnippet>505</a>                    .acquire_timeout(TIMEOUT)
-<a href=#506 id=506 data-nosnippet>506</a>                    .max_lifetime(TIMEOUT * <span class="number">100</span>)
-<a href=#507 id=507 data-nosnippet>507</a>                    .clone(),
-<a href=#508 id=508 data-nosnippet>508</a>            )
-<a href=#509 id=509 data-nosnippet>509</a>            .<span class="kw">await
-<a href=#510 id=510 data-nosnippet>510</a>            </span>.unwrap(),
-<a href=#511 id=511 data-nosnippet>511</a>            socket_io,
-<a href=#512 id=512 data-nosnippet>512</a>            _test_storage_dir: test_storage_dir,
-<a href=#513 id=513 data-nosnippet>513</a>        }),
-<a href=#514 id=514 data-nosnippet>514</a>    };
-<a href=#515 id=515 data-nosnippet>515</a>
-<a href=#516 id=516 data-nosnippet>516</a>    community::register_events(api.clone());
-<a href=#517 id=517 data-nosnippet>517</a>    space::register_events(api.clone());
-<a href=#518 id=518 data-nosnippet>518</a>
-<a href=#519 id=519 data-nosnippet>519</a>    &lt;migration::Migrator <span class="kw">as </span>migration::MigratorTrait&gt;::fresh(<span class="kw-2">&amp;</span>api.db)
-<a href=#520 id=520 data-nosnippet>520</a>        .<span class="kw">await
-<a href=#521 id=521 data-nosnippet>521</a>        </span>.unwrap();
-<a href=#522 id=522 data-nosnippet>522</a>
-<a href=#523 id=523 data-nosnippet>523</a>    <span class="kw">let </span>(axum_router, <span class="kw">_</span>) = router()
-<a href=#524 id=524 data-nosnippet>524</a>        .nest(<span class="string">"/internal"</span>, internal::router().into())
-<a href=#525 id=525 data-nosnippet>525</a>        .layer(socket_io_layer)
-<a href=#526 id=526 data-nosnippet>526</a>        .with_state(api.clone())
-<a href=#527 id=527 data-nosnippet>527</a>        .split_for_parts();
-<a href=#528 id=528 data-nosnippet>528</a>    <span class="kw">let </span>axum_router = axum_router.merge(control::router().with_state(api.clone()));
-<a href=#529 id=529 data-nosnippet>529</a>    <span class="kw">let </span>axum_router =
-<a href=#530 id=530 data-nosnippet>530</a>        axum_router.route_layer(axum::middleware::from_fn(metrics::track_http_requests));
-<a href=#531 id=531 data-nosnippet>531</a>
-<a href=#532 id=532 data-nosnippet>532</a>    (api, axum_router)
-<a href=#533 id=533 data-nosnippet>533</a>}
+<a href=#480 id=480 data-nosnippet>480</a>    <span class="comment">// Generous, because this bounds how long a test waits for a pooled
+<a href=#481 id=481 data-nosnippet>481</a>    // connection, not how long a query may take. nextest runs the suite with
+<a href=#482 id=482 data-nosnippet>482</a>    // one process per test across every core, so a 100 ms budget is a function
+<a href=#483 id=483 data-nosnippet>483</a>    // of machine load rather than of the code under test: it surfaces as
+<a href=#484 id=484 data-nosnippet>484</a>    // `PoolTimedOut` in a different handful of tests on every run.
+<a href=#485 id=485 data-nosnippet>485</a>    </span><span class="kw">const </span>TIMEOUT: std::time::Duration = std::time::Duration::from_secs(<span class="number">30</span>);
+<a href=#486 id=486 data-nosnippet>486</a>    <span class="kw">let </span>(socket_io_layer, socket_io) = socket_io();
+<a href=#487 id=487 data-nosnippet>487</a>
+<a href=#488 id=488 data-nosnippet>488</a>    <span class="kw">let </span>test_storage_dir = tempfile::tempdir().unwrap();
+<a href=#489 id=489 data-nosnippet>489</a>
+<a href=#490 id=490 data-nosnippet>490</a>    <span class="kw">let </span>api = Api {
+<a href=#491 id=491 data-nosnippet>491</a>        inner: Arc::new(Inner {
+<a href=#492 id=492 data-nosnippet>492</a>            auth: auth::test(),
+<a href=#493 id=493 data-nosnippet>493</a>            storage: storage::Storage::local_test(test_storage_dir.path().to_owned()),
+<a href=#494 id=494 data-nosnippet>494</a>            upload_max_bytes: <span class="number">8 </span>* <span class="number">1024 </span>* <span class="number">1024</span>,
+<a href=#495 id=495 data-nosnippet>495</a>            relay_url: <span class="string">"http://localhost:3340"</span>.into(),
+<a href=#496 id=496 data-nosnippet>496</a>            relay_hmac_secret: <span class="string">"test-relay-secret"</span>.into(),
+<a href=#497 id=497 data-nosnippet>497</a>            metrics_import_url,
+<a href=#498 id=498 data-nosnippet>498</a>            metrics_import_client: reqwest::Client::new(),
+<a href=#499 id=499 data-nosnippet>499</a>            sfu_nodes: RwLock::new(HashMap::new()),
+<a href=#500 id=500 data-nosnippet>500</a>            advertised_sfu: RwLock::new(<span class="prelude-val">None</span>),
+<a href=#501 id=501 data-nosnippet>501</a>            voice_participants: RwLock::new(HashMap::new()),
+<a href=#502 id=502 data-nosnippet>502</a>            voice_eviction_generations: RwLock::new(HashMap::new()),
+<a href=#503 id=503 data-nosnippet>503</a>            control_calls: RwLock::new(HashMap::new()),
+<a href=#504 id=504 data-nosnippet>504</a>            metrics_handle: metrics::handle(),
+<a href=#505 id=505 data-nosnippet>505</a>            db: sea_orm::Database::connect(
+<a href=#506 id=506 data-nosnippet>506</a>                sea_orm::ConnectOptions::new(<span class="string">"sqlite::memory:"</span>)
+<a href=#507 id=507 data-nosnippet>507</a>                    .min_connections(<span class="number">10</span>)
+<a href=#508 id=508 data-nosnippet>508</a>                    .max_connections(<span class="number">10</span>)
+<a href=#509 id=509 data-nosnippet>509</a>                    .connect_timeout(TIMEOUT)
+<a href=#510 id=510 data-nosnippet>510</a>                    .acquire_timeout(TIMEOUT)
+<a href=#511 id=511 data-nosnippet>511</a>                    .max_lifetime(TIMEOUT * <span class="number">100</span>)
+<a href=#512 id=512 data-nosnippet>512</a>                    .clone(),
+<a href=#513 id=513 data-nosnippet>513</a>            )
+<a href=#514 id=514 data-nosnippet>514</a>            .<span class="kw">await
+<a href=#515 id=515 data-nosnippet>515</a>            </span>.unwrap(),
+<a href=#516 id=516 data-nosnippet>516</a>            socket_io,
+<a href=#517 id=517 data-nosnippet>517</a>            _test_storage_dir: test_storage_dir,
+<a href=#518 id=518 data-nosnippet>518</a>        }),
+<a href=#519 id=519 data-nosnippet>519</a>    };
+<a href=#520 id=520 data-nosnippet>520</a>
+<a href=#521 id=521 data-nosnippet>521</a>    community::register_events(api.clone());
+<a href=#522 id=522 data-nosnippet>522</a>    space::register_events(api.clone());
+<a href=#523 id=523 data-nosnippet>523</a>
+<a href=#524 id=524 data-nosnippet>524</a>    &lt;migration::Migrator <span class="kw">as </span>migration::MigratorTrait&gt;::fresh(<span class="kw-2">&amp;</span>api.db)
+<a href=#525 id=525 data-nosnippet>525</a>        .<span class="kw">await
+<a href=#526 id=526 data-nosnippet>526</a>        </span>.unwrap();
+<a href=#527 id=527 data-nosnippet>527</a>
+<a href=#528 id=528 data-nosnippet>528</a>    <span class="kw">let </span>(axum_router, <span class="kw">_</span>) = router()
+<a href=#529 id=529 data-nosnippet>529</a>        .nest(<span class="string">"/internal"</span>, internal::router().into())
+<a href=#530 id=530 data-nosnippet>530</a>        .layer(socket_io_layer)
+<a href=#531 id=531 data-nosnippet>531</a>        .with_state(api.clone())
+<a href=#532 id=532 data-nosnippet>532</a>        .split_for_parts();
+<a href=#533 id=533 data-nosnippet>533</a>    <span class="kw">let </span>axum_router = axum_router.merge(control::router().with_state(api.clone()));
+<a href=#534 id=534 data-nosnippet>534</a>    <span class="kw">let </span>axum_router =
+<a href=#535 id=535 data-nosnippet>535</a>        axum_router.route_layer(axum::middleware::from_fn(metrics::track_http_requests));
+<a href=#536 id=536 data-nosnippet>536</a>
+<a href=#537 id=537 data-nosnippet>537</a>    (api, axum_router)
+<a href=#538 id=538 data-nosnippet>538</a>}
 </code></pre></div></section></main></body></html>
