@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["AppState","HoundClient"]};
+window.SIDEBAR_ITEMS = {"constant":["KEYRING_READ_GRACE"],"struct":["AppState","HoundClient"]};
