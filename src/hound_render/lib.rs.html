@@ -99,24 +99,39 @@
 <a href=#99 id=99 data-nosnippet>99</a>    platform::imp::drop_stream(stream_key)
 <a href=#100 id=100 data-nosnippet>100</a>}
 <a href=#101 id=101 data-nosnippet>101</a>
-<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// Push the latest decoded I420 frame for `stream_key` (drop-oldest). `i420`
-<a href=#103 id=103 data-nosnippet>103</a>/// is tightly packed `w*h + 2*(w/2 * h/2)` bytes, stride == width, even
-<a href=#104 id=104 data-nosnippet>104</a>/// extents. Cheap and non-blocking on every platform — safe to call from a
-<a href=#105 id=105 data-nosnippet>105</a>/// decode/capture thread; never from a real-time audio thread.
-<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">pub fn </span>push_frame(stream_key: <span class="kw-2">&amp;</span>str, w: u32, h: u32, i420: Vec&lt;u8&gt;) {
-<a href=#107 id=107 data-nosnippet>107</a>    platform::imp::push_frame(stream_key, w, h, i420)
-<a href=#108 id=108 data-nosnippet>108</a>}
-<a href=#109 id=109 data-nosnippet>109</a>
-<a href=#110 id=110 data-nosnippet>110</a><span class="doccomment">/// Push a decoded frame that is still GPU-resident, identified by a
-<a href=#111 id=111 data-nosnippet>111</a>/// platform-defined surface pointer — on macOS an IOSurface-backed NV12
-<a href=#112 id=112 data-nosnippet>112</a>/// `CVPixelBufferRef` (a retain is taken synchronously), on Windows a borrowed
-<a href=#113 id=113 data-nosnippet>113</a>/// NV12 `ID3D11Texture2D` (consumed synchronously: the blit into the Flutter
-<a href=#114 id=114 data-nosnippet>114</a>/// target happens inside this call). Valid for the duration of the call.
-<a href=#115 id=115 data-nosnippet>115</a>/// Returns `true` if the platform renderer took the surface; `false` where
-<a href=#116 id=116 data-nosnippet>116</a>/// there is no surface renderer, the tile is not attached yet (Windows), or
-<a href=#117 id=117 data-nosnippet>117</a>/// zero-copy is disabled via `HOUND_ZEROCOPY_VIDEO=0` — the caller then falls
-<a href=#118 id=118 data-nosnippet>118</a>/// back to [`push_frame`] with materialized I420.
-<a href=#119 id=119 data-nosnippet>119</a></span><span class="kw">pub fn </span>push_surface(stream_key: <span class="kw-2">&amp;</span>str, native_surface_ptr: usize, width: u32, height: u32) -&gt; bool {
-<a href=#120 id=120 data-nosnippet>120</a>    platform::imp::push_surface(stream_key, native_surface_ptr, width, height)
-<a href=#121 id=121 data-nosnippet>121</a>}
+<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// Run `cb` once a real decoded frame has been drawn into `texture_id` (fires
+<a href=#103 id=103 data-nosnippet>103</a>/// inline if one already has). This is the signal a **blank-free texture swap**
+<a href=#104 id=104 data-nosnippet>104</a>/// flips on: Dart attaches a new, freshly allocated buffer for a stream while the
+<a href=#105 id=105 data-nosnippet>105</a>/// OLD texture is still composited (frozen on its last frame), and only shows the
+<a href=#106 id=106 data-nosnippet>106</a>/// new one once it has content — a zero-filled CVPixelBuffer would otherwise flash
+<a href=#107 id=107 data-nosnippet>107</a>/// black. `cb` is DROPPED UNCALLED if the texture is detached or replaced first, so
+<a href=#108 id=108 data-nosnippet>108</a>/// a caller awaiting it sees "never" rather than hanging.
+<a href=#109 id=109 data-nosnippet>109</a>///
+<a href=#110 id=110 data-nosnippet>110</a>/// Platforms without an arrival-driven render loop (Windows/Linux, whose plugins
+<a href=#111 id=111 data-nosnippet>111</a>/// ping their texture on a fixed timer) fire `cb` inline — there is no first-frame
+<a href=#112 id=112 data-nosnippet>112</a>/// edge to observe, so the caller keeps its previous flip-immediately behaviour.
+<a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">pub fn </span>notify_on_draw(texture_id: i64, cb: Box&lt;<span class="kw">dyn </span>FnOnce() + Send&gt;) {
+<a href=#114 id=114 data-nosnippet>114</a>    platform::imp::notify_on_draw(texture_id, cb)
+<a href=#115 id=115 data-nosnippet>115</a>}
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a><span class="doccomment">/// Push the latest decoded I420 frame for `stream_key` (drop-oldest). `i420`
+<a href=#118 id=118 data-nosnippet>118</a>/// is tightly packed `w*h + 2*(w/2 * h/2)` bytes, stride == width, even
+<a href=#119 id=119 data-nosnippet>119</a>/// extents. Cheap and non-blocking on every platform — safe to call from a
+<a href=#120 id=120 data-nosnippet>120</a>/// decode/capture thread; never from a real-time audio thread.
+<a href=#121 id=121 data-nosnippet>121</a></span><span class="kw">pub fn </span>push_frame(stream_key: <span class="kw-2">&amp;</span>str, w: u32, h: u32, i420: Vec&lt;u8&gt;) {
+<a href=#122 id=122 data-nosnippet>122</a>    platform::imp::push_frame(stream_key, w, h, i420)
+<a href=#123 id=123 data-nosnippet>123</a>}
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a><span class="doccomment">/// Push a decoded frame that is still GPU-resident, identified by a
+<a href=#126 id=126 data-nosnippet>126</a>/// platform-defined surface pointer — on macOS an IOSurface-backed NV12
+<a href=#127 id=127 data-nosnippet>127</a>/// `CVPixelBufferRef` (a retain is taken synchronously), on Windows a borrowed
+<a href=#128 id=128 data-nosnippet>128</a>/// NV12 `ID3D11Texture2D` (consumed synchronously: the blit into the Flutter
+<a href=#129 id=129 data-nosnippet>129</a>/// target happens inside this call). Valid for the duration of the call.
+<a href=#130 id=130 data-nosnippet>130</a>/// Returns `true` if the platform renderer took the surface; `false` where
+<a href=#131 id=131 data-nosnippet>131</a>/// there is no surface renderer, the tile is not attached yet (Windows), or
+<a href=#132 id=132 data-nosnippet>132</a>/// zero-copy is disabled via `HOUND_ZEROCOPY_VIDEO=0` — the caller then falls
+<a href=#133 id=133 data-nosnippet>133</a>/// back to [`push_frame`] with materialized I420.
+<a href=#134 id=134 data-nosnippet>134</a></span><span class="kw">pub fn </span>push_surface(stream_key: <span class="kw-2">&amp;</span>str, native_surface_ptr: usize, width: u32, height: u32) -&gt; bool {
+<a href=#135 id=135 data-nosnippet>135</a>    platform::imp::push_surface(stream_key, native_surface_ptr, width, height)
+<a href=#136 id=136 data-nosnippet>136</a>}
 </code></pre></div></section></main></body></html>

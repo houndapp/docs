@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["enumerate_cameras","enumerate_screen_sources","screen_thumbnail"],"mod":["generic","linux","stub"],"type":["AppAudioBackend","CameraBackend","ScreenBackend","VideoDecoderBackend","VideoEncoderBackend"]};
+window.SIDEBAR_ITEMS = {"fn":["device_permission","ensure_microphone_authorized","enumerate_cameras","enumerate_screen_sources","screen_thumbnail"],"mod":["generic","linux","stub"],"type":["AppAudioBackend","CameraBackend","ScreenBackend","VideoDecoderBackend","VideoEncoderBackend"]};

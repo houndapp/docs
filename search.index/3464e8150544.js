@@ -1,1 +1,0 @@
-rn_("BQHAAAAAr6ckvKK9or6iZmlFA0IAAAPxswcSvhfcu927ERiXGZdpbHJ0rpmJooqii6I7vV8AhaAQAACW4bAQojoAAaAwAACg/gGAWA==")

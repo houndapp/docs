@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_DEADLINE"],"fn":["inbound_audio_total","inbound_video_total","wait_for"],"struct":["InCall"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_DEADLINE"],"enum":["VideoSource"],"fn":["inbound_audio_total","inbound_video_total","peer_video","peer_video_frames","remote_peers","wait_for"],"struct":["InCall"]};

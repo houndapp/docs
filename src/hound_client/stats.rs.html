@@ -2199,7 +2199,7 @@
 <a href=#2199 id=2199 data-nosnippet>2199</a>            // LIVE diagnosis (not a separate heuristic) so the logged report is never a
 <a href=#2200 id=2200 data-nosnippet>2200</a>            // "healthy" body — a window counts as degraded iff the report names a fault
 <a href=#2201 id=2201 data-nosnippet>2201</a>            // this window. Re-arms after a clean window.
-<a href=#2202 id=2202 data-nosnippet>2202</a>            </span><span class="kw">let </span>degraded = !<span class="kw">crate</span>::audio_report::diagnose(<span class="kw-2">&amp;</span>snap).starts_with(<span class="string">"healthy"</span>);
+<a href=#2202 id=2202 data-nosnippet>2202</a>            </span><span class="kw">let </span>degraded = <span class="kw">crate</span>::audio_report::diagnose_detail(<span class="kw-2">&amp;</span>snap).<span class="macro">stage !</span>= <span class="string">"healthy"</span>;
 <a href=#2203 id=2203 data-nosnippet>2203</a>            <span class="kw">if </span>degraded {
 <a href=#2204 id=2204 data-nosnippet>2204</a>                bad_streak += <span class="number">1</span>;
 <a href=#2205 id=2205 data-nosnippet>2205</a>                <span class="kw">if </span>bad_streak &gt;= SUSTAINED_STUTTER_WINDOWS &amp;&amp; !logged_degraded {

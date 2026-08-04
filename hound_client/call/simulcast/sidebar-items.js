@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["spawn_low_video_publish","spawn_quality_listener"],"struct":["LayerControl"]};
+window.SIDEBAR_ITEMS = {"enum":["LowDecl"],"fn":["own_video_track","spawn_low_video_publish","spawn_quality_listener","try_withdraw"],"struct":["LayerControl"]};

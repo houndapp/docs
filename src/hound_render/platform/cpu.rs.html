@@ -254,193 +254,201 @@
 <a href=#254 id=254 data-nosnippet>254</a>    clear_mailbox(stream_key);
 <a href=#255 id=255 data-nosnippet>255</a>}
 <a href=#256 id=256 data-nosnippet>256</a>
-<a href=#257 id=257 data-nosnippet>257</a><span class="doccomment">/// Stop + join the render thread only, leaving the mailbox alone — the re-attach path
-<a href=#258 id=258 data-nosnippet>258</a>/// ([`attach`]), which must not discard a frame pushed before the tile attached.
-<a href=#259 id=259 data-nosnippet>259</a></span><span class="kw">fn </span>stop_thread(stream_key: <span class="kw-2">&amp;</span>str) {
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">let </span>stream = streams()
-<a href=#261 id=261 data-nosnippet>261</a>        .lock()
-<a href=#262 id=262 data-nosnippet>262</a>        .unwrap_or_else(|e| e.into_inner())
-<a href=#263 id=263 data-nosnippet>263</a>        .remove(stream_key);
-<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>s) = stream {
-<a href=#265 id=265 data-nosnippet>265</a>        s.stop.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#266 id=266 data-nosnippet>266</a>        <span class="comment">// Unpark the thread: it sleeps on the mailbox condvar, so without this the
-<a href=#267 id=267 data-nosnippet>267</a>        // join waits out a full idle timeout.
-<a href=#268 id=268 data-nosnippet>268</a>        </span>mailbox_for(stream_key).arrived.notify_all();
-<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(h) = s.handle.take() {
-<a href=#270 id=270 data-nosnippet>270</a>            <span class="kw">let _ </span>= h.join();
-<a href=#271 id=271 data-nosnippet>271</a>        }
-<a href=#272 id=272 data-nosnippet>272</a>    }
-<a href=#273 id=273 data-nosnippet>273</a>}
-<a href=#274 id=274 data-nosnippet>274</a>
-<a href=#275 id=275 data-nosnippet>275</a><span class="doccomment">/// Render-thread body: until `stop`, park on the mailbox condvar and convert+scale each
-<a href=#276 id=276 data-nosnippet>276</a>/// arriving frame into the plugin's RGBA buffer (capped at ~30 fps). Until the first
-<a href=#277 id=277 data-nosnippet>277</a>/// frame arrives the buffer is cleared to opaque black once (so a not-yet-producing
-<a href=#278 id=278 data-nosnippet>278</a>/// stream shows black, not garbage). Drop-oldest: a slow consumer just skips stale
-<a href=#279 id=279 data-nosnippet>279</a>/// frames.
-<a href=#280 id=280 data-nosnippet>280</a></span><span class="kw">fn </span>render_loop(stream_key: String, buf: BufferPtr, stop: Arc&lt;AtomicBool&gt;, mailbox: Arc&lt;Mailbox&gt;) {
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">let </span>(dst_w, dst_h) = (buf.w, buf.h);
-<a href=#282 id=282 data-nosnippet>282</a>    <span class="kw">let </span>dst_bytes = dst_w * dst_h * <span class="number">4</span>;
-<a href=#283 id=283 data-nosnippet>283</a>    <span class="comment">// SAFETY: see `attach` — the buffer is `dst_bytes` (the size Dart allocated +
-<a href=#284 id=284 data-nosnippet>284</a>    // passed as w×h), writable, and outlives this thread (Dart detaches before
-<a href=#285 id=285 data-nosnippet>285</a>    // freeing). Only this thread writes it.
-<a href=#286 id=286 data-nosnippet>286</a>    </span><span class="kw">let </span>out: <span class="kw-2">&amp;mut </span>[u8] = <span class="kw">unsafe </span>{ std::slice::from_raw_parts_mut(buf.ptr, dst_bytes) };
-<a href=#287 id=287 data-nosnippet>287</a>
-<a href=#288 id=288 data-nosnippet>288</a>    <span class="comment">// Opaque black until the first frame.
-<a href=#289 id=289 data-nosnippet>289</a>    </span><span class="kw">for </span>px <span class="kw">in </span>out.chunks_exact_mut(<span class="number">4</span>) {
-<a href=#290 id=290 data-nosnippet>290</a>        px[<span class="number">0</span>] = <span class="number">0</span>;
-<a href=#291 id=291 data-nosnippet>291</a>        px[<span class="number">1</span>] = <span class="number">0</span>;
-<a href=#292 id=292 data-nosnippet>292</a>        px[<span class="number">2</span>] = <span class="number">0</span>;
-<a href=#293 id=293 data-nosnippet>293</a>        px[<span class="number">3</span>] = <span class="number">255</span>;
-<a href=#294 id=294 data-nosnippet>294</a>    }
+<a href=#257 id=257 data-nosnippet>257</a><span class="doccomment">/// No first-frame edge is observable here: the per-stream thread converts into the
+<a href=#258 id=258 data-nosnippet>258</a>/// plugin's buffer whenever a frame arrives, and the plugin pings its texture on its
+<a href=#259 id=259 data-nosnippet>259</a>/// own fixed timer — nothing tells us which ping carried real content. Fire inline,
+<a href=#260 id=260 data-nosnippet>260</a>/// which leaves the caller's texture swap at its previous flip-immediately timing.
+<a href=#261 id=261 data-nosnippet>261</a></span><span class="kw">pub fn </span>notify_on_draw(_texture_id: i64, cb: Box&lt;<span class="kw">dyn </span>FnOnce() + Send&gt;) {
+<a href=#262 id=262 data-nosnippet>262</a>    cb();
+<a href=#263 id=263 data-nosnippet>263</a>}
+<a href=#264 id=264 data-nosnippet>264</a>
+<a href=#265 id=265 data-nosnippet>265</a><span class="doccomment">/// Stop + join the render thread only, leaving the mailbox alone — the re-attach path
+<a href=#266 id=266 data-nosnippet>266</a>/// ([`attach`]), which must not discard a frame pushed before the tile attached.
+<a href=#267 id=267 data-nosnippet>267</a></span><span class="kw">fn </span>stop_thread(stream_key: <span class="kw-2">&amp;</span>str) {
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">let </span>stream = streams()
+<a href=#269 id=269 data-nosnippet>269</a>        .lock()
+<a href=#270 id=270 data-nosnippet>270</a>        .unwrap_or_else(|e| e.into_inner())
+<a href=#271 id=271 data-nosnippet>271</a>        .remove(stream_key);
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>s) = stream {
+<a href=#273 id=273 data-nosnippet>273</a>        s.stop.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="comment">// Unpark the thread: it sleeps on the mailbox condvar, so without this the
+<a href=#275 id=275 data-nosnippet>275</a>        // join waits out a full idle timeout.
+<a href=#276 id=276 data-nosnippet>276</a>        </span>mailbox_for(stream_key).arrived.notify_all();
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(h) = s.handle.take() {
+<a href=#278 id=278 data-nosnippet>278</a>            <span class="kw">let _ </span>= h.join();
+<a href=#279 id=279 data-nosnippet>279</a>        }
+<a href=#280 id=280 data-nosnippet>280</a>    }
+<a href=#281 id=281 data-nosnippet>281</a>}
+<a href=#282 id=282 data-nosnippet>282</a>
+<a href=#283 id=283 data-nosnippet>283</a><span class="doccomment">/// Render-thread body: until `stop`, park on the mailbox condvar and convert+scale each
+<a href=#284 id=284 data-nosnippet>284</a>/// arriving frame into the plugin's RGBA buffer (capped at ~30 fps). Until the first
+<a href=#285 id=285 data-nosnippet>285</a>/// frame arrives the buffer is cleared to opaque black once (so a not-yet-producing
+<a href=#286 id=286 data-nosnippet>286</a>/// stream shows black, not garbage). Drop-oldest: a slow consumer just skips stale
+<a href=#287 id=287 data-nosnippet>287</a>/// frames.
+<a href=#288 id=288 data-nosnippet>288</a></span><span class="kw">fn </span>render_loop(stream_key: String, buf: BufferPtr, stop: Arc&lt;AtomicBool&gt;, mailbox: Arc&lt;Mailbox&gt;) {
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">let </span>(dst_w, dst_h) = (buf.w, buf.h);
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="kw">let </span>dst_bytes = dst_w * dst_h * <span class="number">4</span>;
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="comment">// SAFETY: see `attach` — the buffer is `dst_bytes` (the size Dart allocated +
+<a href=#292 id=292 data-nosnippet>292</a>    // passed as w×h), writable, and outlives this thread (Dart detaches before
+<a href=#293 id=293 data-nosnippet>293</a>    // freeing). Only this thread writes it.
+<a href=#294 id=294 data-nosnippet>294</a>    </span><span class="kw">let </span>out: <span class="kw-2">&amp;mut </span>[u8] = <span class="kw">unsafe </span>{ std::slice::from_raw_parts_mut(buf.ptr, dst_bytes) };
 <a href=#295 id=295 data-nosnippet>295</a>
-<a href=#296 id=296 data-nosnippet>296</a>    <span class="kw">let </span><span class="kw-2">mut </span>rendered: u64 = <span class="number">0</span>;
-<a href=#297 id=297 data-nosnippet>297</a>    <span class="comment">// Earliest next conversion (the rate floor). Arrival is what wakes this thread;
-<a href=#298 id=298 data-nosnippet>298</a>    // this only stops a &gt;30 fps source from burning a convert the embedder never pulls,
-<a href=#299 id=299 data-nosnippet>299</a>    // and never delays a source at or below the floor.
-<a href=#300 id=300 data-nosnippet>300</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>not_before = Instant::now();
-<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(Slot { w, h, i420 }) = next_frame(<span class="kw-2">&amp;</span>mailbox, <span class="kw-2">&amp;</span>stop, not_before) <span class="kw">else </span>{
-<a href=#303 id=303 data-nosnippet>303</a>            <span class="kw">continue</span>;
-<a href=#304 id=304 data-nosnippet>304</a>        };
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="comment">// Convert into the buffer at ITS true size: when the buffer matches the
-<a href=#306 id=306 data-nosnippet>306</a>        // decoded frame (the steady state, Dart having sized it to the frame) this
-<a href=#307 id=307 data-nosnippet>307</a>        // is a 1:1 copy with no scale; if they differ (the brief window before a
-<a href=#308 id=308 data-nosnippet>308</a>        // resolution-change recreate lands) it nearest-neighbor scales to fit.
-<a href=#309 id=309 data-nosnippet>309</a>        </span><span class="kw">crate</span>::yuv::i420_to_rgba_scaled(<span class="kw-2">&amp;</span>i420, w <span class="kw">as </span>usize, h <span class="kw">as </span>usize, out, dst_w, dst_h);
-<a href=#310 id=310 data-nosnippet>310</a>        not_before = Instant::now() + FRAME_DT;
-<a href=#311 id=311 data-nosnippet>311</a>        rendered += <span class="number">1</span>;
-<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">if </span>rendered == <span class="number">1 </span>|| rendered.is_multiple_of(<span class="number">300</span>) {
-<a href=#313 id=313 data-nosnippet>313</a>            <span class="macro">tracing::debug!</span>(
-<a href=#314 id=314 data-nosnippet>314</a>                target: <span class="string">"video_render_cpu"</span>,
-<a href=#315 id=315 data-nosnippet>315</a>                key = %stream_key,
-<a href=#316 id=316 data-nosnippet>316</a>                rendered,
-<a href=#317 id=317 data-nosnippet>317</a>                src = <span class="macro">format!</span>(<span class="string">"{w}x{h}"</span>),
-<a href=#318 id=318 data-nosnippet>318</a>                dst = <span class="macro">format!</span>(<span class="string">"{dst_w}x{dst_h}"</span>),
-<a href=#319 id=319 data-nosnippet>319</a>                <span class="string">"cpu render: converted frame into RGBA buffer"
-<a href=#320 id=320 data-nosnippet>320</a>            </span>);
-<a href=#321 id=321 data-nosnippet>321</a>        }
-<a href=#322 id=322 data-nosnippet>322</a>    }
-<a href=#323 id=323 data-nosnippet>323</a>}
-<a href=#324 id=324 data-nosnippet>324</a>
-<a href=#325 id=325 data-nosnippet>325</a><span class="doccomment">/// Park until a frame is in the mailbox (and the `not_before` rate floor has passed),
-<a href=#326 id=326 data-nosnippet>326</a>/// then take it. `None` = nothing to draw this pass — the caller re-checks `stop` and
-<a href=#327 id=327 data-nosnippet>327</a>/// waits again. The condvar is what makes this arrival-driven: a pushed frame is taken
-<a href=#328 id=328 data-nosnippet>328</a>/// the instant it lands, not up to [`FRAME_DT`] later. The timeout is only a liveness
-<a href=#329 id=329 data-nosnippet>329</a>/// floor so `stop` is still observed once the producer goes silent.
-<a href=#330 id=330 data-nosnippet>330</a></span><span class="kw">fn </span>next_frame(mb: <span class="kw-2">&amp;</span>Mailbox, stop: <span class="kw-2">&amp;</span>AtomicBool, not_before: Instant) -&gt; <span class="prelude-ty">Option</span>&lt;Slot&gt; {
-<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">let </span><span class="kw-2">mut </span>slot = mb.slot.lock().unwrap_or_else(|e| e.into_inner());
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">loop </span>{
-<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">if </span>stop.load(Ordering::Relaxed) {
-<a href=#334 id=334 data-nosnippet>334</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#335 id=335 data-nosnippet>335</a>        }
-<a href=#336 id=336 data-nosnippet>336</a>        <span class="kw">let </span>wait = <span class="kw">if </span>slot.is_some() {
-<a href=#337 id=337 data-nosnippet>337</a>            <span class="kw">let </span>now = Instant::now();
-<a href=#338 id=338 data-nosnippet>338</a>            <span class="kw">if </span>now &gt;= not_before {
-<a href=#339 id=339 data-nosnippet>339</a>                <span class="kw">return </span>slot.take();
-<a href=#340 id=340 data-nosnippet>340</a>            }
-<a href=#341 id=341 data-nosnippet>341</a>            <span class="comment">// A frame is here but too early: hold it until the floor (drop-oldest
-<a href=#342 id=342 data-nosnippet>342</a>            // still applies — a newer push replaces it while we wait).
-<a href=#343 id=343 data-nosnippet>343</a>            </span>not_before - now
-<a href=#344 id=344 data-nosnippet>344</a>        } <span class="kw">else </span>{
-<a href=#345 id=345 data-nosnippet>345</a>            FRAME_DT
-<a href=#346 id=346 data-nosnippet>346</a>        };
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">let </span>(guard, timeout) = mb
-<a href=#348 id=348 data-nosnippet>348</a>            .arrived
-<a href=#349 id=349 data-nosnippet>349</a>            .wait_timeout(slot, wait)
-<a href=#350 id=350 data-nosnippet>350</a>            .unwrap_or_else(|e| e.into_inner());
-<a href=#351 id=351 data-nosnippet>351</a>        slot = guard;
-<a href=#352 id=352 data-nosnippet>352</a>        <span class="kw">if </span>timeout.timed_out() &amp;&amp; slot.is_none() {
-<a href=#353 id=353 data-nosnippet>353</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#354 id=354 data-nosnippet>354</a>        }
-<a href=#355 id=355 data-nosnippet>355</a>    }
-<a href=#356 id=356 data-nosnippet>356</a>}
-<a href=#357 id=357 data-nosnippet>357</a>
-<a href=#358 id=358 data-nosnippet>358</a><span class="attr">#[cfg(test)]
-<a href=#359 id=359 data-nosnippet>359</a></span><span class="kw">mod </span>tests {
-<a href=#360 id=360 data-nosnippet>360</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#361 id=361 data-nosnippet>361</a>
-<a href=#362 id=362 data-nosnippet>362</a>    <span class="kw">fn </span>frame() -&gt; Slot {
-<a href=#363 id=363 data-nosnippet>363</a>        Slot {
-<a href=#364 id=364 data-nosnippet>364</a>            w: <span class="number">2</span>,
-<a href=#365 id=365 data-nosnippet>365</a>            h: <span class="number">2</span>,
-<a href=#366 id=366 data-nosnippet>366</a>            i420: <span class="macro">vec!</span>[<span class="number">0u8</span>; <span class="number">6</span>],
-<a href=#367 id=367 data-nosnippet>367</a>        }
-<a href=#368 id=368 data-nosnippet>368</a>    }
+<a href=#296 id=296 data-nosnippet>296</a>    <span class="comment">// Opaque black until the first frame.
+<a href=#297 id=297 data-nosnippet>297</a>    </span><span class="kw">for </span>px <span class="kw">in </span>out.chunks_exact_mut(<span class="number">4</span>) {
+<a href=#298 id=298 data-nosnippet>298</a>        px[<span class="number">0</span>] = <span class="number">0</span>;
+<a href=#299 id=299 data-nosnippet>299</a>        px[<span class="number">1</span>] = <span class="number">0</span>;
+<a href=#300 id=300 data-nosnippet>300</a>        px[<span class="number">2</span>] = <span class="number">0</span>;
+<a href=#301 id=301 data-nosnippet>301</a>        px[<span class="number">3</span>] = <span class="number">255</span>;
+<a href=#302 id=302 data-nosnippet>302</a>    }
+<a href=#303 id=303 data-nosnippet>303</a>
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">let </span><span class="kw-2">mut </span>rendered: u64 = <span class="number">0</span>;
+<a href=#305 id=305 data-nosnippet>305</a>    <span class="comment">// Earliest next conversion (the rate floor). Arrival is what wakes this thread;
+<a href=#306 id=306 data-nosnippet>306</a>    // this only stops a &gt;30 fps source from burning a convert the embedder never pulls,
+<a href=#307 id=307 data-nosnippet>307</a>    // and never delays a source at or below the floor.
+<a href=#308 id=308 data-nosnippet>308</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>not_before = Instant::now();
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(Slot { w, h, i420 }) = next_frame(<span class="kw-2">&amp;</span>mailbox, <span class="kw-2">&amp;</span>stop, not_before) <span class="kw">else </span>{
+<a href=#311 id=311 data-nosnippet>311</a>            <span class="kw">continue</span>;
+<a href=#312 id=312 data-nosnippet>312</a>        };
+<a href=#313 id=313 data-nosnippet>313</a>        <span class="comment">// Convert into the buffer at ITS true size: when the buffer matches the
+<a href=#314 id=314 data-nosnippet>314</a>        // decoded frame (the steady state, Dart having sized it to the frame) this
+<a href=#315 id=315 data-nosnippet>315</a>        // is a 1:1 copy with no scale; if they differ (the brief window before a
+<a href=#316 id=316 data-nosnippet>316</a>        // resolution-change recreate lands) it nearest-neighbor scales to fit.
+<a href=#317 id=317 data-nosnippet>317</a>        </span><span class="kw">crate</span>::yuv::i420_to_rgba_scaled(<span class="kw-2">&amp;</span>i420, w <span class="kw">as </span>usize, h <span class="kw">as </span>usize, out, dst_w, dst_h);
+<a href=#318 id=318 data-nosnippet>318</a>        not_before = Instant::now() + FRAME_DT;
+<a href=#319 id=319 data-nosnippet>319</a>        rendered += <span class="number">1</span>;
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw">if </span>rendered == <span class="number">1 </span>|| rendered.is_multiple_of(<span class="number">300</span>) {
+<a href=#321 id=321 data-nosnippet>321</a>            <span class="macro">tracing::debug!</span>(
+<a href=#322 id=322 data-nosnippet>322</a>                target: <span class="string">"video_render_cpu"</span>,
+<a href=#323 id=323 data-nosnippet>323</a>                key = %stream_key,
+<a href=#324 id=324 data-nosnippet>324</a>                rendered,
+<a href=#325 id=325 data-nosnippet>325</a>                src = <span class="macro">format!</span>(<span class="string">"{w}x{h}"</span>),
+<a href=#326 id=326 data-nosnippet>326</a>                dst = <span class="macro">format!</span>(<span class="string">"{dst_w}x{dst_h}"</span>),
+<a href=#327 id=327 data-nosnippet>327</a>                <span class="string">"cpu render: converted frame into RGBA buffer"
+<a href=#328 id=328 data-nosnippet>328</a>            </span>);
+<a href=#329 id=329 data-nosnippet>329</a>        }
+<a href=#330 id=330 data-nosnippet>330</a>    }
+<a href=#331 id=331 data-nosnippet>331</a>}
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a><span class="doccomment">/// Park until a frame is in the mailbox (and the `not_before` rate floor has passed),
+<a href=#334 id=334 data-nosnippet>334</a>/// then take it. `None` = nothing to draw this pass — the caller re-checks `stop` and
+<a href=#335 id=335 data-nosnippet>335</a>/// waits again. The condvar is what makes this arrival-driven: a pushed frame is taken
+<a href=#336 id=336 data-nosnippet>336</a>/// the instant it lands, not up to [`FRAME_DT`] later. The timeout is only a liveness
+<a href=#337 id=337 data-nosnippet>337</a>/// floor so `stop` is still observed once the producer goes silent.
+<a href=#338 id=338 data-nosnippet>338</a></span><span class="kw">fn </span>next_frame(mb: <span class="kw-2">&amp;</span>Mailbox, stop: <span class="kw-2">&amp;</span>AtomicBool, not_before: Instant) -&gt; <span class="prelude-ty">Option</span>&lt;Slot&gt; {
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">let </span><span class="kw-2">mut </span>slot = mb.slot.lock().unwrap_or_else(|e| e.into_inner());
+<a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">loop </span>{
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">if </span>stop.load(Ordering::Relaxed) {
+<a href=#342 id=342 data-nosnippet>342</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#343 id=343 data-nosnippet>343</a>        }
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">let </span>wait = <span class="kw">if </span>slot.is_some() {
+<a href=#345 id=345 data-nosnippet>345</a>            <span class="kw">let </span>now = Instant::now();
+<a href=#346 id=346 data-nosnippet>346</a>            <span class="kw">if </span>now &gt;= not_before {
+<a href=#347 id=347 data-nosnippet>347</a>                <span class="kw">return </span>slot.take();
+<a href=#348 id=348 data-nosnippet>348</a>            }
+<a href=#349 id=349 data-nosnippet>349</a>            <span class="comment">// A frame is here but too early: hold it until the floor (drop-oldest
+<a href=#350 id=350 data-nosnippet>350</a>            // still applies — a newer push replaces it while we wait).
+<a href=#351 id=351 data-nosnippet>351</a>            </span>not_before - now
+<a href=#352 id=352 data-nosnippet>352</a>        } <span class="kw">else </span>{
+<a href=#353 id=353 data-nosnippet>353</a>            FRAME_DT
+<a href=#354 id=354 data-nosnippet>354</a>        };
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">let </span>(guard, timeout) = mb
+<a href=#356 id=356 data-nosnippet>356</a>            .arrived
+<a href=#357 id=357 data-nosnippet>357</a>            .wait_timeout(slot, wait)
+<a href=#358 id=358 data-nosnippet>358</a>            .unwrap_or_else(|e| e.into_inner());
+<a href=#359 id=359 data-nosnippet>359</a>        slot = guard;
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">if </span>timeout.timed_out() &amp;&amp; slot.is_none() {
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#362 id=362 data-nosnippet>362</a>        }
+<a href=#363 id=363 data-nosnippet>363</a>    }
+<a href=#364 id=364 data-nosnippet>364</a>}
+<a href=#365 id=365 data-nosnippet>365</a>
+<a href=#366 id=366 data-nosnippet>366</a><span class="attr">#[cfg(test)]
+<a href=#367 id=367 data-nosnippet>367</a></span><span class="kw">mod </span>tests {
+<a href=#368 id=368 data-nosnippet>368</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
 <a href=#369 id=369 data-nosnippet>369</a>
-<a href=#370 id=370 data-nosnippet>370</a>    <span class="doccomment">/// The waiter wakes on the PUSH, not on the tick: a frame pushed mid-interval is
-<a href=#371 id=371 data-nosnippet>371</a>    /// taken straight away instead of waiting out `FRAME_DT`.
-<a href=#372 id=372 data-nosnippet>372</a>    </span><span class="attr">#[test]
-<a href=#373 id=373 data-nosnippet>373</a>    </span><span class="kw">fn </span>next_frame_wakes_on_arrival() {
-<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">let </span>mb = Arc::new(Mailbox::new());
-<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">let </span>stop = AtomicBool::new(<span class="bool-val">false</span>);
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">let </span>producer = {
-<a href=#377 id=377 data-nosnippet>377</a>            <span class="kw">let </span>mb = mb.clone();
-<a href=#378 id=378 data-nosnippet>378</a>            std::thread::spawn(<span class="kw">move </span>|| {
-<a href=#379 id=379 data-nosnippet>379</a>                std::thread::sleep(Duration::from_millis(<span class="number">1</span>));
-<a href=#380 id=380 data-nosnippet>380</a>                <span class="kw-2">*</span>mb.slot.lock().unwrap() = <span class="prelude-val">Some</span>(frame());
-<a href=#381 id=381 data-nosnippet>381</a>                mb.arrived.notify_one();
-<a href=#382 id=382 data-nosnippet>382</a>            })
-<a href=#383 id=383 data-nosnippet>383</a>        };
-<a href=#384 id=384 data-nosnippet>384</a>
-<a href=#385 id=385 data-nosnippet>385</a>        <span class="kw">let </span>t = Instant::now();
-<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span>got = next_frame(<span class="kw-2">&amp;</span>mb, <span class="kw-2">&amp;</span>stop, Instant::now());
-<a href=#387 id=387 data-nosnippet>387</a>
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="macro">assert!</span>(got.is_some(), <span class="string">"the pushed frame is taken"</span>);
-<a href=#389 id=389 data-nosnippet>389</a>        <span class="macro">assert!</span>(
-<a href=#390 id=390 data-nosnippet>390</a>            t.elapsed() &lt; FRAME_DT,
-<a href=#391 id=391 data-nosnippet>391</a>            <span class="string">"woke on arrival, not on the timer ({:?})"</span>,
-<a href=#392 id=392 data-nosnippet>392</a>            t.elapsed()
-<a href=#393 id=393 data-nosnippet>393</a>        );
-<a href=#394 id=394 data-nosnippet>394</a>        producer.join().unwrap();
-<a href=#395 id=395 data-nosnippet>395</a>    }
-<a href=#396 id=396 data-nosnippet>396</a>
-<a href=#397 id=397 data-nosnippet>397</a>    <span class="doccomment">/// A frame that arrives inside the rate floor is HELD, not dropped: the embedder
-<a href=#398 id=398 data-nosnippet>398</a>    /// re-pulls at ~30 Hz, so converting faster is wasted work.
-<a href=#399 id=399 data-nosnippet>399</a>    </span><span class="attr">#[test]
-<a href=#400 id=400 data-nosnippet>400</a>    </span><span class="kw">fn </span>next_frame_holds_a_frame_until_the_rate_floor() {
-<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">let </span>mb = Mailbox::new();
-<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">let </span>stop = AtomicBool::new(<span class="bool-val">false</span>);
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw-2">*</span>mb.slot.lock().unwrap() = <span class="prelude-val">Some</span>(frame());
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">let </span>floor = Duration::from_millis(<span class="number">40</span>);
-<a href=#405 id=405 data-nosnippet>405</a>
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">let </span>t = Instant::now();
-<a href=#407 id=407 data-nosnippet>407</a>        <span class="kw">let </span>got = next_frame(<span class="kw-2">&amp;</span>mb, <span class="kw-2">&amp;</span>stop, Instant::now() + floor);
-<a href=#408 id=408 data-nosnippet>408</a>
-<a href=#409 id=409 data-nosnippet>409</a>        <span class="macro">assert!</span>(got.is_some(), <span class="string">"held, never dropped"</span>);
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="macro">assert!</span>(
-<a href=#411 id=411 data-nosnippet>411</a>            t.elapsed() &gt;= floor - Duration::from_millis(<span class="number">5</span>),
-<a href=#412 id=412 data-nosnippet>412</a>            <span class="string">"waited out the floor ({:?})"</span>,
-<a href=#413 id=413 data-nosnippet>413</a>            t.elapsed()
-<a href=#414 id=414 data-nosnippet>414</a>        );
-<a href=#415 id=415 data-nosnippet>415</a>    }
+<a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">fn </span>frame() -&gt; Slot {
+<a href=#371 id=371 data-nosnippet>371</a>        Slot {
+<a href=#372 id=372 data-nosnippet>372</a>            w: <span class="number">2</span>,
+<a href=#373 id=373 data-nosnippet>373</a>            h: <span class="number">2</span>,
+<a href=#374 id=374 data-nosnippet>374</a>            i420: <span class="macro">vec!</span>[<span class="number">0u8</span>; <span class="number">6</span>],
+<a href=#375 id=375 data-nosnippet>375</a>        }
+<a href=#376 id=376 data-nosnippet>376</a>    }
+<a href=#377 id=377 data-nosnippet>377</a>
+<a href=#378 id=378 data-nosnippet>378</a>    <span class="doccomment">/// The waiter wakes on the PUSH, not on the tick: a frame pushed mid-interval is
+<a href=#379 id=379 data-nosnippet>379</a>    /// taken straight away instead of waiting out `FRAME_DT`.
+<a href=#380 id=380 data-nosnippet>380</a>    </span><span class="attr">#[test]
+<a href=#381 id=381 data-nosnippet>381</a>    </span><span class="kw">fn </span>next_frame_wakes_on_arrival() {
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">let </span>mb = Arc::new(Mailbox::new());
+<a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">let </span>stop = AtomicBool::new(<span class="bool-val">false</span>);
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span>producer = {
+<a href=#385 id=385 data-nosnippet>385</a>            <span class="kw">let </span>mb = mb.clone();
+<a href=#386 id=386 data-nosnippet>386</a>            std::thread::spawn(<span class="kw">move </span>|| {
+<a href=#387 id=387 data-nosnippet>387</a>                std::thread::sleep(Duration::from_millis(<span class="number">1</span>));
+<a href=#388 id=388 data-nosnippet>388</a>                <span class="kw-2">*</span>mb.slot.lock().unwrap() = <span class="prelude-val">Some</span>(frame());
+<a href=#389 id=389 data-nosnippet>389</a>                mb.arrived.notify_one();
+<a href=#390 id=390 data-nosnippet>390</a>            })
+<a href=#391 id=391 data-nosnippet>391</a>        };
+<a href=#392 id=392 data-nosnippet>392</a>
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">let </span>t = Instant::now();
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">let </span>got = next_frame(<span class="kw-2">&amp;</span>mb, <span class="kw-2">&amp;</span>stop, Instant::now());
+<a href=#395 id=395 data-nosnippet>395</a>
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="macro">assert!</span>(got.is_some(), <span class="string">"the pushed frame is taken"</span>);
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="macro">assert!</span>(
+<a href=#398 id=398 data-nosnippet>398</a>            t.elapsed() &lt; FRAME_DT,
+<a href=#399 id=399 data-nosnippet>399</a>            <span class="string">"woke on arrival, not on the timer ({:?})"</span>,
+<a href=#400 id=400 data-nosnippet>400</a>            t.elapsed()
+<a href=#401 id=401 data-nosnippet>401</a>        );
+<a href=#402 id=402 data-nosnippet>402</a>        producer.join().unwrap();
+<a href=#403 id=403 data-nosnippet>403</a>    }
+<a href=#404 id=404 data-nosnippet>404</a>
+<a href=#405 id=405 data-nosnippet>405</a>    <span class="doccomment">/// A frame that arrives inside the rate floor is HELD, not dropped: the embedder
+<a href=#406 id=406 data-nosnippet>406</a>    /// re-pulls at ~30 Hz, so converting faster is wasted work.
+<a href=#407 id=407 data-nosnippet>407</a>    </span><span class="attr">#[test]
+<a href=#408 id=408 data-nosnippet>408</a>    </span><span class="kw">fn </span>next_frame_holds_a_frame_until_the_rate_floor() {
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw">let </span>mb = Mailbox::new();
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span>stop = AtomicBool::new(<span class="bool-val">false</span>);
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw-2">*</span>mb.slot.lock().unwrap() = <span class="prelude-val">Some</span>(frame());
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">let </span>floor = Duration::from_millis(<span class="number">40</span>);
+<a href=#413 id=413 data-nosnippet>413</a>
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="kw">let </span>t = Instant::now();
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>got = next_frame(<span class="kw-2">&amp;</span>mb, <span class="kw-2">&amp;</span>stop, Instant::now() + floor);
 <a href=#416 id=416 data-nosnippet>416</a>
-<a href=#417 id=417 data-nosnippet>417</a>    <span class="doccomment">/// A stopping thread is not left parked: the flag is observed without a push.
-<a href=#418 id=418 data-nosnippet>418</a>    </span><span class="attr">#[test]
-<a href=#419 id=419 data-nosnippet>419</a>    </span><span class="kw">fn </span>next_frame_returns_when_stopped() {
-<a href=#420 id=420 data-nosnippet>420</a>        <span class="kw">let </span>mb = Mailbox::new();
-<a href=#421 id=421 data-nosnippet>421</a>        <span class="kw">let </span>stop = AtomicBool::new(<span class="bool-val">true</span>);
-<a href=#422 id=422 data-nosnippet>422</a>        <span class="macro">assert!</span>(next_frame(<span class="kw-2">&amp;</span>mb, <span class="kw-2">&amp;</span>stop, Instant::now()).is_none());
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="macro">assert!</span>(got.is_some(), <span class="string">"held, never dropped"</span>);
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="macro">assert!</span>(
+<a href=#419 id=419 data-nosnippet>419</a>            t.elapsed() &gt;= floor - Duration::from_millis(<span class="number">5</span>),
+<a href=#420 id=420 data-nosnippet>420</a>            <span class="string">"waited out the floor ({:?})"</span>,
+<a href=#421 id=421 data-nosnippet>421</a>            t.elapsed()
+<a href=#422 id=422 data-nosnippet>422</a>        );
 <a href=#423 id=423 data-nosnippet>423</a>    }
 <a href=#424 id=424 data-nosnippet>424</a>
-<a href=#425 id=425 data-nosnippet>425</a>    <span class="doccomment">/// A gone stream's mailbox is pruned, so its last I420 buffer is released.
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="doccomment">/// A stopping thread is not left parked: the flag is observed without a push.
 <a href=#426 id=426 data-nosnippet>426</a>    </span><span class="attr">#[test]
-<a href=#427 id=427 data-nosnippet>427</a>    </span><span class="kw">fn </span>drop_stream_prunes_an_unattached_mailbox() {
-<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span>key = <span class="string">"test:drop-stream"</span>;
-<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">let </span>mb = mailbox_for(key);
-<a href=#430 id=430 data-nosnippet>430</a>        <span class="kw-2">*</span>mb.slot.lock().unwrap() = <span class="prelude-val">Some</span>(frame());
-<a href=#431 id=431 data-nosnippet>431</a>
-<a href=#432 id=432 data-nosnippet>432</a>        drop_stream(key);
-<a href=#433 id=433 data-nosnippet>433</a>
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="macro">assert!</span>(
-<a href=#435 id=435 data-nosnippet>435</a>            !mailboxes().lock().unwrap().contains_key(key),
-<a href=#436 id=436 data-nosnippet>436</a>            <span class="string">"map entry pruned"
-<a href=#437 id=437 data-nosnippet>437</a>        </span>);
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="macro">assert_eq!</span>(Arc::strong_count(<span class="kw-2">&amp;</span>mb), <span class="number">1</span>, <span class="string">"nothing else holds the mailbox"</span>);
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="macro">assert!</span>(
-<a href=#440 id=440 data-nosnippet>440</a>            mailbox_for(key).slot.lock().unwrap().is_none(),
-<a href=#441 id=441 data-nosnippet>441</a>            <span class="string">"a later push gets a fresh, empty mailbox"
-<a href=#442 id=442 data-nosnippet>442</a>        </span>);
-<a href=#443 id=443 data-nosnippet>443</a>        drop_stream(key);
-<a href=#444 id=444 data-nosnippet>444</a>    }
-<a href=#445 id=445 data-nosnippet>445</a>}
+<a href=#427 id=427 data-nosnippet>427</a>    </span><span class="kw">fn </span>next_frame_returns_when_stopped() {
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span>mb = Mailbox::new();
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">let </span>stop = AtomicBool::new(<span class="bool-val">true</span>);
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="macro">assert!</span>(next_frame(<span class="kw-2">&amp;</span>mb, <span class="kw-2">&amp;</span>stop, Instant::now()).is_none());
+<a href=#431 id=431 data-nosnippet>431</a>    }
+<a href=#432 id=432 data-nosnippet>432</a>
+<a href=#433 id=433 data-nosnippet>433</a>    <span class="doccomment">/// A gone stream's mailbox is pruned, so its last I420 buffer is released.
+<a href=#434 id=434 data-nosnippet>434</a>    </span><span class="attr">#[test]
+<a href=#435 id=435 data-nosnippet>435</a>    </span><span class="kw">fn </span>drop_stream_prunes_an_unattached_mailbox() {
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="kw">let </span>key = <span class="string">"test:drop-stream"</span>;
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">let </span>mb = mailbox_for(key);
+<a href=#438 id=438 data-nosnippet>438</a>        <span class="kw-2">*</span>mb.slot.lock().unwrap() = <span class="prelude-val">Some</span>(frame());
+<a href=#439 id=439 data-nosnippet>439</a>
+<a href=#440 id=440 data-nosnippet>440</a>        drop_stream(key);
+<a href=#441 id=441 data-nosnippet>441</a>
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="macro">assert!</span>(
+<a href=#443 id=443 data-nosnippet>443</a>            !mailboxes().lock().unwrap().contains_key(key),
+<a href=#444 id=444 data-nosnippet>444</a>            <span class="string">"map entry pruned"
+<a href=#445 id=445 data-nosnippet>445</a>        </span>);
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="macro">assert_eq!</span>(Arc::strong_count(<span class="kw-2">&amp;</span>mb), <span class="number">1</span>, <span class="string">"nothing else holds the mailbox"</span>);
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="macro">assert!</span>(
+<a href=#448 id=448 data-nosnippet>448</a>            mailbox_for(key).slot.lock().unwrap().is_none(),
+<a href=#449 id=449 data-nosnippet>449</a>            <span class="string">"a later push gets a fresh, empty mailbox"
+<a href=#450 id=450 data-nosnippet>450</a>        </span>);
+<a href=#451 id=451 data-nosnippet>451</a>        drop_stream(key);
+<a href=#452 id=452 data-nosnippet>452</a>    }
+<a href=#453 id=453 data-nosnippet>453</a>}
 </code></pre></div></section></main></body></html>
