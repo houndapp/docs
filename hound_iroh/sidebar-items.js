@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CLOSE_TIMEOUT"],"fn":["close_bounded"],"struct":["GracefulEndpoint"]};
