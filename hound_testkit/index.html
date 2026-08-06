@@ -24,10 +24,11 @@ the last-observed state on timeout.</dd><dt><a class="mod" href="env/index.html"
 lazily-bootstrapped default community (<code>general</code>/<code>voice</code> space pair), and
 per-run-unique participant emails.</dd><dt><a class="mod" href="mailpit/index.html" title="mod hound_testkit::mailpit">mailpit</a></dt><dd>Mailpit polling: find the magic-link email the backend sent and pull out its
 sign-in code. Moved here (from <code>tools/houndbot</code>) so both <code>houndbot</code> and the
-scenario suite share one implementation.</dd><dt><a class="mod" href="messaging/index.html" title="mod hound_testkit::messaging">messaging</a></dt><dd>Messaging over an opened text space: send + a deadline-bounded,
-watch-driven wait for a message with matching contents to arrive via the
-realtime plane (or be present already — history + a same-tick echo both
-land in the same <code>watch_messages</code> channel).</dd><dt><a class="mod" href="participant/index.html" title="mod hound_testkit::participant">participant</a></dt><dd>A signed-in scenario participant: an in-process <code>Arc&lt;HoundClient&gt;</code> plus the
+scenario suite share one implementation.</dd><dt><a class="mod" href="messaging/index.html" title="mod hound_testkit::messaging">messaging</a></dt><dd>Messaging over an opened text space: send/edit + deadline-bounded,
+watch-driven waits for messages to arrive via the realtime plane (or be
+present already — history + a same-tick echo both land in the same
+<code>watch_messages</code> channel). Never a blind <code>sleep</code>-then-assert; every
+<code>expect_*</code> fails printing the last observed list.</dd><dt><a class="mod" href="participant/index.html" title="mod hound_testkit::participant">participant</a></dt><dd>A signed-in scenario participant: an in-process <code>Arc&lt;HoundClient&gt;</code> plus the
 call/messaging handles built on top of it.</dd><dt><a class="mod" href="remote/index.html" title="mod hound_testkit::remote">remote</a></dt><dd>Remote-target mode: running the scenario suite against a DEPLOYED hound
 (staging, or a new cluster pre-DNS-cutover) instead of the local compose
 stack. Selected explicitly by <code>hound-stack e2e --target &lt;url&gt;</code> — never by

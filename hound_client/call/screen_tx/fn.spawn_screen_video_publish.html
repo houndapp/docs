@@ -3,11 +3,11 @@
     path: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>,
     enc_rx: Receiver&lt;Frame&gt;,
     adapt: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../adapt/struct.AdaptShared.html" title="struct hound_client::call::adapt::AdaptShared">AdaptShared</a>&gt;,
-    neg_dims: Dimensions,
+    neg_dims: <a class="struct" href="../../../hound_engine/types/struct.Dimensions.html" title="struct hound_engine::types::Dimensions">Dimensions</a>,
     rtt_conn: Connection,
     screen_quality: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;ArcSwap&lt;ScreenQuality&gt;&gt;,
     stats: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../../stats/struct.CallStats.html" title="struct hound_client::stats::CallStats">CallStats</a>&gt;,
-    codec: VideoCodec,
+    codec: <a class="enum" href="../../../hound_engine/types/enum.VideoCodec.html" title="enum hound_engine::types::VideoCodec">VideoCodec</a>,
 ) -&gt; JoinHandle&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.unit.html">()</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The async screen VIDEO publish task: acquire the <code>screen</code> track, gate on a live
 subscriber, then forward each encoded AU while running the 1 s adaptation tick
 (screen ladder). Mirrors the camera publish task. Reads <code>screen_quality</code> each tick

@@ -197,91 +197,105 @@
 <a href=#197 id=197 data-nosnippet>197</a>        <span class="bool-val">false
 <a href=#198 id=198 data-nosnippet>198</a>    </span>}
 <a href=#199 id=199 data-nosnippet>199</a>
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="doccomment">/// The opened device's native sample rate (Hz). The mix bus uses this only as a
-<a href=#201 id=201 data-nosnippet>201</a>    /// heuristic: a rate other than the engine rate means the device was opened
-<a href=#202 id=202 data-nosnippet>202</a>    /// resampled — in practice a Bluetooth headset in hands-free (HFP) mode, whose
-<a href=#203 id=203 data-nosnippet>203</a>    /// SCO link is often not yet carrying audio when the stream first opens (silent
-<a href=#204 id=204 data-nosnippet>204</a>    /// first connect that a reopen fixes). Default = engine rate, so sinks that don't
-<a href=#205 id=205 data-nosnippet>205</a>    /// report it (and every test fake) opt out of the warmup reopen entirely.
-<a href=#206 id=206 data-nosnippet>206</a>    </span><span class="kw">fn </span>device_rate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
-<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">crate</span>::types::SAMPLE_RATE.hz()
-<a href=#208 id=208 data-nosnippet>208</a>    }
-<a href=#209 id=209 data-nosnippet>209</a>}
-<a href=#210 id=210 data-nosnippet>210</a>
-<a href=#211 id=211 data-nosnippet>211</a><span class="doccomment">/// A running camera/screen source producing timestamped raw frames.
-<a href=#212 id=212 data-nosnippet>212</a>///
-<a href=#213 id=213 data-nosnippet>213</a>/// ## Implementor contract
-<a href=#214 id=214 data-nosnippet>214</a>/// * Construction negotiated a format and began delivery, reporting the
-<a href=#215 id=215 data-nosnippet>215</a>///   geometry the consumer will actually receive via [`Self::negotiated`]
-<a href=#216 id=216 data-nosnippet>216</a>///   (cameras rarely honour the exact ask; backends scale to the requested
-<a href=#217 id=217 data-nosnippet>217</a>///   encode target so the encoder geometry always matches).
-<a href=#218 id=218 data-nosnippet>218</a>/// * [`Self::next_frame`] blocks until the next frame or returns `Err` when
-<a href=#219 id=219 data-nosnippet>219</a>///   the stream ended / the device was lost. Frames are stamped on the
-<a href=#220 id=220 data-nosnippet>220</a>///   capture clock supplied at open.
-<a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">pub trait </span>VideoCapture: sealed::Sealed {
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="doccomment">/// Block until the next frame is available.
-<a href=#223 id=223 data-nosnippet>223</a>    </span><span class="kw">fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;RawFrame, CaptureError&gt;;
+<a href=#200 id=200 data-nosnippet>200</a>    <span class="doccomment">/// Read+clear "the OS automatically rerouted this stream to a different device".
+<a href=#201 id=201 data-nosnippet>201</a>    ///
+<a href=#202 id=202 data-nosnippet>202</a>    /// Distinct from [`Self::is_dead`] on purpose: the stream is **still playing** (cpal
+<a href=#203 id=203 data-nosnippet>203</a>    /// reports `ErrorKind::DeviceChanged` as informational — "the stream was automatically
+<a href=#204 id=204 data-nosnippet>204</a>    /// rerouted […] no rebuild is required"), so tearing it down on the spot is wrong and
+<a href=#205 id=205 data-nosnippet>205</a>    /// costs a blocking device open on the RT mix thread per event. What IS stale is the
+<a href=#206 id=206 data-nosnippet>206</a>    /// sink's geometry — [`Self::device_rate`], its resampler, and therefore the scale of
+<a href=#207 id=207 data-nosnippet>207</a>    /// [`Self::buffered_ms`] — so the bus debounces these edges and re-opens ONCE after
+<a href=#208 id=208 data-nosnippet>208</a>    /// the route stops flapping. Edge-triggered (read+clear). Default false for sinks that
+<a href=#209 id=209 data-nosnippet>209</a>    /// cannot observe a reroute.
+<a href=#210 id=210 data-nosnippet>210</a>    </span><span class="kw">fn </span>take_route_changed(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="bool-val">false
+<a href=#212 id=212 data-nosnippet>212</a>    </span>}
+<a href=#213 id=213 data-nosnippet>213</a>
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="doccomment">/// The opened device's native sample rate (Hz). The mix bus uses this only as a
+<a href=#215 id=215 data-nosnippet>215</a>    /// heuristic: a rate other than the engine rate means the device was opened
+<a href=#216 id=216 data-nosnippet>216</a>    /// resampled — in practice a Bluetooth headset in hands-free (HFP) mode, whose
+<a href=#217 id=217 data-nosnippet>217</a>    /// SCO link is often not yet carrying audio when the stream first opens (silent
+<a href=#218 id=218 data-nosnippet>218</a>    /// first connect that a reopen fixes). Default = engine rate, so sinks that don't
+<a href=#219 id=219 data-nosnippet>219</a>    /// report it (and every test fake) opt out of the warmup reopen entirely.
+<a href=#220 id=220 data-nosnippet>220</a>    </span><span class="kw">fn </span>device_rate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">crate</span>::types::SAMPLE_RATE.hz()
+<a href=#222 id=222 data-nosnippet>222</a>    }
+<a href=#223 id=223 data-nosnippet>223</a>}
 <a href=#224 id=224 data-nosnippet>224</a>
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="doccomment">/// The geometry + pixel format delivered frames carry (the encode
-<a href=#226 id=226 data-nosnippet>226</a>    /// target, post any internal scale).
-<a href=#227 id=227 data-nosnippet>227</a>    </span><span class="kw">fn </span>negotiated(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (Dimensions, PixelFormat);
-<a href=#228 id=228 data-nosnippet>228</a>}
-<a href=#229 id=229 data-nosnippet>229</a>
-<a href=#230 id=230 data-nosnippet>230</a><span class="doccomment">/// A video encoder: raw frames in, encoded chunks out, with keyframe and
-<a href=#231 id=231 data-nosnippet>231</a>/// bitrate control. One per outbound video track.
-<a href=#232 id=232 data-nosnippet>232</a>///
-<a href=#233 id=233 data-nosnippet>233</a>/// ## Implementor contract
-<a href=#234 id=234 data-nosnippet>234</a>/// * [`Self::encode`] may return **zero or more** chunks for one input frame:
-<a href=#235 id=235 data-nosnippet>235</a>///   look-ahead encoders buffer internally, so early frames can yield nothing
-<a href=#236 id=236 data-nosnippet>236</a>///   and a later frame can flush several. The caller must not assume 1:1.
-<a href=#237 id=237 data-nosnippet>237</a>/// * [`Self::request_keyframe`] forces the *next* encoded frame to be a
-<a href=#238 id=238 data-nosnippet>238</a>///   keyframe (IDR). Callers coalesce PLI storms before driving it.
-<a href=#239 id=239 data-nosnippet>239</a>/// * [`Self::set_bitrate`] retargets rate control live; best-effort.
-<a href=#240 id=240 data-nosnippet>240</a>/// * [`Self::flush`] drains any buffered frames at stream end.
-<a href=#241 id=241 data-nosnippet>241</a></span><span class="kw">pub trait </span>VideoEncode: sealed::Sealed {
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="doccomment">/// The codec this encoder produces (for packet headers).
-<a href=#243 id=243 data-nosnippet>243</a>    </span><span class="kw">fn </span>codec(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VideoCodec;
-<a href=#244 id=244 data-nosnippet>244</a>
-<a href=#245 id=245 data-nosnippet>245</a>    <span class="doccomment">/// A short human label for the encode path actually in use, including whether
-<a href=#246 id=246 data-nosnippet>246</a>    /// it is hardware- or software-backed (e.g. `"VideoToolbox (hardware)"`,
-<a href=#247 id=247 data-nosnippet>247</a>    /// `"openh264 (software)"`). For diagnostics — surfaced in the call logs so a
-<a href=#248 id=248 data-nosnippet>248</a>    /// software-encode fallback (CPU-heavy) is visible alongside the decode path.
-<a href=#249 id=249 data-nosnippet>249</a>    </span><span class="kw">fn </span>backend(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str;
-<a href=#250 id=250 data-nosnippet>250</a>
-<a href=#251 id=251 data-nosnippet>251</a>    <span class="doccomment">/// Encode one raw frame. Returns any encoded chunks now ready.
-<a href=#252 id=252 data-nosnippet>252</a>    </span><span class="kw">fn </span>encode(<span class="kw-2">&amp;mut </span><span class="self">self</span>, frame: <span class="kw-2">&amp;</span>RawFrame) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;EncodedChunk&gt;, CaptureError&gt;;
-<a href=#253 id=253 data-nosnippet>253</a>
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="doccomment">/// Force the next encoded frame to be a keyframe (IDR/key).
-<a href=#255 id=255 data-nosnippet>255</a>    </span><span class="kw">fn </span>request_keyframe(<span class="kw-2">&amp;mut </span><span class="self">self</span>);
-<a href=#256 id=256 data-nosnippet>256</a>
-<a href=#257 id=257 data-nosnippet>257</a>    <span class="doccomment">/// Retarget the rate controller. Best-effort.
-<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">fn </span>set_bitrate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bitrate: Bitrate) -&gt; <span class="prelude-ty">Result</span>&lt;(), CaptureError&gt;;
-<a href=#259 id=259 data-nosnippet>259</a>
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="doccomment">/// Drain buffered frames (call once at stream end).
-<a href=#261 id=261 data-nosnippet>261</a>    </span><span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;EncodedChunk&gt;, CaptureError&gt;;
-<a href=#262 id=262 data-nosnippet>262</a>}
-<a href=#263 id=263 data-nosnippet>263</a>
-<a href=#264 id=264 data-nosnippet>264</a><span class="doccomment">/// A video decoder: encoded chunks in, raw frames out. The receive-side
-<a href=#265 id=265 data-nosnippet>265</a>/// complement to [`VideoEncode`]; one per inbound video track.
-<a href=#266 id=266 data-nosnippet>266</a>///
-<a href=#267 id=267 data-nosnippet>267</a>/// ## Implementor contract
-<a href=#268 id=268 data-nosnippet>268</a>/// * [`Self::decode`] takes one encoded access unit and returns **zero or
-<a href=#269 id=269 data-nosnippet>269</a>///   one** decoded [`RawFrame`]. Zero is normal and not an error: a decoder
-<a href=#270 id=270 data-nosnippet>270</a>///   cannot emit anything until it has seen the in-band bootstrap (H.264
-<a href=#271 id=271 data-nosnippet>271</a>///   SPS/PPS, AV1 sequence header), so pre-keyframe chunks are dropped.
-<a href=#272 id=272 data-nosnippet>272</a>/// * Decoded frames are [`PixelFormat::I420`] (backends that decode to NV12
-<a href=#273 id=273 data-nosnippet>273</a>///   natively convert before returning) at the decoded picture dimensions.
-<a href=#274 id=274 data-nosnippet>274</a></span><span class="kw">pub trait </span>VideoDecode: sealed::Sealed {
-<a href=#275 id=275 data-nosnippet>275</a>    <span class="doccomment">/// The codec this decoder consumes.
-<a href=#276 id=276 data-nosnippet>276</a>    </span><span class="kw">fn </span>codec(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VideoCodec;
+<a href=#225 id=225 data-nosnippet>225</a><span class="doccomment">/// A running camera/screen source producing timestamped raw frames.
+<a href=#226 id=226 data-nosnippet>226</a>///
+<a href=#227 id=227 data-nosnippet>227</a>/// ## Implementor contract
+<a href=#228 id=228 data-nosnippet>228</a>/// * Construction negotiated a format and began delivery, reporting the
+<a href=#229 id=229 data-nosnippet>229</a>///   geometry the consumer will actually receive via [`Self::negotiated`]
+<a href=#230 id=230 data-nosnippet>230</a>///   (cameras rarely honour the exact ask; backends scale to the requested
+<a href=#231 id=231 data-nosnippet>231</a>///   encode target so the encoder geometry always matches).
+<a href=#232 id=232 data-nosnippet>232</a>/// * [`Self::next_frame`] blocks until the next frame or returns `Err` when
+<a href=#233 id=233 data-nosnippet>233</a>///   the stream ended / the device was lost. Frames are stamped on the
+<a href=#234 id=234 data-nosnippet>234</a>///   capture clock supplied at open.
+<a href=#235 id=235 data-nosnippet>235</a></span><span class="kw">pub trait </span>VideoCapture: sealed::Sealed {
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="doccomment">/// Block until the next frame is available.
+<a href=#237 id=237 data-nosnippet>237</a>    </span><span class="kw">fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;RawFrame, CaptureError&gt;;
+<a href=#238 id=238 data-nosnippet>238</a>
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="doccomment">/// The geometry + pixel format delivered frames carry (the encode
+<a href=#240 id=240 data-nosnippet>240</a>    /// target, post any internal scale).
+<a href=#241 id=241 data-nosnippet>241</a>    </span><span class="kw">fn </span>negotiated(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (Dimensions, PixelFormat);
+<a href=#242 id=242 data-nosnippet>242</a>}
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a><span class="doccomment">/// A video encoder: raw frames in, encoded chunks out, with keyframe and
+<a href=#245 id=245 data-nosnippet>245</a>/// bitrate control. One per outbound video track.
+<a href=#246 id=246 data-nosnippet>246</a>///
+<a href=#247 id=247 data-nosnippet>247</a>/// ## Implementor contract
+<a href=#248 id=248 data-nosnippet>248</a>/// * [`Self::encode`] may return **zero or more** chunks for one input frame:
+<a href=#249 id=249 data-nosnippet>249</a>///   look-ahead encoders buffer internally, so early frames can yield nothing
+<a href=#250 id=250 data-nosnippet>250</a>///   and a later frame can flush several. The caller must not assume 1:1.
+<a href=#251 id=251 data-nosnippet>251</a>/// * [`Self::request_keyframe`] forces the *next* encoded frame to be a
+<a href=#252 id=252 data-nosnippet>252</a>///   keyframe (IDR). Callers coalesce PLI storms before driving it.
+<a href=#253 id=253 data-nosnippet>253</a>/// * [`Self::set_bitrate`] retargets rate control live; best-effort.
+<a href=#254 id=254 data-nosnippet>254</a>/// * [`Self::flush`] drains any buffered frames at stream end.
+<a href=#255 id=255 data-nosnippet>255</a></span><span class="kw">pub trait </span>VideoEncode: sealed::Sealed {
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// The codec this encoder produces (for packet headers).
+<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">fn </span>codec(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VideoCodec;
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="doccomment">/// A short human label for the encode path actually in use, including whether
+<a href=#260 id=260 data-nosnippet>260</a>    /// it is hardware- or software-backed (e.g. `"VideoToolbox (hardware)"`,
+<a href=#261 id=261 data-nosnippet>261</a>    /// `"openh264 (software)"`). For diagnostics — surfaced in the call logs so a
+<a href=#262 id=262 data-nosnippet>262</a>    /// software-encode fallback (CPU-heavy) is visible alongside the decode path.
+<a href=#263 id=263 data-nosnippet>263</a>    </span><span class="kw">fn </span>backend(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str;
+<a href=#264 id=264 data-nosnippet>264</a>
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="doccomment">/// Encode one raw frame. Returns any encoded chunks now ready.
+<a href=#266 id=266 data-nosnippet>266</a>    </span><span class="kw">fn </span>encode(<span class="kw-2">&amp;mut </span><span class="self">self</span>, frame: <span class="kw-2">&amp;</span>RawFrame) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;EncodedChunk&gt;, CaptureError&gt;;
+<a href=#267 id=267 data-nosnippet>267</a>
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="doccomment">/// Force the next encoded frame to be a keyframe (IDR/key).
+<a href=#269 id=269 data-nosnippet>269</a>    </span><span class="kw">fn </span>request_keyframe(<span class="kw-2">&amp;mut </span><span class="self">self</span>);
+<a href=#270 id=270 data-nosnippet>270</a>
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="doccomment">/// Retarget the rate controller. Best-effort.
+<a href=#272 id=272 data-nosnippet>272</a>    </span><span class="kw">fn </span>set_bitrate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bitrate: Bitrate) -&gt; <span class="prelude-ty">Result</span>&lt;(), CaptureError&gt;;
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="doccomment">/// Drain buffered frames (call once at stream end).
+<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;EncodedChunk&gt;, CaptureError&gt;;
+<a href=#276 id=276 data-nosnippet>276</a>}
 <a href=#277 id=277 data-nosnippet>277</a>
-<a href=#278 id=278 data-nosnippet>278</a>    <span class="doccomment">/// Decode one encoded access unit. `None` while pre-bootstrap/buffering.
-<a href=#279 id=279 data-nosnippet>279</a>    </span><span class="kw">fn </span>decode(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chunk: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;RawFrame&gt;, CaptureError&gt;;
-<a href=#280 id=280 data-nosnippet>280</a>
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="doccomment">/// A short human label for the decode path actually in use, including whether
-<a href=#282 id=282 data-nosnippet>282</a>    /// it is hardware- or software-backed (e.g. `"VideoToolbox (hardware)"`,
-<a href=#283 id=283 data-nosnippet>283</a>    /// `"openh264 (software)"`). For diagnostics — surfaced in the call logs so a
-<a href=#284 id=284 data-nosnippet>284</a>    /// CPU-burning software-decode fallback (e.g. AV1 with no HW block) is visible.
-<a href=#285 id=285 data-nosnippet>285</a>    </span><span class="kw">fn </span>backend(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str;
-<a href=#286 id=286 data-nosnippet>286</a>}
+<a href=#278 id=278 data-nosnippet>278</a><span class="doccomment">/// A video decoder: encoded chunks in, raw frames out. The receive-side
+<a href=#279 id=279 data-nosnippet>279</a>/// complement to [`VideoEncode`]; one per inbound video track.
+<a href=#280 id=280 data-nosnippet>280</a>///
+<a href=#281 id=281 data-nosnippet>281</a>/// ## Implementor contract
+<a href=#282 id=282 data-nosnippet>282</a>/// * [`Self::decode`] takes one encoded access unit and returns **zero or
+<a href=#283 id=283 data-nosnippet>283</a>///   one** decoded [`RawFrame`]. Zero is normal and not an error: a decoder
+<a href=#284 id=284 data-nosnippet>284</a>///   cannot emit anything until it has seen the in-band bootstrap (H.264
+<a href=#285 id=285 data-nosnippet>285</a>///   SPS/PPS, AV1 sequence header), so pre-keyframe chunks are dropped.
+<a href=#286 id=286 data-nosnippet>286</a>/// * Decoded frames are [`PixelFormat::I420`] (backends that decode to NV12
+<a href=#287 id=287 data-nosnippet>287</a>///   natively convert before returning) at the decoded picture dimensions.
+<a href=#288 id=288 data-nosnippet>288</a></span><span class="kw">pub trait </span>VideoDecode: sealed::Sealed {
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="doccomment">/// The codec this decoder consumes.
+<a href=#290 id=290 data-nosnippet>290</a>    </span><span class="kw">fn </span>codec(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VideoCodec;
+<a href=#291 id=291 data-nosnippet>291</a>
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="doccomment">/// Decode one encoded access unit. `None` while pre-bootstrap/buffering.
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">fn </span>decode(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chunk: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;RawFrame&gt;, CaptureError&gt;;
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="doccomment">/// A short human label for the decode path actually in use, including whether
+<a href=#296 id=296 data-nosnippet>296</a>    /// it is hardware- or software-backed (e.g. `"VideoToolbox (hardware)"`,
+<a href=#297 id=297 data-nosnippet>297</a>    /// `"openh264 (software)"`). For diagnostics — surfaced in the call logs so a
+<a href=#298 id=298 data-nosnippet>298</a>    /// CPU-burning software-decode fallback (e.g. AV1 with no HW block) is visible.
+<a href=#299 id=299 data-nosnippet>299</a>    </span><span class="kw">fn </span>backend(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str;
+<a href=#300 id=300 data-nosnippet>300</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_DEADLINE"],"struct":["TextSpace"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_DEADLINE"],"fn":["describe"],"struct":["TextSpace"]};

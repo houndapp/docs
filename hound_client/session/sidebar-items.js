@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["user_id_from_jwt"],"struct":["MemorySessionStore","Session","StoredTokens"],"trait":["SessionStore"]};
+window.SIDEBAR_ITEMS = {"constant":["REFRESH_FALLBACK_LEAD","REFRESH_TICK"],"fn":["access_token_due","peek_claims","refresh_due","user_id_from_jwt"],"struct":["MemorySessionStore","Session","SessionInner","SessionReauth","StoredTokens","TokenClaims"],"trait":["SessionStore"]};
