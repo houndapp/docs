@@ -112,89 +112,215 @@
 <a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">use </span>uuid::Uuid;
 <a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">use </span>webauthn_authenticator_rs::AuthenticatorBackend;
 <a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">use </span>webauthn_authenticator_rs::softtoken::SoftToken;
-<a href=#115 id=115 data-nosnippet>115</a>
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="doccomment">/// The dev stack's primary origin: the `hound-auth` page the
-<a href=#119 id=119 data-nosnippet>119</a>    /// browser-deferred ceremony runs in (`services/backend/compose.dev.yaml`,
-<a href=#120 id=120 data-nosnippet>120</a>    /// mirrored in `tools/stack/src/backend.rs`'s `RP_ORIGIN`).
-<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="kw">const </span>DEV_BROWSER_ORIGIN: <span class="kw-2">&amp;</span>str = <span class="string">"http://localhost:3100"</span>;
-<a href=#122 id=122 data-nosnippet>122</a>
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// The origin a NATIVE macOS/iOS ceremony presents. Apple's app-based
-<a href=#124 id=124 data-nosnippet>124</a>    /// WebAuthn (`ASAuthorization*PublicKeyCredential*`) has no web page to
-<a href=#125 id=125 data-nosnippet>125</a>    /// take an origin from, so it synthesises `https://&lt;rpId&gt;` — always https,
-<a href=#126 id=126 data-nosnippet>126</a>    /// never a port, whatever the relying party actually listens on. With
-<a href=#127 id=127 data-nosnippet>127</a>    /// `rp_id = localhost` (dev) that is this string; in prod it is
-<a href=#128 id=128 data-nosnippet>128</a>    /// `https://api.hound.chat`, which already equals `RP_ORIGIN` and so needs
-<a href=#129 id=129 data-nosnippet>129</a>    /// no extra entry. Dev is the case that needs one.
-<a href=#130 id=130 data-nosnippet>130</a>    </span><span class="kw">const </span>NATIVE_APPLE_ORIGIN: <span class="kw-2">&amp;</span>str = <span class="string">"https://localhost"</span>;
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="doccomment">/// Long enough that the software token never times out; it does no IO.
-<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">const </span>TIMEOUT_MS: u32 = <span class="number">5_000</span>;
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="comment">// Only the stored-credential guards below reach past the ceremony API into
+<a href=#116 id=116 data-nosnippet>116</a>    // the key material; nothing outside this module names `webauthn_rs`.
+<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="kw">use </span>webauthn_rs::prelude::{COSEAlgorithm, COSEKeyType};
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#120 id=120 data-nosnippet>120</a>
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="doccomment">/// The dev stack's primary origin: the `hound-auth` page the
+<a href=#122 id=122 data-nosnippet>122</a>    /// browser-deferred ceremony runs in (`services/backend/compose.dev.yaml`,
+<a href=#123 id=123 data-nosnippet>123</a>    /// mirrored in `tools/stack/src/backend.rs`'s `RP_ORIGIN`).
+<a href=#124 id=124 data-nosnippet>124</a>    </span><span class="kw">const </span>DEV_BROWSER_ORIGIN: <span class="kw-2">&amp;</span>str = <span class="string">"http://localhost:3100"</span>;
+<a href=#125 id=125 data-nosnippet>125</a>
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="doccomment">/// The origin a NATIVE macOS/iOS ceremony presents. Apple's app-based
+<a href=#127 id=127 data-nosnippet>127</a>    /// WebAuthn (`ASAuthorization*PublicKeyCredential*`) has no web page to
+<a href=#128 id=128 data-nosnippet>128</a>    /// take an origin from, so it synthesises `https://&lt;rpId&gt;` — always https,
+<a href=#129 id=129 data-nosnippet>129</a>    /// never a port, whatever the relying party actually listens on. With
+<a href=#130 id=130 data-nosnippet>130</a>    /// `rp_id = localhost` (dev) that is this string; in prod it is
+<a href=#131 id=131 data-nosnippet>131</a>    /// `https://api.hound.chat`, which already equals `RP_ORIGIN` and so needs
+<a href=#132 id=132 data-nosnippet>132</a>    /// no extra entry. Dev is the case that needs one.
+<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">const </span>NATIVE_APPLE_ORIGIN: <span class="kw-2">&amp;</span>str = <span class="string">"https://localhost"</span>;
 <a href=#134 id=134 data-nosnippet>134</a>
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// A full register + authenticate round trip against `rp`, with the
-<a href=#136 id=136 data-nosnippet>136</a>    /// authenticator signing `origin` into `clientDataJSON` — the only knob
-<a href=#137 id=137 data-nosnippet>137</a>    /// this test needs, since origin validation is the whole subject.
-<a href=#138 id=138 data-nosnippet>138</a>    ///
-<a href=#139 id=139 data-nosnippet>139</a>    /// `SoftToken::new(true)` (`falsify_uv`): webauthn-rs's *passkey* ceremony
-<a href=#140 id=140 data-nosnippet>140</a>    /// always demands user verification, so a token that reports itself
-<a href=#141 id=141 data-nosnippet>141</a>    /// UV-incapable fails inside the authenticator before the RP ever sees an
-<a href=#142 id=142 data-nosnippet>142</a>    /// origin. Authenticator-side calls therefore `expect` — a failure there is
-<a href=#143 id=143 data-nosnippet>143</a>    /// a broken test, not the assertion under test; only the two `RelyingParty`
-<a href=#144 id=144 data-nosnippet>144</a>    /// finish calls are allowed to fail, and both fail with the same
-<a href=#145 id=145 data-nosnippet>145</a>    /// `WebauthnError::InvalidRPOrigin`.
-<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="kw">fn </span>round_trip(rp: <span class="kw-2">&amp;</span>RelyingParty, origin: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), PasskeyError&gt; {
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span>origin = Url::parse(origin).expect(<span class="string">"test origin parses"</span>);
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>token, _ca) = SoftToken::new(<span class="bool-val">true</span>).expect(<span class="string">"build software token"</span>);
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let </span>(challenge, reg_state) =
-<a href=#151 id=151 data-nosnippet>151</a>            rp.start_registration(Uuid::now_v7(), <span class="string">"user@hound.chat"</span>, <span class="string">"Test User"</span>)<span class="question-mark">?</span>;
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span>credential = token
-<a href=#153 id=153 data-nosnippet>153</a>            .perform_register(origin.clone(), challenge.public_key, TIMEOUT_MS)
-<a href=#154 id=154 data-nosnippet>154</a>            .expect(<span class="string">"software token creates a credential"</span>);
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span>passkey = rp.finish_registration(<span class="kw-2">&amp;</span>credential, <span class="kw-2">&amp;</span>reg_state)<span class="question-mark">?</span>;
-<a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">let </span>(challenge, auth_state) = rp.start_authentication(<span class="kw-2">&amp;</span>[passkey])<span class="question-mark">?</span>;
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>assertion = token
-<a href=#159 id=159 data-nosnippet>159</a>            .perform_auth(origin, challenge.public_key, TIMEOUT_MS)
-<a href=#160 id=160 data-nosnippet>160</a>            .expect(<span class="string">"software token signs an assertion"</span>);
-<a href=#161 id=161 data-nosnippet>161</a>        rp.finish_authentication(<span class="kw-2">&amp;</span>assertion, <span class="kw-2">&amp;</span>auth_state).map(drop)
-<a href=#162 id=162 data-nosnippet>162</a>    }
-<a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="doccomment">/// The dev stack's configuration: the native app's `https://localhost` is
-<a href=#165 id=165 data-nosnippet>165</a>    /// an EXTRA origin next to the browser page's `http://localhost:3100`, and
-<a href=#166 id=166 data-nosnippet>166</a>    /// both complete a ceremony. Without this the native macOS sheet succeeds
-<a href=#167 id=167 data-nosnippet>167</a>    /// and then the backend rejects the result.
-<a href=#168 id=168 data-nosnippet>168</a>    </span><span class="attr">#[test]
-<a href=#169 id=169 data-nosnippet>169</a>    </span><span class="kw">fn </span>both_the_browser_page_and_the_native_app_origin_are_accepted() {
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>rp = RelyingParty::new(
-<a href=#171 id=171 data-nosnippet>171</a>            <span class="string">"localhost"</span>,
-<a href=#172 id=172 data-nosnippet>172</a>            <span class="kw-2">&amp;</span>DEV_BROWSER_ORIGIN.parse().unwrap(),
-<a href=#173 id=173 data-nosnippet>173</a>            <span class="kw-2">&amp;</span>[NATIVE_APPLE_ORIGIN.parse().unwrap()],
-<a href=#174 id=174 data-nosnippet>174</a>        )
-<a href=#175 id=175 data-nosnippet>175</a>        .unwrap();
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a>        round_trip(<span class="kw-2">&amp;</span>rp, DEV_BROWSER_ORIGIN).expect(<span class="string">"browser-page ceremony"</span>);
-<a href=#178 id=178 data-nosnippet>178</a>        round_trip(<span class="kw-2">&amp;</span>rp, NATIVE_APPLE_ORIGIN).expect(<span class="string">"native macOS/iOS ceremony"</span>);
-<a href=#179 id=179 data-nosnippet>179</a>    }
-<a href=#180 id=180 data-nosnippet>180</a>
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="doccomment">/// The guard the entry above pays for: `https://localhost` differs from
-<a href=#182 id=182 data-nosnippet>182</a>    /// `http://localhost:3100` in both scheme and port, and webauthn-rs matches
-<a href=#183 id=183 data-nosnippet>183</a>    /// origins exactly (no `allow_any_port`, no scheme coercion), so dropping
-<a href=#184 id=184 data-nosnippet>184</a>    /// the extra origin silently breaks native sign-in.
-<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="attr">#[test]
-<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">fn </span>the_native_app_origin_is_rejected_when_not_configured() {
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let </span>rp = RelyingParty::new(<span class="string">"localhost"</span>, <span class="kw-2">&amp;</span>DEV_BROWSER_ORIGIN.parse().unwrap(), <span class="kw-2">&amp;</span>[]).unwrap();
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>err = round_trip(<span class="kw-2">&amp;</span>rp, NATIVE_APPLE_ORIGIN)
-<a href=#190 id=190 data-nosnippet>190</a>            .expect_err(<span class="string">"an unlisted origin must not complete a ceremony"</span>);
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="macro">assert!</span>(
-<a href=#192 id=192 data-nosnippet>192</a>            <span class="macro">matches!</span>(
-<a href=#193 id=193 data-nosnippet>193</a>                err,
-<a href=#194 id=194 data-nosnippet>194</a>                PasskeyError::WebAuthn(webauthn_rs::prelude::WebauthnError::InvalidRPOrigin)
-<a href=#195 id=195 data-nosnippet>195</a>            ),
-<a href=#196 id=196 data-nosnippet>196</a>            <span class="string">"expected InvalidRPOrigin, got: {err:?}"</span>,
-<a href=#197 id=197 data-nosnippet>197</a>        );
-<a href=#198 id=198 data-nosnippet>198</a>    }
-<a href=#199 id=199 data-nosnippet>199</a>}
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// Long enough that the software token never times out; it does no IO.
+<a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">const </span>TIMEOUT_MS: u32 = <span class="number">5_000</span>;
+<a href=#137 id=137 data-nosnippet>137</a>
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="doccomment">/// A full register + authenticate round trip against `rp`, with the
+<a href=#139 id=139 data-nosnippet>139</a>    /// authenticator signing `origin` into `clientDataJSON` — the only knob
+<a href=#140 id=140 data-nosnippet>140</a>    /// this test needs, since origin validation is the whole subject.
+<a href=#141 id=141 data-nosnippet>141</a>    ///
+<a href=#142 id=142 data-nosnippet>142</a>    /// `SoftToken::new(true)` (`falsify_uv`): webauthn-rs's *passkey* ceremony
+<a href=#143 id=143 data-nosnippet>143</a>    /// always demands user verification, so a token that reports itself
+<a href=#144 id=144 data-nosnippet>144</a>    /// UV-incapable fails inside the authenticator before the RP ever sees an
+<a href=#145 id=145 data-nosnippet>145</a>    /// origin. Authenticator-side calls therefore `expect` — a failure there is
+<a href=#146 id=146 data-nosnippet>146</a>    /// a broken test, not the assertion under test; only the two `RelyingParty`
+<a href=#147 id=147 data-nosnippet>147</a>    /// finish calls are allowed to fail, and both fail with the same
+<a href=#148 id=148 data-nosnippet>148</a>    /// `WebauthnError::InvalidRPOrigin`.
+<a href=#149 id=149 data-nosnippet>149</a>    </span><span class="kw">fn </span>round_trip(rp: <span class="kw-2">&amp;</span>RelyingParty, origin: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), PasskeyError&gt; {
+<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let </span>origin = Url::parse(origin).expect(<span class="string">"test origin parses"</span>);
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>token, _ca) = SoftToken::new(<span class="bool-val">true</span>).expect(<span class="string">"build software token"</span>);
+<a href=#152 id=152 data-nosnippet>152</a>
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>(challenge, reg_state) =
+<a href=#154 id=154 data-nosnippet>154</a>            rp.start_registration(Uuid::now_v7(), <span class="string">"user@hound.chat"</span>, <span class="string">"Test User"</span>)<span class="question-mark">?</span>;
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span>credential = token
+<a href=#156 id=156 data-nosnippet>156</a>            .perform_register(origin.clone(), challenge.public_key, TIMEOUT_MS)
+<a href=#157 id=157 data-nosnippet>157</a>            .expect(<span class="string">"software token creates a credential"</span>);
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>passkey = rp.finish_registration(<span class="kw-2">&amp;</span>credential, <span class="kw-2">&amp;</span>reg_state)<span class="question-mark">?</span>;
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">let </span>(challenge, auth_state) = rp.start_authentication(<span class="kw-2">&amp;</span>[passkey])<span class="question-mark">?</span>;
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>assertion = token
+<a href=#162 id=162 data-nosnippet>162</a>            .perform_auth(origin, challenge.public_key, TIMEOUT_MS)
+<a href=#163 id=163 data-nosnippet>163</a>            .expect(<span class="string">"software token signs an assertion"</span>);
+<a href=#164 id=164 data-nosnippet>164</a>        rp.finish_authentication(<span class="kw-2">&amp;</span>assertion, <span class="kw-2">&amp;</span>auth_state).map(drop)
+<a href=#165 id=165 data-nosnippet>165</a>    }
+<a href=#166 id=166 data-nosnippet>166</a>
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="doccomment">/// The dev stack's configuration: the native app's `https://localhost` is
+<a href=#168 id=168 data-nosnippet>168</a>    /// an EXTRA origin next to the browser page's `http://localhost:3100`, and
+<a href=#169 id=169 data-nosnippet>169</a>    /// both complete a ceremony. Without this the native macOS sheet succeeds
+<a href=#170 id=170 data-nosnippet>170</a>    /// and then the backend rejects the result.
+<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="attr">#[test]
+<a href=#172 id=172 data-nosnippet>172</a>    </span><span class="kw">fn </span>both_the_browser_page_and_the_native_app_origin_are_accepted() {
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">let </span>rp = RelyingParty::new(
+<a href=#174 id=174 data-nosnippet>174</a>            <span class="string">"localhost"</span>,
+<a href=#175 id=175 data-nosnippet>175</a>            <span class="kw-2">&amp;</span>DEV_BROWSER_ORIGIN.parse().unwrap(),
+<a href=#176 id=176 data-nosnippet>176</a>            <span class="kw-2">&amp;</span>[NATIVE_APPLE_ORIGIN.parse().unwrap()],
+<a href=#177 id=177 data-nosnippet>177</a>        )
+<a href=#178 id=178 data-nosnippet>178</a>        .unwrap();
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a>        round_trip(<span class="kw-2">&amp;</span>rp, DEV_BROWSER_ORIGIN).expect(<span class="string">"browser-page ceremony"</span>);
+<a href=#181 id=181 data-nosnippet>181</a>        round_trip(<span class="kw-2">&amp;</span>rp, NATIVE_APPLE_ORIGIN).expect(<span class="string">"native macOS/iOS ceremony"</span>);
+<a href=#182 id=182 data-nosnippet>182</a>    }
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="doccomment">/// The guard the entry above pays for: `https://localhost` differs from
+<a href=#185 id=185 data-nosnippet>185</a>    /// `http://localhost:3100` in both scheme and port, and webauthn-rs matches
+<a href=#186 id=186 data-nosnippet>186</a>    /// origins exactly (no `allow_any_port`, no scheme coercion), so dropping
+<a href=#187 id=187 data-nosnippet>187</a>    /// the extra origin silently breaks native sign-in.
+<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="attr">#[test]
+<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="kw">fn </span>the_native_app_origin_is_rejected_when_not_configured() {
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>rp = RelyingParty::new(<span class="string">"localhost"</span>, <span class="kw-2">&amp;</span>DEV_BROWSER_ORIGIN.parse().unwrap(), <span class="kw-2">&amp;</span>[]).unwrap();
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>err = round_trip(<span class="kw-2">&amp;</span>rp, NATIVE_APPLE_ORIGIN)
+<a href=#193 id=193 data-nosnippet>193</a>            .expect_err(<span class="string">"an unlisted origin must not complete a ceremony"</span>);
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="macro">assert!</span>(
+<a href=#195 id=195 data-nosnippet>195</a>            <span class="macro">matches!</span>(
+<a href=#196 id=196 data-nosnippet>196</a>                err,
+<a href=#197 id=197 data-nosnippet>197</a>                PasskeyError::WebAuthn(webauthn_rs::prelude::WebauthnError::InvalidRPOrigin)
+<a href=#198 id=198 data-nosnippet>198</a>            ),
+<a href=#199 id=199 data-nosnippet>199</a>            <span class="string">"expected InvalidRPOrigin, got: {err:?}"</span>,
+<a href=#200 id=200 data-nosnippet>200</a>        );
+<a href=#201 id=201 data-nosnippet>201</a>    }
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="comment">// ---------------------------------------------------------------------
+<a href=#204 id=204 data-nosnippet>204</a>    // Stored-credential compatibility (webauthn-rs 0.5.5 -&gt; 0.6.x-dev).
+<a href=#205 id=205 data-nosnippet>205</a>    //
+<a href=#206 id=206 data-nosnippet>206</a>    // PERMANENT REGRESSION GUARD — do not delete on a version bump; re-run it.
+<a href=#207 id=207 data-nosnippet>207</a>    //
+<a href=#208 id=208 data-nosnippet>208</a>    // The backend persists `Passkey` as a JSON column, and prod holds rows
+<a href=#209 id=209 data-nosnippet>209</a>    // written by webauthn-rs 0.5.5. The 0.6 line replaced OpenSSL with
+<a href=#210 id=210 data-nosnippet>210</a>    // RustCrypto (`crypto-glue`) under the same public types, so nothing in
+<a href=#211 id=211 data-nosnippet>211</a>    // the compiler stops a serde-shape or key-interpretation change from
+<a href=#212 id=212 data-nosnippet>212</a>    // locking every existing user out — only these fixtures do.
+<a href=#213 id=213 data-nosnippet>213</a>    //
+<a href=#214 id=214 data-nosnippet>214</a>    // `tests/fixtures/*-v0.5.5.json` were captured under 0.5.5 and are frozen:
+<a href=#215 id=215 data-nosnippet>215</a>    // - `passkey-es256-v0.5.5.json` + `assertion-es256-v0.5.5.json` come from
+<a href=#216 id=216 data-nosnippet>216</a>    //   one real softtoken ceremony (register, then authenticate) that 0.5.5
+<a href=#217 id=217 data-nosnippet>217</a>    //   itself accepted, so a failure here is 0.6's.
+<a href=#218 id=218 data-nosnippet>218</a>    // - `passkey-rs256-v0.5.5.json` is hand-built in the 0.5.5 shape and was
+<a href=#219 id=219 data-nosnippet>219</a>    //   round-trip-verified under 0.5.5: RS256 (-257) is advertised alongside
+<a href=#220 id=220 data-nosnippet>220</a>    //   ES256 (-7) by both lines and is what Windows Hello / TPM keys use, but
+<a href=#221 id=221 data-nosnippet>221</a>    //   the softtoken only ever mints ES256, so it cannot be captured live.
+<a href=#222 id=222 data-nosnippet>222</a>    // ---------------------------------------------------------------------
+<a href=#223 id=223 data-nosnippet>223</a>
+<a href=#224 id=224 data-nosnippet>224</a>    </span><span class="kw">const </span>ES256_PASSKEY: <span class="kw-2">&amp;</span>str = <span class="macro">include_str!</span>(<span class="string">"../tests/fixtures/passkey-es256-v0.5.5.json"</span>);
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">const </span>ES256_ASSERTION: <span class="kw-2">&amp;</span>str = <span class="macro">include_str!</span>(<span class="string">"../tests/fixtures/assertion-es256-v0.5.5.json"</span>);
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">const </span>RS256_PASSKEY: <span class="kw-2">&amp;</span>str = <span class="macro">include_str!</span>(<span class="string">"../tests/fixtures/passkey-rs256-v0.5.5.json"</span>);
+<a href=#227 id=227 data-nosnippet>227</a>
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="doccomment">/// The bytes WebAuthn signs over: `authenticatorData || SHA-256(clientDataJSON)`
+<a href=#229 id=229 data-nosnippet>229</a>    /// (§7.2 step 19). Re-derived here so the guard can verify a captured
+<a href=#230 id=230 data-nosnippet>230</a>    /// assertion directly against the stored key, with no in-flight ceremony
+<a href=#231 id=231 data-nosnippet>231</a>    /// state to serialise.
+<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">fn </span>signed_bytes(assertion: <span class="kw-2">&amp;</span>PublicKeyCredential) -&gt; Vec&lt;u8&gt; {
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">use </span>sha2::{Digest, Sha256};
+<a href=#234 id=234 data-nosnippet>234</a>
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">let </span><span class="kw-2">mut </span>data = assertion.response.authenticator_data.clone();
+<a href=#236 id=236 data-nosnippet>236</a>        data.extend_from_slice(<span class="kw-2">&amp;</span>Sha256::digest(<span class="kw-2">&amp;</span>assertion.response.client_data_json));
+<a href=#237 id=237 data-nosnippet>237</a>        data
+<a href=#238 id=238 data-nosnippet>238</a>    }
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a>    <span class="doccomment">/// A 0.5.5-written ES256 row still loads, still enters a ceremony, and its
+<a href=#241 id=241 data-nosnippet>241</a>    /// public key still verifies the signature its own authenticator produced
+<a href=#242 id=242 data-nosnippet>242</a>    /// back then. The last clause is the one that matters: it proves the stored
+<a href=#243 id=243 data-nosnippet>243</a>    /// key material means the same thing to RustCrypto that it meant to OpenSSL.
+<a href=#244 id=244 data-nosnippet>244</a>    </span><span class="attr">#[test]
+<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="kw">fn </span>a_v055_es256_credential_still_loads_and_verifies() {
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>passkey: Passkey =
+<a href=#247 id=247 data-nosnippet>247</a>            serde_json::from_str(ES256_PASSKEY).expect(<span class="string">"0.5.5 ES256 row deserialises"</span>);
+<a href=#248 id=248 data-nosnippet>248</a>        <span class="kw">let </span>assertion: PublicKeyCredential =
+<a href=#249 id=249 data-nosnippet>249</a>            serde_json::from_str(ES256_ASSERTION).expect(<span class="string">"0.5.5 assertion deserialises"</span>);
+<a href=#250 id=250 data-nosnippet>250</a>
+<a href=#251 id=251 data-nosnippet>251</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>passkey.cred_algorithm(), COSEAlgorithm::ES256);
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="macro">assert_eq!</span>(
+<a href=#253 id=253 data-nosnippet>253</a>            passkey.cred_id().as_slice(),
+<a href=#254 id=254 data-nosnippet>254</a>            assertion.raw_id.as_slice(),
+<a href=#255 id=255 data-nosnippet>255</a>            <span class="string">"fixtures must come from the same credential"</span>,
+<a href=#256 id=256 data-nosnippet>256</a>        );
+<a href=#257 id=257 data-nosnippet>257</a>
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="comment">// The row is usable as ceremony input, not merely as bytes.
+<a href=#259 id=259 data-nosnippet>259</a>        </span><span class="kw">let </span>rp = RelyingParty::new(<span class="string">"localhost"</span>, <span class="kw-2">&amp;</span>DEV_BROWSER_ORIGIN.parse().unwrap(), <span class="kw-2">&amp;</span>[]).unwrap();
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">let </span>(challenge, _state) = rp
+<a href=#261 id=261 data-nosnippet>261</a>            .start_authentication(std::slice::from_ref(<span class="kw-2">&amp;</span>passkey))
+<a href=#262 id=262 data-nosnippet>262</a>            .expect(<span class="string">"a stored credential can open an authentication ceremony"</span>);
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span>allowed = challenge.public_key.allow_credentials;
+<a href=#264 id=264 data-nosnippet>264</a>        <span class="macro">assert_eq!</span>(allowed.len(), <span class="number">1</span>);
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="macro">assert_eq!</span>(allowed[<span class="number">0</span>].id.as_slice(), passkey.cred_id().as_slice());
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="macro">assert!</span>(
+<a href=#268 id=268 data-nosnippet>268</a>            passkey
+<a href=#269 id=269 data-nosnippet>269</a>                .get_public_key()
+<a href=#270 id=270 data-nosnippet>270</a>                .verify_signature(<span class="kw-2">&amp;</span>assertion.response.signature, <span class="kw-2">&amp;</span>signed_bytes(<span class="kw-2">&amp;</span>assertion))
+<a href=#271 id=271 data-nosnippet>271</a>                .expect(<span class="string">"the stored ES256 key is usable for verification"</span>),
+<a href=#272 id=272 data-nosnippet>272</a>            <span class="string">"the 0.5.5 assertion must still verify against the 0.5.5 public key"</span>,
+<a href=#273 id=273 data-nosnippet>273</a>        );
+<a href=#274 id=274 data-nosnippet>274</a>    }
+<a href=#275 id=275 data-nosnippet>275</a>
+<a href=#276 id=276 data-nosnippet>276</a>    <span class="doccomment">/// The RS256 half of the same guard. No captured assertion (see the module
+<a href=#277 id=277 data-nosnippet>277</a>    /// comment), so instead of verifying a real signature this drives
+<a href=#278 id=278 data-nosnippet>278</a>    /// `verify_signature` — which parses the stored modulus/exponent BEFORE it
+<a href=#279 id=279 data-nosnippet>279</a>    /// looks at the signature — with a correctly-sized dud. `Ok(false)` means
+<a href=#280 id=280 data-nosnippet>280</a>    /// the key parsed and merely didn't match; a stored key RustCrypto cannot
+<a href=#281 id=281 data-nosnippet>281</a>    /// read would come back `Err(RsaParametersInvalid)` instead, which is
+<a href=#282 id=282 data-nosnippet>282</a>    /// exactly the lockout this guard exists to catch.
+<a href=#283 id=283 data-nosnippet>283</a>    </span><span class="attr">#[test]
+<a href=#284 id=284 data-nosnippet>284</a>    </span><span class="kw">fn </span>a_v055_rs256_credential_still_loads() {
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">let </span>passkey: Passkey =
+<a href=#286 id=286 data-nosnippet>286</a>            serde_json::from_str(RS256_PASSKEY).expect(<span class="string">"0.5.5 RS256 row deserialises"</span>);
+<a href=#287 id=287 data-nosnippet>287</a>
+<a href=#288 id=288 data-nosnippet>288</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>passkey.cred_algorithm(), COSEAlgorithm::RS256);
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">let </span>COSEKeyType::RSA(rsa) = <span class="kw-2">&amp;</span>passkey.get_public_key().key <span class="kw">else </span>{
+<a href=#290 id=290 data-nosnippet>290</a>            <span class="macro">panic!</span>(
+<a href=#291 id=291 data-nosnippet>291</a>                <span class="string">"expected an RSA key, got {:?}"</span>,
+<a href=#292 id=292 data-nosnippet>292</a>                passkey.get_public_key().key
+<a href=#293 id=293 data-nosnippet>293</a>            );
+<a href=#294 id=294 data-nosnippet>294</a>        };
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="macro">assert_eq!</span>(rsa.n.len(), <span class="number">256</span>, <span class="string">"2048-bit modulus survives the round trip"</span>);
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="macro">assert_eq!</span>(rsa.e, [<span class="number">0x01</span>, <span class="number">0x00</span>, <span class="number">0x01</span>]);
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="macro">assert!</span>(
+<a href=#298 id=298 data-nosnippet>298</a>            !passkey
+<a href=#299 id=299 data-nosnippet>299</a>                .get_public_key()
+<a href=#300 id=300 data-nosnippet>300</a>                .verify_signature(<span class="kw-2">&amp;</span>[<span class="number">0u8</span>; <span class="number">256</span>], <span class="string">b"not the signed bytes"</span>)
+<a href=#301 id=301 data-nosnippet>301</a>                .expect(<span class="string">"the stored RSA key is usable for verification"</span>),
+<a href=#302 id=302 data-nosnippet>302</a>            <span class="string">"a dud signature must not verify"</span>,
+<a href=#303 id=303 data-nosnippet>303</a>        );
+<a href=#304 id=304 data-nosnippet>304</a>
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">let </span>rp = RelyingParty::new(<span class="string">"localhost"</span>, <span class="kw-2">&amp;</span>DEV_BROWSER_ORIGIN.parse().unwrap(), <span class="kw-2">&amp;</span>[]).unwrap();
+<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">let </span>(challenge, _state) = rp
+<a href=#307 id=307 data-nosnippet>307</a>            .start_authentication(std::slice::from_ref(<span class="kw-2">&amp;</span>passkey))
+<a href=#308 id=308 data-nosnippet>308</a>            .expect(<span class="string">"a stored credential can open an authentication ceremony"</span>);
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="macro">assert_eq!</span>(challenge.public_key.allow_credentials.len(), <span class="number">1</span>);
+<a href=#310 id=310 data-nosnippet>310</a>    }
+<a href=#311 id=311 data-nosnippet>311</a>
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="doccomment">/// Re-serialising a 0.5.5 row must reproduce it byte for byte. The backend
+<a href=#313 id=313 data-nosnippet>313</a>    /// rewrites the whole column on every counter roll (`update_credential` -&gt;
+<a href=#314 id=314 data-nosnippet>314</a>    /// `update_passkey`), so a one-way-compatible shape would silently rewrite
+<a href=#315 id=315 data-nosnippet>315</a>    /// prod into a form only 0.6 can read — an upgrade that cannot be rolled
+<a href=#316 id=316 data-nosnippet>316</a>    /// back. Pretty-printed because that is what the fixtures store.
+<a href=#317 id=317 data-nosnippet>317</a>    </span><span class="attr">#[test]
+<a href=#318 id=318 data-nosnippet>318</a>    </span><span class="kw">fn </span>rewriting_a_v055_row_does_not_change_it() {
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">for </span>(name, fixture) <span class="kw">in </span>[(<span class="string">"es256"</span>, ES256_PASSKEY), (<span class="string">"rs256"</span>, RS256_PASSKEY)] {
+<a href=#320 id=320 data-nosnippet>320</a>            <span class="kw">let </span>passkey: Passkey = serde_json::from_str(fixture).expect(<span class="string">"row deserialises"</span>);
+<a href=#321 id=321 data-nosnippet>321</a>            <span class="kw">let </span>rewritten = serde_json::to_string_pretty(<span class="kw-2">&amp;</span>passkey).expect(<span class="string">"row reserialises"</span>);
+<a href=#322 id=322 data-nosnippet>322</a>            <span class="macro">assert_eq!</span>(rewritten.trim(), fixture.trim(), <span class="string">"{name} row changed shape"</span>);
+<a href=#323 id=323 data-nosnippet>323</a>        }
+<a href=#324 id=324 data-nosnippet>324</a>    }
+<a href=#325 id=325 data-nosnippet>325</a>}
 </code></pre></div></section></main></body></html>

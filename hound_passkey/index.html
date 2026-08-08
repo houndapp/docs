@@ -30,8 +30,8 @@ state machine is what produces it) plus a generic variant for the authenticator
 seam and anything that doesn’t originate in the crypto machine.</dd><dt><a class="mod" href="proto/index.html" title="mod hound_passkey::proto">proto</a></dt><dd>The canonical WebAuthn wire types — re-exported from <code>webauthn-rs-proto</code> so
 every caller (the relying party AND the client authenticator seam) shares ONE
 vocabulary rather than passing opaque <code>serde_json::Value</code>s around.</dd><dt><a class="mod" href="rp/index.html" title="mod hound_passkey::rp">rp</a></dt><dd>The relying-party ceremony wrapper. Behind the <code>rp</code> feature because it links
-<code>webauthn-rs</code> (and transitively <code>openssl</code>) — enabled by the relying party (the
-backend), not the client.
+<code>webauthn-rs</code> and its crypto — dead weight on the client, which only ever
+speaks the wire types. Enabled by the relying party (the backend).
 The sans-IO relying party: a thin wrapper over <code>webauthn_rs::Webauthn</code>
 exposing the four ceremony calls plus the RP-config accessors the
 <code>.well-known</code> endpoints read. It owns NO state beyond

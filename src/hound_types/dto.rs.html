@@ -179,28 +179,48 @@
 <a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">pub </span>enabled: bool,
 <a href=#180 id=180 data-nosnippet>180</a>}
 <a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a><span class="doccomment">/// One SFU node's registration status, as reported by `GET /internal/sfu/nodes`.
-<a href=#183 id=183 data-nosnippet>183</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-<a href=#184 id=184 data-nosnippet>184</a></span><span class="kw">pub struct </span>SfuNodeStatus {
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">pub </span>node_id: String,
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">pub </span>draining: bool,
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="doccomment">/// Seen within the registry's liveness TTL — eligible for selection.
-<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="kw">pub </span>live: bool,
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="doccomment">/// Current active relay-session count, from the node's last registration
-<a href=#190 id=190 data-nosnippet>190</a>    /// heartbeat. `#[serde(default)]` so a response from an older backend (or
-<a href=#191 id=191 data-nosnippet>191</a>    /// a node that hasn't upgraded to report it yet) still deserializes —
-<a href=#192 id=192 data-nosnippet>192</a>    /// `None` in both cases.
-<a href=#193 id=193 data-nosnippet>193</a>    </span><span class="attr">#[serde(default)]
-<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">pub </span>sessions: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#195 id=195 data-nosnippet>195</a>}
-<a href=#196 id=196 data-nosnippet>196</a>
-<a href=#197 id=197 data-nosnippet>197</a><span class="doccomment">/// Response for `GET /internal/sfu/nodes`: the backend's SFU registry, the
-<a href=#198 id=198 data-nosnippet>198</a>/// contract tooling polls instead of scraping backend log lines. Internal
-<a href=#199 id=199 data-nosnippet>199</a>/// (bearer = relay HMAC secret), so deliberately not in the public OpenAPI.
-<a href=#200 id=200 data-nosnippet>200</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-<a href=#201 id=201 data-nosnippet>201</a></span><span class="kw">pub struct </span>SfuNodesResponse {
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">pub </span>nodes: Vec&lt;SfuNodeStatus&gt;,
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="doccomment">/// The node new voice joins currently route to.
-<a href=#204 id=204 data-nosnippet>204</a>    </span><span class="kw">pub </span>best: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#205 id=205 data-nosnippet>205</a>}
+<a href=#182 id=182 data-nosnippet>182</a><span class="comment">// ─── realtime ────────────────────────────────────────────────────────────────
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a></span><span class="doccomment">/// Response for `GET /realtime/config`: how to reach the realtime plane.
+<a href=#185 id=185 data-nosnippet>185</a>///
+<a href=#186 id=186 data-nosnippet>186</a>/// The client reads this once at startup. `webtransport_url` present means "try
+<a href=#187 id=187 data-nosnippet>187</a>/// WebTransport, fall back to the WebSocket on failure"; absent means the
+<a href=#188 id=188 data-nosnippet>188</a>/// instance runs no WebTransport endpoint and the WebSocket is the only leg.
+<a href=#189 id=189 data-nosnippet>189</a>/// `cert_hash` is the SHA-256 digest (dotted lowercase hex) the client must pin
+<a href=#190 id=190 data-nosnippet>190</a>/// — present only for a self-signed development endpoint; a production endpoint
+<a href=#191 id=191 data-nosnippet>191</a>/// carries a CA-issued certificate and omits it.
+<a href=#192 id=192 data-nosnippet>192</a></span><span class="attr">#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+<a href=#193 id=193 data-nosnippet>193</a>#[cfg_attr(feature = <span class="string">"utoipa"</span>, derive(utoipa::ToSchema))]
+<a href=#194 id=194 data-nosnippet>194</a></span><span class="kw">pub struct </span>RealtimeConfig {
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="attr">#[cfg_attr(feature = <span class="string">"utoipa"</span>, schema(example = <span class="string">"https://rt.hound.chat/realtime"</span>))]
+<a href=#196 id=196 data-nosnippet>196</a>    #[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#197 id=197 data-nosnippet>197</a>    </span><span class="kw">pub </span>webtransport_url: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">pub </span>cert_hash: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#200 id=200 data-nosnippet>200</a>}
+<a href=#201 id=201 data-nosnippet>201</a>
+<a href=#202 id=202 data-nosnippet>202</a><span class="doccomment">/// One SFU node's registration status, as reported by `GET /internal/sfu/nodes`.
+<a href=#203 id=203 data-nosnippet>203</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+<a href=#204 id=204 data-nosnippet>204</a></span><span class="kw">pub struct </span>SfuNodeStatus {
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">pub </span>node_id: String,
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="kw">pub </span>draining: bool,
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="doccomment">/// Seen within the registry's liveness TTL — eligible for selection.
+<a href=#208 id=208 data-nosnippet>208</a>    </span><span class="kw">pub </span>live: bool,
+<a href=#209 id=209 data-nosnippet>209</a>    <span class="doccomment">/// Current active relay-session count, from the node's last registration
+<a href=#210 id=210 data-nosnippet>210</a>    /// heartbeat. `#[serde(default)]` so a response from an older backend (or
+<a href=#211 id=211 data-nosnippet>211</a>    /// a node that hasn't upgraded to report it yet) still deserializes —
+<a href=#212 id=212 data-nosnippet>212</a>    /// `None` in both cases.
+<a href=#213 id=213 data-nosnippet>213</a>    </span><span class="attr">#[serde(default)]
+<a href=#214 id=214 data-nosnippet>214</a>    </span><span class="kw">pub </span>sessions: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#215 id=215 data-nosnippet>215</a>}
+<a href=#216 id=216 data-nosnippet>216</a>
+<a href=#217 id=217 data-nosnippet>217</a><span class="doccomment">/// Response for `GET /internal/sfu/nodes`: the backend's SFU registry, the
+<a href=#218 id=218 data-nosnippet>218</a>/// contract tooling polls instead of scraping backend log lines. Internal
+<a href=#219 id=219 data-nosnippet>219</a>/// (bearer = relay HMAC secret), so deliberately not in the public OpenAPI.
+<a href=#220 id=220 data-nosnippet>220</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+<a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">pub struct </span>SfuNodesResponse {
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">pub </span>nodes: Vec&lt;SfuNodeStatus&gt;,
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="doccomment">/// The node new voice joins currently route to.
+<a href=#224 id=224 data-nosnippet>224</a>    </span><span class="kw">pub </span>best: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#225 id=225 data-nosnippet>225</a>}
 </code></pre></div></section></main></body></html>

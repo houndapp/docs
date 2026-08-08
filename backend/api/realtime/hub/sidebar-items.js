@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAILBOX_CAPACITY","MAX_CONNS_PER_USER","VOICE_EVICTION_GRACE"],"enum":["Step"],"fn":["authorize_space","init_metrics","message_payload","resolve","run_session","schedule_voice_eviction"],"struct":["Realtime","SessionGuard","SessionLimits","UserSlot"]};

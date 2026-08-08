@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_ADMISSION_TIMEOUT","DEFAULT_KEEP_ALIVE","DEFAULT_MAX_IDLE"],"enum":["Identity","Reject"],"fn":["bearer_of","not_after_of","query_of","query_param_of"],"struct":["CertHash","Incoming","LeafCert","ServerOptions","SessionRequest","WtServer"]};

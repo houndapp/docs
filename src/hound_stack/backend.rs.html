@@ -91,26 +91,41 @@
 <a href=#91 id=91 data-nosnippet>91</a>        // backend's RELAY_HMAC_SECRET".
 <a href=#92 id=92 data-nosnippet>92</a>        </span>.env(<span class="string">"RELAY_HMAC_SECRET"</span>, RELAY_SECRET_DEV)
 <a href=#93 id=93 data-nosnippet>93</a>        .env(<span class="string">"RELAY_URL"</span>, <span class="string">"http://localhost:3340"</span>)
-<a href=#94 id=94 data-nosnippet>94</a>        .env(<span class="string">"STORAGE_LOCAL_DIR"</span>, storage_dir)
-<a href=#95 id=95 data-nosnippet>95</a>        .env(<span class="string">"RUST_LOG"</span>, <span class="string">"info"</span>)
-<a href=#96 id=96 data-nosnippet>96</a>        .stdout(Stdio::from(log_file))
-<a href=#97 id=97 data-nosnippet>97</a>        .stderr(Stdio::from(stderr_file))
-<a href=#98 id=98 data-nosnippet>98</a>        .spawn()
-<a href=#99 id=99 data-nosnippet>99</a>        .with_context(|| <span class="macro">format!</span>(<span class="string">"spawning backend ({})"</span>, binary.display()))<span class="question-mark">?</span>;
-<a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="prelude-val">Ok</span>(BackendProcess {
-<a href=#102 id=102 data-nosnippet>102</a>        child,
-<a href=#103 id=103 data-nosnippet>103</a>        log_path: log_path.to_owned(),
-<a href=#104 id=104 data-nosnippet>104</a>    })
-<a href=#105 id=105 data-nosnippet>105</a>}
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a><span class="doccomment">/// The caller's env value when set and non-empty, else `default` — the seam
-<a href=#108 id=108 data-nosnippet>108</a>/// that lets the native-passkey dev mode re-home the RP trio without a stack
-<a href=#109 id=109 data-nosnippet>109</a>/// rebuild.
-<a href=#110 id=110 data-nosnippet>110</a></span><span class="kw">fn </span>env_or(key: <span class="kw-2">&amp;</span>str, default: <span class="kw-2">&amp;</span>str) -&gt; String {
-<a href=#111 id=111 data-nosnippet>111</a>    std::env::var(key)
-<a href=#112 id=112 data-nosnippet>112</a>        .ok()
-<a href=#113 id=113 data-nosnippet>113</a>        .filter(|v| !v.is_empty())
-<a href=#114 id=114 data-nosnippet>114</a>        .unwrap_or_else(|| default.to_owned())
-<a href=#115 id=115 data-nosnippet>115</a>}
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="comment">// The realtime plane's WebTransport leg. Self-signed in dev: clients
+<a href=#95 id=95 data-nosnippet>95</a>        // pin the hash `GET /realtime/config` publishes, which is also how they
+<a href=#96 id=96 data-nosnippet>96</a>        // learn the endpoint exists at all. The websocket leg stays available
+<a href=#97 id=97 data-nosnippet>97</a>        // regardless, so a client that can't do WebTransport still works.
+<a href=#98 id=98 data-nosnippet>98</a>        </span>.env(<span class="string">"RT_WT_SELF_SIGNED"</span>, <span class="string">"true"</span>)
+<a href=#99 id=99 data-nosnippet>99</a>        .env(<span class="string">"RT_WT_PORT"</span>, <span class="string">"7891"</span>)
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="comment">// The IPv4 literal, NOT `localhost`, deliberately: the endpoint binds
+<a href=#101 id=101 data-nosnippet>101</a>        // `--host` (default `0.0.0.0`), which is the IPv4 wildcard only, while
+<a href=#102 id=102 data-nosnippet>102</a>        // `getaddrinfo("localhost")` returns `::1` first on macOS. The client's
+<a href=#103 id=103 data-nosnippet>103</a>        // resolver takes the first address it is given (see
+<a href=#104 id=104 data-nosnippet>104</a>        // `hound_wt::PinnedResolver`), so a `localhost` URL dials `[::1]:7891`,
+<a href=#105 id=105 data-nosnippet>105</a>        // finds nothing listening, times out, and silently falls back to the
+<a href=#106 id=106 data-nosnippet>106</a>        // websocket leg — the scenarios still pass, over the wrong transport.
+<a href=#107 id=107 data-nosnippet>107</a>        // A deployment that advertises a dual-stack hostname must bind one.
+<a href=#108 id=108 data-nosnippet>108</a>        </span>.env(<span class="string">"RT_WT_URL"</span>, <span class="string">"https://127.0.0.1:7891/realtime"</span>)
+<a href=#109 id=109 data-nosnippet>109</a>        .env(<span class="string">"STORAGE_LOCAL_DIR"</span>, storage_dir)
+<a href=#110 id=110 data-nosnippet>110</a>        .env(<span class="string">"RUST_LOG"</span>, <span class="string">"info"</span>)
+<a href=#111 id=111 data-nosnippet>111</a>        .stdout(Stdio::from(log_file))
+<a href=#112 id=112 data-nosnippet>112</a>        .stderr(Stdio::from(stderr_file))
+<a href=#113 id=113 data-nosnippet>113</a>        .spawn()
+<a href=#114 id=114 data-nosnippet>114</a>        .with_context(|| <span class="macro">format!</span>(<span class="string">"spawning backend ({})"</span>, binary.display()))<span class="question-mark">?</span>;
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="prelude-val">Ok</span>(BackendProcess {
+<a href=#117 id=117 data-nosnippet>117</a>        child,
+<a href=#118 id=118 data-nosnippet>118</a>        log_path: log_path.to_owned(),
+<a href=#119 id=119 data-nosnippet>119</a>    })
+<a href=#120 id=120 data-nosnippet>120</a>}
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a><span class="doccomment">/// The caller's env value when set and non-empty, else `default` — the seam
+<a href=#123 id=123 data-nosnippet>123</a>/// that lets the native-passkey dev mode re-home the RP trio without a stack
+<a href=#124 id=124 data-nosnippet>124</a>/// rebuild.
+<a href=#125 id=125 data-nosnippet>125</a></span><span class="kw">fn </span>env_or(key: <span class="kw-2">&amp;</span>str, default: <span class="kw-2">&amp;</span>str) -&gt; String {
+<a href=#126 id=126 data-nosnippet>126</a>    std::env::var(key)
+<a href=#127 id=127 data-nosnippet>127</a>        .ok()
+<a href=#128 id=128 data-nosnippet>128</a>        .filter(|v| !v.is_empty())
+<a href=#129 id=129 data-nosnippet>129</a>        .unwrap_or_else(|| default.to_owned())
+<a href=#130 id=130 data-nosnippet>130</a>}
 </code></pre></div></section></main></body></html>

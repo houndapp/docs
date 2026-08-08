@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MIN_PROTOCOL_VERSION","PROTOCOL_VERSION"],"enum":["ClientMessage","ErrorCode","ServerMessage","SpaceKind"],"fn":["negotiate_version"],"struct":["Attachment","MessagePayload","SpacePayload"]};

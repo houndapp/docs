@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Authorization","Input","Room","Target"],"fn":["refusal"],"struct":["Conn","ConnId","Connect","Hub","Outgoing"]};

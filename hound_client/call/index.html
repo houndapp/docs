@@ -42,7 +42,7 @@ reconnect attempts; <a href="struct.LevelsView.html" title="struct hound_client:
 <p>A live call heals a dropped control WebSocket or MoQ/iroh connection <strong>without
 the user re-joining</strong> — “nothing drops a call except total network loss.”</p>
 <ul>
-<li><a href="reconnect/struct.Backoff.html" title="struct hound_client::call::reconnect::Backoff"><code>reconnect::Backoff</code></a> + [<code>reconnect::classify</code>] — the pure, headless policy
+<li><a href="reconnect/struct.Backoff.html" title="struct hound_client::call::reconnect::Backoff"><code>reconnect::Backoff</code></a> + <a href="reconnect/fn.classify.html" title="fn hound_client::call::reconnect::classify"><code>reconnect::classify</code></a> — the pure, headless policy
 (exp-backoff+jitter; retryable-vs-fatal over <a href="../error/enum.HoundError.html" title="enum hound_client::error::HoundError"><code>HoundError</code></a>). Only an
 auth/permission outcome (<code>Http 401/403</code> or <code>Auth</code>) is fatal; everything
 transient retries FOREVER.</li>
