@@ -82,7 +82,7 @@ while the ladder pauses video (AudioOnly), so the local tile never freezes.</dd>
 <code>CallView</code> snapshots, exposes the outbound intent queue, and fans the
 keyframe/feedback/quality signals out to the per-track listeners), plus
 <a href="control/fn.dial_relay.html" title="fn hound_client::call::control::dial_relay"><code>dial_relay</code></a> — the iroh endpoint + QUIC connection the MoQ session rides.
-Invariant: the returned <a href="../../hound_iroh/struct.GracefulEndpoint.html" title="struct hound_iroh::GracefulEndpoint"><code>GracefulEndpoint</code></a> must outlive the connection — the
+Invariant: the returned [<code>GracefulEndpoint</code>] must outlive the connection — the
 SFU is relay-only reachable, so dropping the endpoint wedges every stream after
 the handshake. Its drop is also what closes the endpoint, so every exit path
 (bail, abort, teardown) closes the socket gracefully rather than aborting it.</dd><dt><a class="mod" href="policy/index.html" title="mod hound_client::call::policy">policy</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Pure, unit-tested call policy — the sans-IO decision layer. Inputs (sizes,
