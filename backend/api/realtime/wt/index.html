@@ -7,7 +7,7 @@ WebSocket, which is a fully supported configuration, not a degraded one.</p>
 <p>The accept loop’s only job is to hand a peer to a task of its own. Everything
 that waits on the peer — the QUIC/HTTP/3 handshake, reading its credential,
 writing the accept or the refusal — happens inside that task under
-<a href="../../../../hound_wt/server/constant.DEFAULT_ADMISSION_TIMEOUT.html" title="constant hound_wt::server::DEFAULT_ADMISSION_TIMEOUT"><code>hound_wt::DEFAULT_ADMISSION_TIMEOUT</code></a>. A peer that stalls therefore costs one
+[<code>hound_wt::DEFAULT_ADMISSION_TIMEOUT</code>]. A peer that stalls therefore costs one
 task for ten seconds and nothing else; doing the handshake inline would let it
 park every connection queued behind it.</p>
 <h3 id="supervision"><a class="doc-anchor" href="#supervision">§</a>Supervision</h3>

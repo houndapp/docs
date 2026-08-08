@@ -3,7 +3,7 @@
 <code>CallView</code> snapshots, exposes the outbound intent queue, and fans the
 keyframe/feedback/quality signals out to the per-track listeners), plus
 <a href="fn.dial_relay.html" title="fn hound_client::call::control::dial_relay"><code>dial_relay</code></a> — the iroh endpoint + QUIC connection the MoQ session rides.
-Invariant: the returned [<code>GracefulEndpoint</code>] must outlive the connection — the
+Invariant: the returned <a href="../../../hound_iroh/struct.GracefulEndpoint.html" title="struct hound_iroh::GracefulEndpoint"><code>GracefulEndpoint</code></a> must outlive the connection — the
 SFU is relay-only reachable, so dropping the endpoint wedges every stream after
 the handshake. Its drop is also what closes the endpoint, so every exit path
 (bail, abort, teardown) closes the socket gracefully rather than aborting it.</p>
@@ -15,7 +15,7 @@ the QUIC connection the MoQ session rides. The endpoint is per-call with an
 ephemeral key (no persisted device identity yet) — fine for the call’s lifetime;
 sharing it across calls is a later optimization.
 Returns BOTH the endpoint and the connection: the caller MUST keep the
-[<code>GracefulEndpoint</code>] alive for the connection’s lifetime. The SFU is reachable
+<a href="../../../hound_iroh/struct.GracefulEndpoint.html" title="struct hound_iroh::GracefulEndpoint"><code>GracefulEndpoint</code></a> alive for the connection’s lifetime. The SFU is reachable
 only via the relay (it has no client-routable direct address), so all packets —
 including every stream after the handshake — ride the endpoint’s magicsock/relay
 actor. Dropping the endpoint stops that actor, so the QUIC handshake still

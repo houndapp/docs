@@ -2,8 +2,8 @@
     api: &amp;<a class="struct" href="../../struct.Api.html" title="struct backend::api::Api">Api</a>,
     user_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
     space_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
-) -&gt; (<a class="enum" href="https://doc.rust-lang.org/1.93.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>&gt;, <a class="enum" href="../../../../hound_realtime/hub/enum.Authorization.html" title="enum hound_realtime::hub::Authorization">Authorization</a>)</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Resolve a space’s owning community and whether <code>user_id</code> may see it.</p>
-<p>Three-way on purpose. A database failure is <a href="../../../../hound_realtime/hub/enum.Authorization.html#variant.Unavailable" title="variant hound_realtime::hub::Authorization::Unavailable"><code>Authorization::Unavailable</code></a>,
+) -&gt; (<a class="enum" href="https://doc.rust-lang.org/1.93.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>&gt;, Authorization)</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Resolve a space’s owning community and whether <code>user_id</code> may see it.</p>
+<p>Three-way on purpose. A database failure is [<code>Authorization::Unavailable</code>],
 never <code>Denied</code>: telling a member they are not one because a query failed is
 both wrong and unrecoverable from the client’s side, where a retryable answer
 is exactly what the situation calls for.</p>
