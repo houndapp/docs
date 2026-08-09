@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Command"],"fn":["label_value","main","render_bench","render_job","render_visual"],"mod":["criterion","junit","push","visual"],"struct":["Args","Meta","PushArgs"]};
