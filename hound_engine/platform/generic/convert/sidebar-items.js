@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["bgra_to_i420","deinterleave_cbcr","nv12_bytes_to_i420","nv12_bytes_to_i420_cropped","rgb_to_i420","scale_i420","yuyv_to_i420"]};
+window.SIDEBAR_ITEMS = {"fn":["bgra_to_i420","deinterleave_cbcr","halve_edge_pixel","halve_plane","nv12_bytes_to_i420","nv12_bytes_to_i420_cropped","rgb_to_i420","scale_i420","yuyv_to_i420"]};
