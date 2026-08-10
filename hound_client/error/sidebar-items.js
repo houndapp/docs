@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["HoundError"],"type":["Result"]};
+window.SIDEBAR_ITEMS = {"enum":["AuthCode","DecodeCode","HoundError","InternalCode","MediaCode","NetCode","NotFoundCode","RealtimeCode","StateCode"],"macro":["codes"],"type":["Result"]};
