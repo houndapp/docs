@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["APP_ROLE_ENV","EVENT_COOLDOWN","LAUNCH_ID_TAG"],"fn":["admit","app_role","cooled_down","enrich","event_filter","is_first_party","launch_id","uptime","uptime_bucket"],"struct":["AppSnapshot","AudioSnapshot"]};
+window.SIDEBAR_ITEMS = {"constant":["APP_ROLE_ENV","EVENT_COOLDOWN","LAUNCH_ID_TAG"],"fn":["admit","app_role","cooled_down","enrich","event_filter","is_first_party","launch_id","uptime","uptime_bucket"],"struct":["AppSnapshot","AudioSnapshot","VideoSnapshot"]};
