@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BLOB_PATH_ENV"],"fn":["active_blob_path","api","blob_enabled","install_blob","load_blob","set_blob_enabled","sw_h264_available"],"static":["BLOB_ENABLED","BLOB_PATH"],"struct":["Openh264Decoder","Openh264Encoder"]};
+window.SIDEBAR_ITEMS = {"constant":["BLOB_PATH_ENV"],"fn":["active_blob_path","api","blob_enabled","install_blob","load_blob","resolve_env_blob","set_blob_enabled","sw_h264_available"],"static":["BLOB_ENABLED","BLOB_PATH"],"struct":["Openh264Decoder","Openh264Encoder"]};
