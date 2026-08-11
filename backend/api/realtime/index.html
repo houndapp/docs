@@ -8,7 +8,7 @@ QUIC connection, per-stream head-of-line blocking, no TCP handshake to
 re-do after a network change) or a <strong>plain WebSocket</strong> (universally
 reachable, the fallback when WebTransport is unavailable or the endpoint is
 not configured). Both legs authenticate identically, then hand a
-[<code>hound_wt::MessagePipe</code>] to the same <a href="hub/fn.run_session.html" title="fn backend::api::realtime::hub::run_session"><code>hub::run_session</code></a> — the transport
+<a href="../../../hound_wt/pipe/trait.MessagePipe.html" title="trait hound_wt::pipe::MessagePipe"><code>hound_wt::MessagePipe</code></a> to the same <a href="hub/fn.run_session.html" title="fn backend::api::realtime::hub::run_session"><code>hub::run_session</code></a> — the transport
 difference ends there.</p>
 <h3 id="endpoints"><a class="doc-anchor" href="#endpoints">§</a>Endpoints</h3>
 <ul>

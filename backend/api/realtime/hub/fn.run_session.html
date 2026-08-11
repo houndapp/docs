@@ -4,7 +4,7 @@
     user_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
     transport: <a class="enum" href="../enum.Transport.html" title="enum backend::api::realtime::Transport">Transport</a>,
 )<div class="where">where
-    P: MessagePipe + Liveness,</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Drive one authenticated connection for its full lifetime, whichever leg it
+    P: <a class="trait" href="../../../../hound_wt/pipe/trait.MessagePipe.html" title="trait hound_wt::pipe::MessagePipe">MessagePipe</a> + <a class="trait" href="../../../../hound_wt/pipe/trait.Liveness.html" title="trait hound_wt::pipe::Liveness">Liveness</a>,</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Drive one authenticated connection for its full lifetime, whichever leg it
 arrived on.</p>
 <p><code>user_id</code> is the identity from the validated token — never client-supplied —
 and is what every membership check and every stamped event uses.</p>

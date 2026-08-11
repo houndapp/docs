@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BASE_URL","BLOBS","SETTLE_CEILING","VERSION"],"fn":["allow","allowed","cache_path","decompress","host_blob","install","install_at","remove","settle","settled","spawn_install","verify","write_atomically"],"static":["DOWNLOADING","SETTLED"],"struct":["Blob"]};
