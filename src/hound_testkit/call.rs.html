@@ -378,329 +378,357 @@
 <a href=#378 id=378 data-nosnippet>378</a>        }
 <a href=#379 id=379 data-nosnippet>379</a>    }
 <a href=#380 id=380 data-nosnippet>380</a>
-<a href=#381 id=381 data-nosnippet>381</a>    <span class="doccomment">/// Report a remote tile's rendered size + visibility — the *demand* half
-<a href=#382 id=382 data-nosnippet>382</a>    /// of demand-driven simulcast (`HoundClient::call_set_tile_quality`,
-<a href=#383 id=383 data-nosnippet>383</a>    /// what the Flutter grid calls on every relayout). A tile below
-<a href=#384 id=384 data-nosnippet>384</a>    /// `hound_media::TILE_SOURCE_MIN_PIXELS` (or hidden at any size) asks for
-<a href=#385 id=385 data-nosnippet>385</a>    /// the low spatial layer; a large visible tile asks for the source.
-<a href=#386 id=386 data-nosnippet>386</a>    </span><span class="kw">pub async fn </span>set_tile_quality(
-<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#388 id=388 data-nosnippet>388</a>        peer: u32,
-<a href=#389 id=389 data-nosnippet>389</a>        source: VideoSource,
-<a href=#390 id=390 data-nosnippet>390</a>        width: u32,
-<a href=#391 id=391 data-nosnippet>391</a>        height: u32,
-<a href=#392 id=392 data-nosnippet>392</a>        visible: bool,
-<a href=#393 id=393 data-nosnippet>393</a>    ) -&gt; eyre::Result&lt;()&gt; {
-<a href=#394 id=394 data-nosnippet>394</a>        <span class="self">self</span>.participant
-<a href=#395 id=395 data-nosnippet>395</a>            .client()
-<a href=#396 id=396 data-nosnippet>396</a>            .call_set_tile_quality(peer, source.as_client_str().to_string(), width, height, visible)
-<a href=#397 id=397 data-nosnippet>397</a>            .<span class="kw">await
-<a href=#398 id=398 data-nosnippet>398</a>            </span>.map_err(|e| {
-<a href=#399 id=399 data-nosnippet>399</a>                <span class="macro">eyre::eyre!</span>(<span class="string">"set_tile_quality(peer {peer}, {source:?}, {width}x{height}, visible={visible}) failed: {e}"</span>)
-<a href=#400 id=400 data-nosnippet>400</a>            })
-<a href=#401 id=401 data-nosnippet>401</a>    }
-<a href=#402 id=402 data-nosnippet>402</a>
-<a href=#403 id=403 data-nosnippet>403</a>    <span class="doccomment">/// Pause/resume INBOUND video (`HoundClient::call_set_video_paused`) —
-<a href=#404 id=404 data-nosnippet>404</a>    /// what the app does on hide/minimize (`ui/lib/app/hound_app.dart`'s
-<a href=#405 id=405 data-nosnippet>405</a>    /// `onHide`). Audio is deliberately unaffected, which is itself an
-<a href=#406 id=406 data-nosnippet>406</a>    /// assertable property (see `video_resumes_promptly_after_pause`).
-<a href=#407 id=407 data-nosnippet>407</a>    </span><span class="kw">pub async fn </span>set_video_paused(<span class="kw-2">&amp;</span><span class="self">self</span>, paused: bool) -&gt; eyre::Result&lt;()&gt; {
-<a href=#408 id=408 data-nosnippet>408</a>        <span class="self">self</span>.participant
-<a href=#409 id=409 data-nosnippet>409</a>            .client()
-<a href=#410 id=410 data-nosnippet>410</a>            .call_set_video_paused(paused)
-<a href=#411 id=411 data-nosnippet>411</a>            .<span class="kw">await
-<a href=#412 id=412 data-nosnippet>412</a>            </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"set_video_paused({paused}) failed: {e}"</span>))
-<a href=#413 id=413 data-nosnippet>413</a>    }
-<a href=#414 id=414 data-nosnippet>414</a>
-<a href=#415 id=415 data-nosnippet>415</a>    <span class="doccomment">/// Wait for `peer`'s inbound `source` video to grow by at least
-<a href=#416 id=416 data-nosnippet>416</a>    /// `min_delta` frames from the count observed when this call is made —
-<a href=#417 id=417 data-nosnippet>417</a>    /// the per-peer, per-source video counterpart of
-<a href=#418 id=418 data-nosnippet>418</a>    /// [`Self::expect_audio_growth`]. Returns how long that took, so a
-<a href=#419 id=419 data-nosnippet>419</a>    /// scenario can report the measured latency next to the deadline that
-<a href=#420 id=420 data-nosnippet>420</a>    /// bounds it.
-<a href=#421 id=421 data-nosnippet>421</a>    ///
-<a href=#422 id=422 data-nosnippet>422</a>    /// The measured figure carries up to one `call:stats` interval (1 s) of
-<a href=#423 id=423 data-nosnippet>423</a>    /// quantization: the counters are sampled by a 1 Hz emitter, so growth
-<a href=#424 id=424 data-nosnippet>424</a>    /// that happened at t+0.1 s first becomes observable at the next tick.
-<a href=#425 id=425 data-nosnippet>425</a>    /// Any budget asserted through `deadline` must include that second.
-<a href=#426 id=426 data-nosnippet>426</a>    ///
-<a href=#427 id=427 data-nosnippet>427</a>    /// Reset-tolerant: the baseline re-anchors DOWNWARD if the counter drops
-<a href=#428 id=428 data-nosnippet>428</a>    /// (a full re-establish clears the per-peer stats row), so a reconnect
-<a href=#429 id=429 data-nosnippet>429</a>    /// landing mid-window can't wedge this into a false timeout.
-<a href=#430 id=430 data-nosnippet>430</a>    </span><span class="kw">pub async fn </span>expect_video_growth(
-<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#432 id=432 data-nosnippet>432</a>        peer: u32,
-<a href=#433 id=433 data-nosnippet>433</a>        source: VideoSource,
-<a href=#434 id=434 data-nosnippet>434</a>        min_delta: u64,
-<a href=#435 id=435 data-nosnippet>435</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
-<a href=#436 id=436 data-nosnippet>436</a>    ) -&gt; eyre::Result&lt;Duration&gt; {
-<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">let </span><span class="kw-2">mut </span>rx = <span class="self">self</span>.stats_rx.clone();
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="kw">let </span>base = AtomicU64::new(peer_video_frames(<span class="kw-2">&amp;</span>rx.borrow_and_update(), peer, source));
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="kw">let </span>started = tokio::time::Instant::now();
-<a href=#440 id=440 data-nosnippet>440</a>        wait_for(
-<a href=#441 id=441 data-nosnippet>441</a>            deadline,
-<a href=#442 id=442 data-nosnippet>442</a>            <span class="kw-2">&amp;mut </span>rx,
-<a href=#443 id=443 data-nosnippet>443</a>            |s: <span class="kw-2">&amp;</span>StatsSnapshot| {
-<a href=#444 id=444 data-nosnippet>444</a>                <span class="kw">let </span>cur = peer_video_frames(s, peer, source);
-<a href=#445 id=445 data-nosnippet>445</a>                <span class="kw">if </span>cur &lt; base.load(Ordering::Relaxed) {
-<a href=#446 id=446 data-nosnippet>446</a>                    base.store(cur, Ordering::Relaxed); <span class="comment">// counters were cleared — re-anchor
-<a href=#447 id=447 data-nosnippet>447</a>                    </span><span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#448 id=448 data-nosnippet>448</a>                }
-<a href=#449 id=449 data-nosnippet>449</a>                cur - base.load(Ordering::Relaxed) &gt;= min_delta
-<a href=#450 id=450 data-nosnippet>450</a>            },
-<a href=#451 id=451 data-nosnippet>451</a>            |s| {
-<a href=#452 id=452 data-nosnippet>452</a>                <span class="macro">format!</span>(
-<a href=#453 id=453 data-nosnippet>453</a>                    <span class="string">"peer {peer} {source:?} frames_received={} (baseline {}, wanted +{min_delta})"</span>,
-<a href=#454 id=454 data-nosnippet>454</a>                    peer_video_frames(s, peer, source),
-<a href=#455 id=455 data-nosnippet>455</a>                    base.load(Ordering::Relaxed)
-<a href=#456 id=456 data-nosnippet>456</a>                )
-<a href=#457 id=457 data-nosnippet>457</a>            },
-<a href=#458 id=458 data-nosnippet>458</a>        )
-<a href=#459 id=459 data-nosnippet>459</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#460 id=460 data-nosnippet>460</a>        <span class="prelude-val">Ok</span>(started.elapsed())
-<a href=#461 id=461 data-nosnippet>461</a>    }
-<a href=#462 id=462 data-nosnippet>462</a>
-<a href=#463 id=463 data-nosnippet>463</a>    <span class="doccomment">/// The paused half of a pause/resume assertion: `peer`'s inbound `source`
-<a href=#464 id=464 data-nosnippet>464</a>    /// video must STOP.
-<a href=#465 id=465 data-nosnippet>465</a>    ///
-<a href=#466 id=466 data-nosnippet>466</a>    /// Two bounded phases, both watch-driven (it wakes on every stats tick
-<a href=#467 id=467 data-nosnippet>467</a>    /// rather than blind-sleeping a window and checking once):
-<a href=#468 id=468 data-nosnippet>468</a>    ///
-<a href=#469 id=469 data-nosnippet>469</a>    /// 1. **settle** — frames already in flight when the pause request goes
-<a href=#470 id=470 data-nosnippet>470</a>    ///    out are expected to land, and the teardown is asynchronous, so this
-<a href=#471 id=471 data-nosnippet>471</a>    ///    first waits (bounded by `settle`) for a whole stats tick in which
-<a href=#472 id=472 data-nosnippet>472</a>    ///    the counter did not move. Never seeing one is a failure: the pause
-<a href=#473 id=473 data-nosnippet>473</a>    ///    did not take effect.
-<a href=#474 id=474 data-nosnippet>474</a>    /// 2. **quiet** — with the counter anchored at that settled value, video
-<a href=#475 id=475 data-nosnippet>475</a>    ///    must stay stopped for `quiet_for`.
-<a href=#476 id=476 data-nosnippet>476</a>    ///
-<a href=#477 id=477 data-nosnippet>477</a>    /// Anchoring the baseline *after* the settle rather than at call time is
-<a href=#478 id=478 data-nosnippet>478</a>    /// what keeps this from flaking on in-flight frames while still failing
-<a href=#479 id=479 data-nosnippet>479</a>    /// loudly on a pause that never actually stops the stream.
-<a href=#480 id=480 data-nosnippet>480</a>    </span><span class="kw">pub async fn </span>expect_no_video_growth(
-<a href=#481 id=481 data-nosnippet>481</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#482 id=482 data-nosnippet>482</a>        peer: u32,
-<a href=#483 id=483 data-nosnippet>483</a>        source: VideoSource,
-<a href=#484 id=484 data-nosnippet>484</a>        settle: Duration,
-<a href=#485 id=485 data-nosnippet>485</a>        quiet_for: Duration,
-<a href=#486 id=486 data-nosnippet>486</a>    ) -&gt; eyre::Result&lt;()&gt; {
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="kw">let </span><span class="kw-2">mut </span>rx = <span class="self">self</span>.stats_rx.clone();
-<a href=#488 id=488 data-nosnippet>488</a>        <span class="kw">let </span><span class="kw-2">mut </span>last = peer_video_frames(<span class="kw-2">&amp;</span>rx.borrow_and_update(), peer, source);
-<a href=#489 id=489 data-nosnippet>489</a>        <span class="comment">// Phase 1: bounded settle.
-<a href=#490 id=490 data-nosnippet>490</a>        </span><span class="kw">let </span>settle_by = tokio::time::Instant::now() + settle;
-<a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">loop </span>{
-<a href=#492 id=492 data-nosnippet>492</a>            <span class="kw">let </span>now = tokio::time::Instant::now();
-<a href=#493 id=493 data-nosnippet>493</a>            <span class="kw">let </span>still_arriving = || {
-<a href=#494 id=494 data-nosnippet>494</a>                <span class="macro">eyre::eyre!</span>(
-<a href=#495 id=495 data-nosnippet>495</a>                    <span class="string">"peer {peer} {source:?} video never stopped within {settle:?} of the pause \
-<a href=#496 id=496 data-nosnippet>496</a>                     — frames_received still climbing (last {last})"
-<a href=#497 id=497 data-nosnippet>497</a>                </span>)
-<a href=#498 id=498 data-nosnippet>498</a>            };
-<a href=#499 id=499 data-nosnippet>499</a>            <span class="kw">if </span>now &gt;= settle_by {
-<a href=#500 id=500 data-nosnippet>500</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(still_arriving());
-<a href=#501 id=501 data-nosnippet>501</a>            }
-<a href=#502 id=502 data-nosnippet>502</a>            <span class="kw">if </span>tokio::time::timeout(settle_by - now, rx.changed())
-<a href=#503 id=503 data-nosnippet>503</a>                .<span class="kw">await
-<a href=#504 id=504 data-nosnippet>504</a>                </span>.is_err()
-<a href=#505 id=505 data-nosnippet>505</a>            {
-<a href=#506 id=506 data-nosnippet>506</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(still_arriving());
-<a href=#507 id=507 data-nosnippet>507</a>            }
-<a href=#508 id=508 data-nosnippet>508</a>            <span class="kw">let </span>cur = peer_video_frames(<span class="kw-2">&amp;</span>rx.borrow(), peer, source);
-<a href=#509 id=509 data-nosnippet>509</a>            <span class="kw">if </span>cur &lt;= last {
-<a href=#510 id=510 data-nosnippet>510</a>                last = cur;
-<a href=#511 id=511 data-nosnippet>511</a>                <span class="kw">break</span>; <span class="comment">// a whole tick with no new frames — the pause landed
-<a href=#512 id=512 data-nosnippet>512</a>            </span>}
-<a href=#513 id=513 data-nosnippet>513</a>            last = cur;
-<a href=#514 id=514 data-nosnippet>514</a>        }
-<a href=#515 id=515 data-nosnippet>515</a>        <span class="comment">// Phase 2: it must STAY stopped.
-<a href=#516 id=516 data-nosnippet>516</a>        </span><span class="kw">let </span>quiet_by = tokio::time::Instant::now() + quiet_for;
-<a href=#517 id=517 data-nosnippet>517</a>        <span class="kw">loop </span>{
-<a href=#518 id=518 data-nosnippet>518</a>            <span class="kw">let </span>now = tokio::time::Instant::now();
-<a href=#519 id=519 data-nosnippet>519</a>            <span class="kw">if </span>now &gt;= quiet_by {
-<a href=#520 id=520 data-nosnippet>520</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#521 id=521 data-nosnippet>521</a>            }
-<a href=#522 id=522 data-nosnippet>522</a>            <span class="kw">if </span>tokio::time::timeout(quiet_by - now, rx.changed())
-<a href=#523 id=523 data-nosnippet>523</a>                .<span class="kw">await
-<a href=#524 id=524 data-nosnippet>524</a>                </span>.is_err()
-<a href=#525 id=525 data-nosnippet>525</a>            {
-<a href=#526 id=526 data-nosnippet>526</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#527 id=527 data-nosnippet>527</a>            }
-<a href=#528 id=528 data-nosnippet>528</a>            <span class="kw">let </span>cur = peer_video_frames(<span class="kw-2">&amp;</span>rx.borrow(), peer, source);
-<a href=#529 id=529 data-nosnippet>529</a>            <span class="kw">if </span>cur &gt; last {
-<a href=#530 id=530 data-nosnippet>530</a>                <span class="macro">eyre::bail!</span>(
-<a href=#531 id=531 data-nosnippet>531</a>                    <span class="string">"expected no inbound video from peer {peer} {source:?} while paused, \
-<a href=#532 id=532 data-nosnippet>532</a>                     but frames grew {last} -&gt; {cur} within {quiet_for:?}"
-<a href=#533 id=533 data-nosnippet>533</a>                </span>);
-<a href=#534 id=534 data-nosnippet>534</a>            }
-<a href=#535 id=535 data-nosnippet>535</a>        }
-<a href=#536 id=536 data-nosnippet>536</a>    }
-<a href=#537 id=537 data-nosnippet>537</a>
-<a href=#538 id=538 data-nosnippet>538</a>    <span class="doccomment">/// Wait until `peer`'s inbound `source` video decodes at a geometry at
-<a href=#539 id=539 data-nosnippet>539</a>    /// least `min_width` wide — i.e. the receiver is on the SOURCE spatial
-<a href=#540 id=540 data-nosnippet>540</a>    /// layer (`cam` / `screen`). Returns the elapsed time so a scenario can
-<a href=#541 id=541 data-nosnippet>541</a>    /// report the measured layer-switch latency; the `deadline` is the
-<a href=#542 id=542 data-nosnippet>542</a>    /// budget. See [`Self::expect_video_growth`] on the 1 Hz quantization
-<a href=#543 id=543 data-nosnippet>543</a>    /// every such budget must absorb.
-<a href=#544 id=544 data-nosnippet>544</a>    </span><span class="kw">pub async fn </span>expect_inbound_width_at_least(
-<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#546 id=546 data-nosnippet>546</a>        peer: u32,
-<a href=#547 id=547 data-nosnippet>547</a>        source: VideoSource,
-<a href=#548 id=548 data-nosnippet>548</a>        min_width: u32,
-<a href=#549 id=549 data-nosnippet>549</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
-<a href=#550 id=550 data-nosnippet>550</a>    ) -&gt; eyre::Result&lt;Duration&gt; {
-<a href=#551 id=551 data-nosnippet>551</a>        <span class="self">self</span>.expect_inbound_width(
-<a href=#552 id=552 data-nosnippet>552</a>            peer,
-<a href=#553 id=553 data-nosnippet>553</a>            source,
-<a href=#554 id=554 data-nosnippet>554</a>            <span class="kw">move </span>|w| w &gt;= min_width,
-<a href=#555 id=555 data-nosnippet>555</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&gt;= {min_width}"</span>),
-<a href=#556 id=556 data-nosnippet>556</a>            deadline,
-<a href=#557 id=557 data-nosnippet>557</a>        )
-<a href=#558 id=558 data-nosnippet>558</a>        .<span class="kw">await
-<a href=#559 id=559 data-nosnippet>559</a>    </span>}
-<a href=#560 id=560 data-nosnippet>560</a>
-<a href=#561 id=561 data-nosnippet>561</a>    <span class="doccomment">/// Wait until `peer`'s inbound `source` video decodes at a geometry no
-<a href=#562 id=562 data-nosnippet>562</a>    /// wider than `max_width` — i.e. the receiver switched DOWN to the low
-<a href=#563 id=563 data-nosnippet>563</a>    /// spatial layer (`cam_l0` / `screen_l0`).
-<a href=#564 id=564 data-nosnippet>564</a>    </span><span class="kw">pub async fn </span>expect_inbound_width_at_most(
-<a href=#565 id=565 data-nosnippet>565</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#566 id=566 data-nosnippet>566</a>        peer: u32,
-<a href=#567 id=567 data-nosnippet>567</a>        source: VideoSource,
-<a href=#568 id=568 data-nosnippet>568</a>        max_width: u32,
-<a href=#569 id=569 data-nosnippet>569</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
-<a href=#570 id=570 data-nosnippet>570</a>    ) -&gt; eyre::Result&lt;Duration&gt; {
-<a href=#571 id=571 data-nosnippet>571</a>        <span class="self">self</span>.expect_inbound_width(
-<a href=#572 id=572 data-nosnippet>572</a>            peer,
-<a href=#573 id=573 data-nosnippet>573</a>            source,
-<a href=#574 id=574 data-nosnippet>574</a>            <span class="kw">move </span>|w| w &lt;= max_width,
-<a href=#575 id=575 data-nosnippet>575</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&lt;= {max_width}"</span>),
-<a href=#576 id=576 data-nosnippet>576</a>            deadline,
-<a href=#577 id=577 data-nosnippet>577</a>        )
-<a href=#578 id=578 data-nosnippet>578</a>        .<span class="kw">await
-<a href=#579 id=579 data-nosnippet>579</a>    </span>}
-<a href=#580 id=580 data-nosnippet>580</a>
-<a href=#581 id=581 data-nosnippet>581</a>    <span class="doccomment">/// Shared core of the geometry expectations. A width of 0 (no frame
-<a href=#582 id=582 data-nosnippet>582</a>    /// decoded yet for this peer/source, or the row is absent entirely) NEVER
-<a href=#583 id=583 data-nosnippet>583</a>    /// satisfies the predicate — otherwise an at-most bound would pass
-<a href=#584 id=584 data-nosnippet>584</a>    /// vacuously on a stream that is simply dead, which is the exact failure
-<a href=#585 id=585 data-nosnippet>585</a>    /// these scenarios exist to catch.
-<a href=#586 id=586 data-nosnippet>586</a>    </span><span class="kw">async fn </span>expect_inbound_width(
-<a href=#587 id=587 data-nosnippet>587</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#588 id=588 data-nosnippet>588</a>        peer: u32,
-<a href=#589 id=589 data-nosnippet>589</a>        source: VideoSource,
-<a href=#590 id=590 data-nosnippet>590</a>        pred: <span class="kw">impl </span>Fn(u32) -&gt; bool,
-<a href=#591 id=591 data-nosnippet>591</a>        want: <span class="kw-2">&amp;</span>str,
-<a href=#592 id=592 data-nosnippet>592</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
-<a href=#593 id=593 data-nosnippet>593</a>    ) -&gt; eyre::Result&lt;Duration&gt; {
-<a href=#594 id=594 data-nosnippet>594</a>        <span class="kw">let </span><span class="kw-2">mut </span>rx = <span class="self">self</span>.stats_rx.clone();
-<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw">let </span>started = tokio::time::Instant::now();
-<a href=#596 id=596 data-nosnippet>596</a>        wait_for(
-<a href=#597 id=597 data-nosnippet>597</a>            deadline,
-<a href=#598 id=598 data-nosnippet>598</a>            <span class="kw-2">&amp;mut </span>rx,
-<a href=#599 id=599 data-nosnippet>599</a>            |s: <span class="kw-2">&amp;</span>StatsSnapshot| {
-<a href=#600 id=600 data-nosnippet>600</a>                <span class="kw">let </span>w = peer_video(s, peer, source).map_or(<span class="number">0</span>, |v| v.width);
-<a href=#601 id=601 data-nosnippet>601</a>                <span class="macro">w !</span>= <span class="number">0 </span>&amp;&amp; pred(w)
-<a href=#602 id=602 data-nosnippet>602</a>            },
-<a href=#603 id=603 data-nosnippet>603</a>            |s| {
-<a href=#604 id=604 data-nosnippet>604</a>                <span class="kw">let </span>v = peer_video(s, peer, source);
-<a href=#605 id=605 data-nosnippet>605</a>                <span class="macro">format!</span>(
-<a href=#606 id=606 data-nosnippet>606</a>                    <span class="string">"peer {peer} {source:?} decoded {}x{} (wanted width {want}), \
-<a href=#607 id=607 data-nosnippet>607</a>                     frames_received={} decoded_fps={:.1}"</span>,
-<a href=#608 id=608 data-nosnippet>608</a>                    v.map_or(<span class="number">0</span>, |v| v.width),
-<a href=#609 id=609 data-nosnippet>609</a>                    v.map_or(<span class="number">0</span>, |v| v.height),
-<a href=#610 id=610 data-nosnippet>610</a>                    v.map_or(<span class="number">0</span>, |v| v.frames_received),
-<a href=#611 id=611 data-nosnippet>611</a>                    v.map_or(<span class="number">0.0</span>, |v| v.decoded_fps),
-<a href=#612 id=612 data-nosnippet>612</a>                )
-<a href=#613 id=613 data-nosnippet>613</a>            },
-<a href=#614 id=614 data-nosnippet>614</a>        )
-<a href=#615 id=615 data-nosnippet>615</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#616 id=616 data-nosnippet>616</a>        <span class="prelude-val">Ok</span>(started.elapsed())
-<a href=#617 id=617 data-nosnippet>617</a>    }
-<a href=#618 id=618 data-nosnippet>618</a>
-<a href=#619 id=619 data-nosnippet>619</a>    <span class="kw">pub async fn </span>mute(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; eyre::Result&lt;()&gt; {
-<a href=#620 id=620 data-nosnippet>620</a>        <span class="self">self</span>.participant
-<a href=#621 id=621 data-nosnippet>621</a>            .client()
-<a href=#622 id=622 data-nosnippet>622</a>            .call_set_muted(<span class="bool-val">true</span>)
-<a href=#623 id=623 data-nosnippet>623</a>            .<span class="kw">await
-<a href=#624 id=624 data-nosnippet>624</a>            </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"mute failed: {e}"</span>))
-<a href=#625 id=625 data-nosnippet>625</a>    }
-<a href=#626 id=626 data-nosnippet>626</a>
-<a href=#627 id=627 data-nosnippet>627</a>    <span class="kw">pub async fn </span>unmute(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; eyre::Result&lt;()&gt; {
-<a href=#628 id=628 data-nosnippet>628</a>        <span class="self">self</span>.participant
-<a href=#629 id=629 data-nosnippet>629</a>            .client()
-<a href=#630 id=630 data-nosnippet>630</a>            .call_set_muted(<span class="bool-val">false</span>)
-<a href=#631 id=631 data-nosnippet>631</a>            .<span class="kw">await
-<a href=#632 id=632 data-nosnippet>632</a>            </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"unmute failed: {e}"</span>))
-<a href=#633 id=633 data-nosnippet>633</a>    }
-<a href=#634 id=634 data-nosnippet>634</a>
-<a href=#635 id=635 data-nosnippet>635</a>    <span class="doccomment">/// Leave the call.
-<a href=#636 id=636 data-nosnippet>636</a>    </span><span class="kw">pub async fn </span>leave(<span class="self">self</span>) -&gt; eyre::Result&lt;()&gt; {
-<a href=#637 id=637 data-nosnippet>637</a>        <span class="self">self</span>.participant
-<a href=#638 id=638 data-nosnippet>638</a>            .client()
-<a href=#639 id=639 data-nosnippet>639</a>            .call_leave()
-<a href=#640 id=640 data-nosnippet>640</a>            .<span class="kw">await
-<a href=#641 id=641 data-nosnippet>641</a>            </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"leave failed: {e}"</span>))
-<a href=#642 id=642 data-nosnippet>642</a>    }
-<a href=#643 id=643 data-nosnippet>643</a>}
-<a href=#644 id=644 data-nosnippet>644</a>
-<a href=#645 id=645 data-nosnippet>645</a><span class="doccomment">/// Everyone in the roster except this client. Empty until the server has
-<a href=#646 id=646 data-nosnippet>646</a>/// assigned our own `self_id` (a roster we can't subtract ourselves from
-<a href=#647 id=647 data-nosnippet>647</a>/// tells us nothing about who the *remote* peers are).
-<a href=#648 id=648 data-nosnippet>648</a></span><span class="kw">fn </span>remote_peers(v: <span class="kw-2">&amp;</span>CallView) -&gt; Vec&lt;u32&gt; {
-<a href=#649 id=649 data-nosnippet>649</a>    v.self_id.map_or_else(Vec::new, |me| {
-<a href=#650 id=650 data-nosnippet>650</a>        v.peers.iter().copied().filter(|p| <span class="kw-2">*</span><span class="macro">p !</span>= me).collect()
-<a href=#651 id=651 data-nosnippet>651</a>    })
-<a href=#652 id=652 data-nosnippet>652</a>}
-<a href=#653 id=653 data-nosnippet>653</a>
-<a href=#654 id=654 data-nosnippet>654</a><span class="doccomment">/// One peer's inbound stream for `source`, or `None` when that peer has no
-<a href=#655 id=655 data-nosnippet>655</a>/// inbound row yet (rows are created lazily by the first pipeline).
-<a href=#656 id=656 data-nosnippet>656</a></span><span class="kw">fn </span>peer_video(s: <span class="kw-2">&amp;</span>StatsSnapshot, peer: u32, source: VideoSource) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>InboundVideoSnapshot&gt; {
-<a href=#657 id=657 data-nosnippet>657</a>    s.inbound
-<a href=#658 id=658 data-nosnippet>658</a>        .iter()
-<a href=#659 id=659 data-nosnippet>659</a>        .find(|p| p.peer_id == peer)
-<a href=#660 id=660 data-nosnippet>660</a>        .map(|p| <span class="kw">match </span>source {
-<a href=#661 id=661 data-nosnippet>661</a>            VideoSource::Camera =&gt; <span class="kw-2">&amp;</span>p.video,
-<a href=#662 id=662 data-nosnippet>662</a>            VideoSource::Screen =&gt; <span class="kw-2">&amp;</span>p.screen_video,
-<a href=#663 id=663 data-nosnippet>663</a>        })
-<a href=#664 id=664 data-nosnippet>664</a>}
-<a href=#665 id=665 data-nosnippet>665</a>
-<a href=#666 id=666 data-nosnippet>666</a><span class="kw">fn </span>peer_video_frames(s: <span class="kw-2">&amp;</span>StatsSnapshot, peer: u32, source: VideoSource) -&gt; u64 {
-<a href=#667 id=667 data-nosnippet>667</a>    peer_video(s, peer, source).map_or(<span class="number">0</span>, |v| v.frames_received)
-<a href=#668 id=668 data-nosnippet>668</a>}
-<a href=#669 id=669 data-nosnippet>669</a>
-<a href=#670 id=670 data-nosnippet>670</a><span class="kw">fn </span>inbound_video_total(s: <span class="kw-2">&amp;</span>StatsSnapshot) -&gt; u64 {
-<a href=#671 id=671 data-nosnippet>671</a>    s.inbound.iter().map(|p| p.video.frames_received).sum()
-<a href=#672 id=672 data-nosnippet>672</a>}
-<a href=#673 id=673 data-nosnippet>673</a>
-<a href=#674 id=674 data-nosnippet>674</a><span class="kw">fn </span>inbound_audio_total(s: <span class="kw-2">&amp;</span>StatsSnapshot) -&gt; u64 {
-<a href=#675 id=675 data-nosnippet>675</a>    s.inbound.iter().map(|p| p.audio.frames_received).sum()
-<a href=#676 id=676 data-nosnippet>676</a>}
-<a href=#677 id=677 data-nosnippet>677</a>
-<a href=#678 id=678 data-nosnippet>678</a><span class="doccomment">/// Shared polling core for a watch-driven `expect_*`: check `pred` on every
-<a href=#679 id=679 data-nosnippet>679</a>/// change (and once up front), bail with `describe`'s last-observed state on
-<a href=#680 id=680 data-nosnippet>680</a>/// timeout. `deadline` defaults to [`DEFAULT_DEADLINE`].
-<a href=#681 id=681 data-nosnippet>681</a></span><span class="kw">async fn </span>wait_for&lt;T&gt;(
-<a href=#682 id=682 data-nosnippet>682</a>    deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
-<a href=#683 id=683 data-nosnippet>683</a>    rx: <span class="kw-2">&amp;mut </span>watch::Receiver&lt;T&gt;,
-<a href=#684 id=684 data-nosnippet>684</a>    pred: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>T) -&gt; bool,
-<a href=#685 id=685 data-nosnippet>685</a>    describe: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>T) -&gt; String,
-<a href=#686 id=686 data-nosnippet>686</a>) -&gt; eyre::Result&lt;()&gt; {
-<a href=#687 id=687 data-nosnippet>687</a>    <span class="kw">let </span>deadline = deadline.unwrap_or(DEFAULT_DEADLINE);
-<a href=#688 id=688 data-nosnippet>688</a>    <span class="kw">let </span>wait = <span class="kw">async </span>{
-<a href=#689 id=689 data-nosnippet>689</a>        <span class="kw">loop </span>{
-<a href=#690 id=690 data-nosnippet>690</a>            <span class="kw">if </span>pred(<span class="kw-2">&amp;</span>rx.borrow_and_update()) {
-<a href=#691 id=691 data-nosnippet>691</a>                <span class="kw">return</span>;
-<a href=#692 id=692 data-nosnippet>692</a>            }
-<a href=#693 id=693 data-nosnippet>693</a>            <span class="kw">if </span>rx.changed().<span class="kw">await</span>.is_err() {
-<a href=#694 id=694 data-nosnippet>694</a>                <span class="kw">return</span>; <span class="comment">// sender dropped — the final check below settles it
-<a href=#695 id=695 data-nosnippet>695</a>            </span>}
-<a href=#696 id=696 data-nosnippet>696</a>        }
-<a href=#697 id=697 data-nosnippet>697</a>    };
-<a href=#698 id=698 data-nosnippet>698</a>    <span class="kw">if </span>tokio::time::timeout(deadline, wait).<span class="kw">await</span>.is_ok() &amp;&amp; pred(<span class="kw-2">&amp;</span>rx.borrow()) {
-<a href=#699 id=699 data-nosnippet>699</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#700 id=700 data-nosnippet>700</a>    }
-<a href=#701 id=701 data-nosnippet>701</a>    <span class="macro">eyre::bail!</span>(
-<a href=#702 id=702 data-nosnippet>702</a>        <span class="string">"timed out after {deadline:?} waiting for condition; last observed: {}"</span>,
-<a href=#703 id=703 data-nosnippet>703</a>        describe(<span class="kw-2">&amp;</span>rx.borrow())
-<a href=#704 id=704 data-nosnippet>704</a>    )
-<a href=#705 id=705 data-nosnippet>705</a>}
+<a href=#381 id=381 data-nosnippet>381</a>    <span class="doccomment">/// Wait until the roster names exactly `count` peers besides self, and
+<a href=#382 id=382 data-nosnippet>382</a>    /// return their `peer_id`s **sorted**, so a scenario with more than one
+<a href=#383 id=383 data-nosnippet>383</a>    /// remote can name them stably across runs.
+<a href=#384 id=384 data-nosnippet>384</a>    ///
+<a href=#385 id=385 data-nosnippet>385</a>    /// [`Self::remote_peer`] deliberately refuses to guess past one remote;
+<a href=#386 id=386 data-nosnippet>386</a>    /// this is the explicit multi-party form, for scenarios whose property is
+<a href=#387 id=387 data-nosnippet>387</a>    /// about telling two remotes apart (e.g. reporting a tile for one and never
+<a href=#388 id=388 data-nosnippet>388</a>    /// for the other). Which sorted slot is which USER is not defined — every
+<a href=#389 id=389 data-nosnippet>389</a>    /// participant in these scenarios publishes the same synthetic media, so a
+<a href=#390 id=390 data-nosnippet>390</a>    /// scenario must only rely on the peers being distinct.
+<a href=#391 id=391 data-nosnippet>391</a>    </span><span class="kw">pub async fn </span>remote_peers(
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#393 id=393 data-nosnippet>393</a>        count: usize,
+<a href=#394 id=394 data-nosnippet>394</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+<a href=#395 id=395 data-nosnippet>395</a>    ) -&gt; eyre::Result&lt;Vec&lt;u32&gt;&gt; {
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">let </span><span class="kw-2">mut </span>rx = <span class="self">self</span>.call_rx.clone();
+<a href=#397 id=397 data-nosnippet>397</a>        wait_for(
+<a href=#398 id=398 data-nosnippet>398</a>            deadline,
+<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw-2">&amp;mut </span>rx,
+<a href=#400 id=400 data-nosnippet>400</a>            |v: <span class="kw-2">&amp;</span>CallView| remote_peers(v).len() == count,
+<a href=#401 id=401 data-nosnippet>401</a>            |v| <span class="macro">format!</span>(<span class="string">"self_id={:?} peers={:?}"</span>, v.self_id, v.peers),
+<a href=#402 id=402 data-nosnippet>402</a>        )
+<a href=#403 id=403 data-nosnippet>403</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">let </span><span class="kw-2">mut </span>peers = remote_peers(<span class="kw-2">&amp;</span>rx.borrow());
+<a href=#405 id=405 data-nosnippet>405</a>        peers.sort_unstable();
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="prelude-val">Ok</span>(peers)
+<a href=#407 id=407 data-nosnippet>407</a>    }
+<a href=#408 id=408 data-nosnippet>408</a>
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="doccomment">/// Report a remote tile's rendered size + visibility — the *demand* half
+<a href=#410 id=410 data-nosnippet>410</a>    /// of demand-driven simulcast (`HoundClient::call_set_tile_quality`,
+<a href=#411 id=411 data-nosnippet>411</a>    /// what the Flutter grid calls on every relayout). A tile below
+<a href=#412 id=412 data-nosnippet>412</a>    /// `hound_media::TILE_SOURCE_MIN_PIXELS` (or hidden at any size) asks for
+<a href=#413 id=413 data-nosnippet>413</a>    /// the low spatial layer; a large visible tile asks for the source.
+<a href=#414 id=414 data-nosnippet>414</a>    </span><span class="kw">pub async fn </span>set_tile_quality(
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#416 id=416 data-nosnippet>416</a>        peer: u32,
+<a href=#417 id=417 data-nosnippet>417</a>        source: VideoSource,
+<a href=#418 id=418 data-nosnippet>418</a>        width: u32,
+<a href=#419 id=419 data-nosnippet>419</a>        height: u32,
+<a href=#420 id=420 data-nosnippet>420</a>        visible: bool,
+<a href=#421 id=421 data-nosnippet>421</a>    ) -&gt; eyre::Result&lt;()&gt; {
+<a href=#422 id=422 data-nosnippet>422</a>        <span class="self">self</span>.participant
+<a href=#423 id=423 data-nosnippet>423</a>            .client()
+<a href=#424 id=424 data-nosnippet>424</a>            .call_set_tile_quality(peer, source.as_client_str().to_string(), width, height, visible)
+<a href=#425 id=425 data-nosnippet>425</a>            .<span class="kw">await
+<a href=#426 id=426 data-nosnippet>426</a>            </span>.map_err(|e| {
+<a href=#427 id=427 data-nosnippet>427</a>                <span class="macro">eyre::eyre!</span>(<span class="string">"set_tile_quality(peer {peer}, {source:?}, {width}x{height}, visible={visible}) failed: {e}"</span>)
+<a href=#428 id=428 data-nosnippet>428</a>            })
+<a href=#429 id=429 data-nosnippet>429</a>    }
+<a href=#430 id=430 data-nosnippet>430</a>
+<a href=#431 id=431 data-nosnippet>431</a>    <span class="doccomment">/// Pause/resume INBOUND video (`HoundClient::call_set_video_paused`) —
+<a href=#432 id=432 data-nosnippet>432</a>    /// what the app does on hide/minimize (`ui/lib/app/hound_app.dart`'s
+<a href=#433 id=433 data-nosnippet>433</a>    /// `onHide`). Audio is deliberately unaffected, which is itself an
+<a href=#434 id=434 data-nosnippet>434</a>    /// assertable property (see `video_resumes_promptly_after_pause`).
+<a href=#435 id=435 data-nosnippet>435</a>    </span><span class="kw">pub async fn </span>set_video_paused(<span class="kw-2">&amp;</span><span class="self">self</span>, paused: bool) -&gt; eyre::Result&lt;()&gt; {
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="self">self</span>.participant
+<a href=#437 id=437 data-nosnippet>437</a>            .client()
+<a href=#438 id=438 data-nosnippet>438</a>            .call_set_video_paused(paused)
+<a href=#439 id=439 data-nosnippet>439</a>            .<span class="kw">await
+<a href=#440 id=440 data-nosnippet>440</a>            </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"set_video_paused({paused}) failed: {e}"</span>))
+<a href=#441 id=441 data-nosnippet>441</a>    }
+<a href=#442 id=442 data-nosnippet>442</a>
+<a href=#443 id=443 data-nosnippet>443</a>    <span class="doccomment">/// Wait for `peer`'s inbound `source` video to grow by at least
+<a href=#444 id=444 data-nosnippet>444</a>    /// `min_delta` frames from the count observed when this call is made —
+<a href=#445 id=445 data-nosnippet>445</a>    /// the per-peer, per-source video counterpart of
+<a href=#446 id=446 data-nosnippet>446</a>    /// [`Self::expect_audio_growth`]. Returns how long that took, so a
+<a href=#447 id=447 data-nosnippet>447</a>    /// scenario can report the measured latency next to the deadline that
+<a href=#448 id=448 data-nosnippet>448</a>    /// bounds it.
+<a href=#449 id=449 data-nosnippet>449</a>    ///
+<a href=#450 id=450 data-nosnippet>450</a>    /// The measured figure carries up to one `call:stats` interval (1 s) of
+<a href=#451 id=451 data-nosnippet>451</a>    /// quantization: the counters are sampled by a 1 Hz emitter, so growth
+<a href=#452 id=452 data-nosnippet>452</a>    /// that happened at t+0.1 s first becomes observable at the next tick.
+<a href=#453 id=453 data-nosnippet>453</a>    /// Any budget asserted through `deadline` must include that second.
+<a href=#454 id=454 data-nosnippet>454</a>    ///
+<a href=#455 id=455 data-nosnippet>455</a>    /// Reset-tolerant: the baseline re-anchors DOWNWARD if the counter drops
+<a href=#456 id=456 data-nosnippet>456</a>    /// (a full re-establish clears the per-peer stats row), so a reconnect
+<a href=#457 id=457 data-nosnippet>457</a>    /// landing mid-window can't wedge this into a false timeout.
+<a href=#458 id=458 data-nosnippet>458</a>    </span><span class="kw">pub async fn </span>expect_video_growth(
+<a href=#459 id=459 data-nosnippet>459</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#460 id=460 data-nosnippet>460</a>        peer: u32,
+<a href=#461 id=461 data-nosnippet>461</a>        source: VideoSource,
+<a href=#462 id=462 data-nosnippet>462</a>        min_delta: u64,
+<a href=#463 id=463 data-nosnippet>463</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+<a href=#464 id=464 data-nosnippet>464</a>    ) -&gt; eyre::Result&lt;Duration&gt; {
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="kw">let </span><span class="kw-2">mut </span>rx = <span class="self">self</span>.stats_rx.clone();
+<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">let </span>base = AtomicU64::new(peer_video_frames(<span class="kw-2">&amp;</span>rx.borrow_and_update(), peer, source));
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">let </span>started = tokio::time::Instant::now();
+<a href=#468 id=468 data-nosnippet>468</a>        wait_for(
+<a href=#469 id=469 data-nosnippet>469</a>            deadline,
+<a href=#470 id=470 data-nosnippet>470</a>            <span class="kw-2">&amp;mut </span>rx,
+<a href=#471 id=471 data-nosnippet>471</a>            |s: <span class="kw-2">&amp;</span>StatsSnapshot| {
+<a href=#472 id=472 data-nosnippet>472</a>                <span class="kw">let </span>cur = peer_video_frames(s, peer, source);
+<a href=#473 id=473 data-nosnippet>473</a>                <span class="kw">if </span>cur &lt; base.load(Ordering::Relaxed) {
+<a href=#474 id=474 data-nosnippet>474</a>                    base.store(cur, Ordering::Relaxed); <span class="comment">// counters were cleared — re-anchor
+<a href=#475 id=475 data-nosnippet>475</a>                    </span><span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#476 id=476 data-nosnippet>476</a>                }
+<a href=#477 id=477 data-nosnippet>477</a>                cur - base.load(Ordering::Relaxed) &gt;= min_delta
+<a href=#478 id=478 data-nosnippet>478</a>            },
+<a href=#479 id=479 data-nosnippet>479</a>            |s| {
+<a href=#480 id=480 data-nosnippet>480</a>                <span class="macro">format!</span>(
+<a href=#481 id=481 data-nosnippet>481</a>                    <span class="string">"peer {peer} {source:?} frames_received={} (baseline {}, wanted +{min_delta})"</span>,
+<a href=#482 id=482 data-nosnippet>482</a>                    peer_video_frames(s, peer, source),
+<a href=#483 id=483 data-nosnippet>483</a>                    base.load(Ordering::Relaxed)
+<a href=#484 id=484 data-nosnippet>484</a>                )
+<a href=#485 id=485 data-nosnippet>485</a>            },
+<a href=#486 id=486 data-nosnippet>486</a>        )
+<a href=#487 id=487 data-nosnippet>487</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="prelude-val">Ok</span>(started.elapsed())
+<a href=#489 id=489 data-nosnippet>489</a>    }
+<a href=#490 id=490 data-nosnippet>490</a>
+<a href=#491 id=491 data-nosnippet>491</a>    <span class="doccomment">/// The paused half of a pause/resume assertion: `peer`'s inbound `source`
+<a href=#492 id=492 data-nosnippet>492</a>    /// video must STOP.
+<a href=#493 id=493 data-nosnippet>493</a>    ///
+<a href=#494 id=494 data-nosnippet>494</a>    /// Two bounded phases, both watch-driven (it wakes on every stats tick
+<a href=#495 id=495 data-nosnippet>495</a>    /// rather than blind-sleeping a window and checking once):
+<a href=#496 id=496 data-nosnippet>496</a>    ///
+<a href=#497 id=497 data-nosnippet>497</a>    /// 1. **settle** — frames already in flight when the pause request goes
+<a href=#498 id=498 data-nosnippet>498</a>    ///    out are expected to land, and the teardown is asynchronous, so this
+<a href=#499 id=499 data-nosnippet>499</a>    ///    first waits (bounded by `settle`) for a whole stats tick in which
+<a href=#500 id=500 data-nosnippet>500</a>    ///    the counter did not move. Never seeing one is a failure: the pause
+<a href=#501 id=501 data-nosnippet>501</a>    ///    did not take effect.
+<a href=#502 id=502 data-nosnippet>502</a>    /// 2. **quiet** — with the counter anchored at that settled value, video
+<a href=#503 id=503 data-nosnippet>503</a>    ///    must stay stopped for `quiet_for`.
+<a href=#504 id=504 data-nosnippet>504</a>    ///
+<a href=#505 id=505 data-nosnippet>505</a>    /// Anchoring the baseline *after* the settle rather than at call time is
+<a href=#506 id=506 data-nosnippet>506</a>    /// what keeps this from flaking on in-flight frames while still failing
+<a href=#507 id=507 data-nosnippet>507</a>    /// loudly on a pause that never actually stops the stream.
+<a href=#508 id=508 data-nosnippet>508</a>    </span><span class="kw">pub async fn </span>expect_no_video_growth(
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#510 id=510 data-nosnippet>510</a>        peer: u32,
+<a href=#511 id=511 data-nosnippet>511</a>        source: VideoSource,
+<a href=#512 id=512 data-nosnippet>512</a>        settle: Duration,
+<a href=#513 id=513 data-nosnippet>513</a>        quiet_for: Duration,
+<a href=#514 id=514 data-nosnippet>514</a>    ) -&gt; eyre::Result&lt;()&gt; {
+<a href=#515 id=515 data-nosnippet>515</a>        <span class="kw">let </span><span class="kw-2">mut </span>rx = <span class="self">self</span>.stats_rx.clone();
+<a href=#516 id=516 data-nosnippet>516</a>        <span class="kw">let </span><span class="kw-2">mut </span>last = peer_video_frames(<span class="kw-2">&amp;</span>rx.borrow_and_update(), peer, source);
+<a href=#517 id=517 data-nosnippet>517</a>        <span class="comment">// Phase 1: bounded settle.
+<a href=#518 id=518 data-nosnippet>518</a>        </span><span class="kw">let </span>settle_by = tokio::time::Instant::now() + settle;
+<a href=#519 id=519 data-nosnippet>519</a>        <span class="kw">loop </span>{
+<a href=#520 id=520 data-nosnippet>520</a>            <span class="kw">let </span>now = tokio::time::Instant::now();
+<a href=#521 id=521 data-nosnippet>521</a>            <span class="kw">let </span>still_arriving = || {
+<a href=#522 id=522 data-nosnippet>522</a>                <span class="macro">eyre::eyre!</span>(
+<a href=#523 id=523 data-nosnippet>523</a>                    <span class="string">"peer {peer} {source:?} video never stopped within {settle:?} of the pause \
+<a href=#524 id=524 data-nosnippet>524</a>                     — frames_received still climbing (last {last})"
+<a href=#525 id=525 data-nosnippet>525</a>                </span>)
+<a href=#526 id=526 data-nosnippet>526</a>            };
+<a href=#527 id=527 data-nosnippet>527</a>            <span class="kw">if </span>now &gt;= settle_by {
+<a href=#528 id=528 data-nosnippet>528</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(still_arriving());
+<a href=#529 id=529 data-nosnippet>529</a>            }
+<a href=#530 id=530 data-nosnippet>530</a>            <span class="kw">if </span>tokio::time::timeout(settle_by - now, rx.changed())
+<a href=#531 id=531 data-nosnippet>531</a>                .<span class="kw">await
+<a href=#532 id=532 data-nosnippet>532</a>                </span>.is_err()
+<a href=#533 id=533 data-nosnippet>533</a>            {
+<a href=#534 id=534 data-nosnippet>534</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(still_arriving());
+<a href=#535 id=535 data-nosnippet>535</a>            }
+<a href=#536 id=536 data-nosnippet>536</a>            <span class="kw">let </span>cur = peer_video_frames(<span class="kw-2">&amp;</span>rx.borrow(), peer, source);
+<a href=#537 id=537 data-nosnippet>537</a>            <span class="kw">if </span>cur &lt;= last {
+<a href=#538 id=538 data-nosnippet>538</a>                last = cur;
+<a href=#539 id=539 data-nosnippet>539</a>                <span class="kw">break</span>; <span class="comment">// a whole tick with no new frames — the pause landed
+<a href=#540 id=540 data-nosnippet>540</a>            </span>}
+<a href=#541 id=541 data-nosnippet>541</a>            last = cur;
+<a href=#542 id=542 data-nosnippet>542</a>        }
+<a href=#543 id=543 data-nosnippet>543</a>        <span class="comment">// Phase 2: it must STAY stopped.
+<a href=#544 id=544 data-nosnippet>544</a>        </span><span class="kw">let </span>quiet_by = tokio::time::Instant::now() + quiet_for;
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw">loop </span>{
+<a href=#546 id=546 data-nosnippet>546</a>            <span class="kw">let </span>now = tokio::time::Instant::now();
+<a href=#547 id=547 data-nosnippet>547</a>            <span class="kw">if </span>now &gt;= quiet_by {
+<a href=#548 id=548 data-nosnippet>548</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#549 id=549 data-nosnippet>549</a>            }
+<a href=#550 id=550 data-nosnippet>550</a>            <span class="kw">if </span>tokio::time::timeout(quiet_by - now, rx.changed())
+<a href=#551 id=551 data-nosnippet>551</a>                .<span class="kw">await
+<a href=#552 id=552 data-nosnippet>552</a>                </span>.is_err()
+<a href=#553 id=553 data-nosnippet>553</a>            {
+<a href=#554 id=554 data-nosnippet>554</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#555 id=555 data-nosnippet>555</a>            }
+<a href=#556 id=556 data-nosnippet>556</a>            <span class="kw">let </span>cur = peer_video_frames(<span class="kw-2">&amp;</span>rx.borrow(), peer, source);
+<a href=#557 id=557 data-nosnippet>557</a>            <span class="kw">if </span>cur &gt; last {
+<a href=#558 id=558 data-nosnippet>558</a>                <span class="macro">eyre::bail!</span>(
+<a href=#559 id=559 data-nosnippet>559</a>                    <span class="string">"expected no inbound video from peer {peer} {source:?} while paused, \
+<a href=#560 id=560 data-nosnippet>560</a>                     but frames grew {last} -&gt; {cur} within {quiet_for:?}"
+<a href=#561 id=561 data-nosnippet>561</a>                </span>);
+<a href=#562 id=562 data-nosnippet>562</a>            }
+<a href=#563 id=563 data-nosnippet>563</a>        }
+<a href=#564 id=564 data-nosnippet>564</a>    }
+<a href=#565 id=565 data-nosnippet>565</a>
+<a href=#566 id=566 data-nosnippet>566</a>    <span class="doccomment">/// Wait until `peer`'s inbound `source` video decodes at a geometry at
+<a href=#567 id=567 data-nosnippet>567</a>    /// least `min_width` wide — i.e. the receiver is on the SOURCE spatial
+<a href=#568 id=568 data-nosnippet>568</a>    /// layer (`cam` / `screen`). Returns the elapsed time so a scenario can
+<a href=#569 id=569 data-nosnippet>569</a>    /// report the measured layer-switch latency; the `deadline` is the
+<a href=#570 id=570 data-nosnippet>570</a>    /// budget. See [`Self::expect_video_growth`] on the 1 Hz quantization
+<a href=#571 id=571 data-nosnippet>571</a>    /// every such budget must absorb.
+<a href=#572 id=572 data-nosnippet>572</a>    </span><span class="kw">pub async fn </span>expect_inbound_width_at_least(
+<a href=#573 id=573 data-nosnippet>573</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#574 id=574 data-nosnippet>574</a>        peer: u32,
+<a href=#575 id=575 data-nosnippet>575</a>        source: VideoSource,
+<a href=#576 id=576 data-nosnippet>576</a>        min_width: u32,
+<a href=#577 id=577 data-nosnippet>577</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+<a href=#578 id=578 data-nosnippet>578</a>    ) -&gt; eyre::Result&lt;Duration&gt; {
+<a href=#579 id=579 data-nosnippet>579</a>        <span class="self">self</span>.expect_inbound_width(
+<a href=#580 id=580 data-nosnippet>580</a>            peer,
+<a href=#581 id=581 data-nosnippet>581</a>            source,
+<a href=#582 id=582 data-nosnippet>582</a>            <span class="kw">move </span>|w| w &gt;= min_width,
+<a href=#583 id=583 data-nosnippet>583</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&gt;= {min_width}"</span>),
+<a href=#584 id=584 data-nosnippet>584</a>            deadline,
+<a href=#585 id=585 data-nosnippet>585</a>        )
+<a href=#586 id=586 data-nosnippet>586</a>        .<span class="kw">await
+<a href=#587 id=587 data-nosnippet>587</a>    </span>}
+<a href=#588 id=588 data-nosnippet>588</a>
+<a href=#589 id=589 data-nosnippet>589</a>    <span class="doccomment">/// Wait until `peer`'s inbound `source` video decodes at a geometry no
+<a href=#590 id=590 data-nosnippet>590</a>    /// wider than `max_width` — i.e. the receiver switched DOWN to the low
+<a href=#591 id=591 data-nosnippet>591</a>    /// spatial layer (`cam_l0` / `screen_l0`).
+<a href=#592 id=592 data-nosnippet>592</a>    </span><span class="kw">pub async fn </span>expect_inbound_width_at_most(
+<a href=#593 id=593 data-nosnippet>593</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#594 id=594 data-nosnippet>594</a>        peer: u32,
+<a href=#595 id=595 data-nosnippet>595</a>        source: VideoSource,
+<a href=#596 id=596 data-nosnippet>596</a>        max_width: u32,
+<a href=#597 id=597 data-nosnippet>597</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+<a href=#598 id=598 data-nosnippet>598</a>    ) -&gt; eyre::Result&lt;Duration&gt; {
+<a href=#599 id=599 data-nosnippet>599</a>        <span class="self">self</span>.expect_inbound_width(
+<a href=#600 id=600 data-nosnippet>600</a>            peer,
+<a href=#601 id=601 data-nosnippet>601</a>            source,
+<a href=#602 id=602 data-nosnippet>602</a>            <span class="kw">move </span>|w| w &lt;= max_width,
+<a href=#603 id=603 data-nosnippet>603</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&lt;= {max_width}"</span>),
+<a href=#604 id=604 data-nosnippet>604</a>            deadline,
+<a href=#605 id=605 data-nosnippet>605</a>        )
+<a href=#606 id=606 data-nosnippet>606</a>        .<span class="kw">await
+<a href=#607 id=607 data-nosnippet>607</a>    </span>}
+<a href=#608 id=608 data-nosnippet>608</a>
+<a href=#609 id=609 data-nosnippet>609</a>    <span class="doccomment">/// Shared core of the geometry expectations. A width of 0 (no frame
+<a href=#610 id=610 data-nosnippet>610</a>    /// decoded yet for this peer/source, or the row is absent entirely) NEVER
+<a href=#611 id=611 data-nosnippet>611</a>    /// satisfies the predicate — otherwise an at-most bound would pass
+<a href=#612 id=612 data-nosnippet>612</a>    /// vacuously on a stream that is simply dead, which is the exact failure
+<a href=#613 id=613 data-nosnippet>613</a>    /// these scenarios exist to catch.
+<a href=#614 id=614 data-nosnippet>614</a>    </span><span class="kw">async fn </span>expect_inbound_width(
+<a href=#615 id=615 data-nosnippet>615</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#616 id=616 data-nosnippet>616</a>        peer: u32,
+<a href=#617 id=617 data-nosnippet>617</a>        source: VideoSource,
+<a href=#618 id=618 data-nosnippet>618</a>        pred: <span class="kw">impl </span>Fn(u32) -&gt; bool,
+<a href=#619 id=619 data-nosnippet>619</a>        want: <span class="kw-2">&amp;</span>str,
+<a href=#620 id=620 data-nosnippet>620</a>        deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+<a href=#621 id=621 data-nosnippet>621</a>    ) -&gt; eyre::Result&lt;Duration&gt; {
+<a href=#622 id=622 data-nosnippet>622</a>        <span class="kw">let </span><span class="kw-2">mut </span>rx = <span class="self">self</span>.stats_rx.clone();
+<a href=#623 id=623 data-nosnippet>623</a>        <span class="kw">let </span>started = tokio::time::Instant::now();
+<a href=#624 id=624 data-nosnippet>624</a>        wait_for(
+<a href=#625 id=625 data-nosnippet>625</a>            deadline,
+<a href=#626 id=626 data-nosnippet>626</a>            <span class="kw-2">&amp;mut </span>rx,
+<a href=#627 id=627 data-nosnippet>627</a>            |s: <span class="kw-2">&amp;</span>StatsSnapshot| {
+<a href=#628 id=628 data-nosnippet>628</a>                <span class="kw">let </span>w = peer_video(s, peer, source).map_or(<span class="number">0</span>, |v| v.width);
+<a href=#629 id=629 data-nosnippet>629</a>                <span class="macro">w !</span>= <span class="number">0 </span>&amp;&amp; pred(w)
+<a href=#630 id=630 data-nosnippet>630</a>            },
+<a href=#631 id=631 data-nosnippet>631</a>            |s| {
+<a href=#632 id=632 data-nosnippet>632</a>                <span class="kw">let </span>v = peer_video(s, peer, source);
+<a href=#633 id=633 data-nosnippet>633</a>                <span class="macro">format!</span>(
+<a href=#634 id=634 data-nosnippet>634</a>                    <span class="string">"peer {peer} {source:?} decoded {}x{} (wanted width {want}), \
+<a href=#635 id=635 data-nosnippet>635</a>                     frames_received={} decoded_fps={:.1}"</span>,
+<a href=#636 id=636 data-nosnippet>636</a>                    v.map_or(<span class="number">0</span>, |v| v.width),
+<a href=#637 id=637 data-nosnippet>637</a>                    v.map_or(<span class="number">0</span>, |v| v.height),
+<a href=#638 id=638 data-nosnippet>638</a>                    v.map_or(<span class="number">0</span>, |v| v.frames_received),
+<a href=#639 id=639 data-nosnippet>639</a>                    v.map_or(<span class="number">0.0</span>, |v| v.decoded_fps),
+<a href=#640 id=640 data-nosnippet>640</a>                )
+<a href=#641 id=641 data-nosnippet>641</a>            },
+<a href=#642 id=642 data-nosnippet>642</a>        )
+<a href=#643 id=643 data-nosnippet>643</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#644 id=644 data-nosnippet>644</a>        <span class="prelude-val">Ok</span>(started.elapsed())
+<a href=#645 id=645 data-nosnippet>645</a>    }
+<a href=#646 id=646 data-nosnippet>646</a>
+<a href=#647 id=647 data-nosnippet>647</a>    <span class="kw">pub async fn </span>mute(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; eyre::Result&lt;()&gt; {
+<a href=#648 id=648 data-nosnippet>648</a>        <span class="self">self</span>.participant
+<a href=#649 id=649 data-nosnippet>649</a>            .client()
+<a href=#650 id=650 data-nosnippet>650</a>            .call_set_muted(<span class="bool-val">true</span>)
+<a href=#651 id=651 data-nosnippet>651</a>            .<span class="kw">await
+<a href=#652 id=652 data-nosnippet>652</a>            </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"mute failed: {e}"</span>))
+<a href=#653 id=653 data-nosnippet>653</a>    }
+<a href=#654 id=654 data-nosnippet>654</a>
+<a href=#655 id=655 data-nosnippet>655</a>    <span class="kw">pub async fn </span>unmute(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; eyre::Result&lt;()&gt; {
+<a href=#656 id=656 data-nosnippet>656</a>        <span class="self">self</span>.participant
+<a href=#657 id=657 data-nosnippet>657</a>            .client()
+<a href=#658 id=658 data-nosnippet>658</a>            .call_set_muted(<span class="bool-val">false</span>)
+<a href=#659 id=659 data-nosnippet>659</a>            .<span class="kw">await
+<a href=#660 id=660 data-nosnippet>660</a>            </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"unmute failed: {e}"</span>))
+<a href=#661 id=661 data-nosnippet>661</a>    }
+<a href=#662 id=662 data-nosnippet>662</a>
+<a href=#663 id=663 data-nosnippet>663</a>    <span class="doccomment">/// Leave the call.
+<a href=#664 id=664 data-nosnippet>664</a>    </span><span class="kw">pub async fn </span>leave(<span class="self">self</span>) -&gt; eyre::Result&lt;()&gt; {
+<a href=#665 id=665 data-nosnippet>665</a>        <span class="self">self</span>.participant
+<a href=#666 id=666 data-nosnippet>666</a>            .client()
+<a href=#667 id=667 data-nosnippet>667</a>            .call_leave()
+<a href=#668 id=668 data-nosnippet>668</a>            .<span class="kw">await
+<a href=#669 id=669 data-nosnippet>669</a>            </span>.map_err(|e| <span class="macro">eyre::eyre!</span>(<span class="string">"leave failed: {e}"</span>))
+<a href=#670 id=670 data-nosnippet>670</a>    }
+<a href=#671 id=671 data-nosnippet>671</a>}
+<a href=#672 id=672 data-nosnippet>672</a>
+<a href=#673 id=673 data-nosnippet>673</a><span class="doccomment">/// Everyone in the roster except this client. Empty until the server has
+<a href=#674 id=674 data-nosnippet>674</a>/// assigned our own `self_id` (a roster we can't subtract ourselves from
+<a href=#675 id=675 data-nosnippet>675</a>/// tells us nothing about who the *remote* peers are).
+<a href=#676 id=676 data-nosnippet>676</a></span><span class="kw">fn </span>remote_peers(v: <span class="kw-2">&amp;</span>CallView) -&gt; Vec&lt;u32&gt; {
+<a href=#677 id=677 data-nosnippet>677</a>    v.self_id.map_or_else(Vec::new, |me| {
+<a href=#678 id=678 data-nosnippet>678</a>        v.peers.iter().copied().filter(|p| <span class="kw-2">*</span><span class="macro">p !</span>= me).collect()
+<a href=#679 id=679 data-nosnippet>679</a>    })
+<a href=#680 id=680 data-nosnippet>680</a>}
+<a href=#681 id=681 data-nosnippet>681</a>
+<a href=#682 id=682 data-nosnippet>682</a><span class="doccomment">/// One peer's inbound stream for `source`, or `None` when that peer has no
+<a href=#683 id=683 data-nosnippet>683</a>/// inbound row yet (rows are created lazily by the first pipeline).
+<a href=#684 id=684 data-nosnippet>684</a></span><span class="kw">fn </span>peer_video(s: <span class="kw-2">&amp;</span>StatsSnapshot, peer: u32, source: VideoSource) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>InboundVideoSnapshot&gt; {
+<a href=#685 id=685 data-nosnippet>685</a>    s.inbound
+<a href=#686 id=686 data-nosnippet>686</a>        .iter()
+<a href=#687 id=687 data-nosnippet>687</a>        .find(|p| p.peer_id == peer)
+<a href=#688 id=688 data-nosnippet>688</a>        .map(|p| <span class="kw">match </span>source {
+<a href=#689 id=689 data-nosnippet>689</a>            VideoSource::Camera =&gt; <span class="kw-2">&amp;</span>p.video,
+<a href=#690 id=690 data-nosnippet>690</a>            VideoSource::Screen =&gt; <span class="kw-2">&amp;</span>p.screen_video,
+<a href=#691 id=691 data-nosnippet>691</a>        })
+<a href=#692 id=692 data-nosnippet>692</a>}
+<a href=#693 id=693 data-nosnippet>693</a>
+<a href=#694 id=694 data-nosnippet>694</a><span class="kw">fn </span>peer_video_frames(s: <span class="kw-2">&amp;</span>StatsSnapshot, peer: u32, source: VideoSource) -&gt; u64 {
+<a href=#695 id=695 data-nosnippet>695</a>    peer_video(s, peer, source).map_or(<span class="number">0</span>, |v| v.frames_received)
+<a href=#696 id=696 data-nosnippet>696</a>}
+<a href=#697 id=697 data-nosnippet>697</a>
+<a href=#698 id=698 data-nosnippet>698</a><span class="kw">fn </span>inbound_video_total(s: <span class="kw-2">&amp;</span>StatsSnapshot) -&gt; u64 {
+<a href=#699 id=699 data-nosnippet>699</a>    s.inbound.iter().map(|p| p.video.frames_received).sum()
+<a href=#700 id=700 data-nosnippet>700</a>}
+<a href=#701 id=701 data-nosnippet>701</a>
+<a href=#702 id=702 data-nosnippet>702</a><span class="kw">fn </span>inbound_audio_total(s: <span class="kw-2">&amp;</span>StatsSnapshot) -&gt; u64 {
+<a href=#703 id=703 data-nosnippet>703</a>    s.inbound.iter().map(|p| p.audio.frames_received).sum()
+<a href=#704 id=704 data-nosnippet>704</a>}
+<a href=#705 id=705 data-nosnippet>705</a>
+<a href=#706 id=706 data-nosnippet>706</a><span class="doccomment">/// Shared polling core for a watch-driven `expect_*`: check `pred` on every
+<a href=#707 id=707 data-nosnippet>707</a>/// change (and once up front), bail with `describe`'s last-observed state on
+<a href=#708 id=708 data-nosnippet>708</a>/// timeout. `deadline` defaults to [`DEFAULT_DEADLINE`].
+<a href=#709 id=709 data-nosnippet>709</a></span><span class="kw">async fn </span>wait_for&lt;T&gt;(
+<a href=#710 id=710 data-nosnippet>710</a>    deadline: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+<a href=#711 id=711 data-nosnippet>711</a>    rx: <span class="kw-2">&amp;mut </span>watch::Receiver&lt;T&gt;,
+<a href=#712 id=712 data-nosnippet>712</a>    pred: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>T) -&gt; bool,
+<a href=#713 id=713 data-nosnippet>713</a>    describe: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>T) -&gt; String,
+<a href=#714 id=714 data-nosnippet>714</a>) -&gt; eyre::Result&lt;()&gt; {
+<a href=#715 id=715 data-nosnippet>715</a>    <span class="kw">let </span>deadline = deadline.unwrap_or(DEFAULT_DEADLINE);
+<a href=#716 id=716 data-nosnippet>716</a>    <span class="kw">let </span>wait = <span class="kw">async </span>{
+<a href=#717 id=717 data-nosnippet>717</a>        <span class="kw">loop </span>{
+<a href=#718 id=718 data-nosnippet>718</a>            <span class="kw">if </span>pred(<span class="kw-2">&amp;</span>rx.borrow_and_update()) {
+<a href=#719 id=719 data-nosnippet>719</a>                <span class="kw">return</span>;
+<a href=#720 id=720 data-nosnippet>720</a>            }
+<a href=#721 id=721 data-nosnippet>721</a>            <span class="kw">if </span>rx.changed().<span class="kw">await</span>.is_err() {
+<a href=#722 id=722 data-nosnippet>722</a>                <span class="kw">return</span>; <span class="comment">// sender dropped — the final check below settles it
+<a href=#723 id=723 data-nosnippet>723</a>            </span>}
+<a href=#724 id=724 data-nosnippet>724</a>        }
+<a href=#725 id=725 data-nosnippet>725</a>    };
+<a href=#726 id=726 data-nosnippet>726</a>    <span class="kw">if </span>tokio::time::timeout(deadline, wait).<span class="kw">await</span>.is_ok() &amp;&amp; pred(<span class="kw-2">&amp;</span>rx.borrow()) {
+<a href=#727 id=727 data-nosnippet>727</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#728 id=728 data-nosnippet>728</a>    }
+<a href=#729 id=729 data-nosnippet>729</a>    <span class="macro">eyre::bail!</span>(
+<a href=#730 id=730 data-nosnippet>730</a>        <span class="string">"timed out after {deadline:?} waiting for condition; last observed: {}"</span>,
+<a href=#731 id=731 data-nosnippet>731</a>        describe(<span class="kw-2">&amp;</span>rx.borrow())
+<a href=#732 id=732 data-nosnippet>732</a>    )
+<a href=#733 id=733 data-nosnippet>733</a>}
 </code></pre></div></section></main></body></html>
