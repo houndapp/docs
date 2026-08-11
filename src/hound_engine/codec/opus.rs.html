@@ -264,275 +264,351 @@
 <a href=#264 id=264 data-nosnippet>264</a>        PcmFrame::at_engine_rate(samples, TimestampUs::ZERO)
 <a href=#265 id=265 data-nosnippet>265</a>    }
 <a href=#266 id=266 data-nosnippet>266</a>
-<a href=#267 id=267 data-nosnippet>267</a>    <span class="doccomment">/// A frame of digital silence (bit-exact zeros) at `ts_us` — what a muted room
-<a href=#268 id=268 data-nosnippet>268</a>    /// delivers, and the only input DTX is allowed to collapse.
-<a href=#269 id=269 data-nosnippet>269</a>    </span><span class="kw">fn </span>silent_frame(ts_us: i64) -&gt; PcmFrame {
-<a href=#270 id=270 data-nosnippet>270</a>        PcmFrame::at_engine_rate(
-<a href=#271 id=271 data-nosnippet>271</a>            <span class="macro">vec!</span>[<span class="number">0i16</span>; SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize],
-<a href=#272 id=272 data-nosnippet>272</a>            TimestampUs::from_micros(ts_us),
-<a href=#273 id=273 data-nosnippet>273</a>        )
-<a href=#274 id=274 data-nosnippet>274</a>    }
-<a href=#275 id=275 data-nosnippet>275</a>
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="doccomment">/// A SUPPRESSED frame: libopus emits 1 byte (the TOC alone), occasionally 2.
-<a href=#277 id=277 data-nosnippet>277</a>    ///
-<a href=#278 id=278 data-nosnippet>278</a>    /// The threshold that matters is not DTX-vs-speech (1 byte vs ~60 — trivially
-<a href=#279 id=279 data-nosnippet>279</a>    /// separable) but DTX-vs-CODED SILENCE. With DTX off a silent 20 ms voice frame
-<a href=#280 id=280 data-nosnippet>280</a>    /// still costs [`CODED_SILENCE_BYTES`], and that is exactly what this encoder
-<a href=#281 id=281 data-nosnippet>281</a>    /// emits during the pre-DTX hangover — so a threshold set loosely above it would
-<a href=#282 id=282 data-nosnippet>282</a>    /// pass on an encoder where DTX did nothing at all. Suppression is proven by
-<a href=#283 id=283 data-nosnippet>283</a>    /// beating coded silence, not by being "small".
-<a href=#284 id=284 data-nosnippet>284</a>    </span><span class="kw">const </span>DTX_SUPPRESSED_BYTES: usize = <span class="number">2</span>;
-<a href=#285 id=285 data-nosnippet>285</a>
-<a href=#286 id=286 data-nosnippet>286</a>    <span class="doccomment">/// What a silent voice frame costs with DTX OFF (measured: the hangover frames
-<a href=#287 id=287 data-nosnippet>287</a>    /// before suppression kicks in). The number the suppressed steady state must beat.
-<a href=#288 id=288 data-nosnippet>288</a>    </span><span class="kw">const </span>CODED_SILENCE_BYTES: usize = <span class="number">8</span>;
-<a href=#289 id=289 data-nosnippet>289</a>
-<a href=#290 id=290 data-nosnippet>290</a>    <span class="doccomment">/// Upper bound for ANY packet in the suppressed steady state. Above the periodic
-<a href=#291 id=291 data-nosnippet>291</a>    /// SILK comfort-noise refresh (which is [`CODED_SILENCE_BYTES`]-sized and lands
-<a href=#292 id=292 data-nosnippet>292</a>    /// roughly every 400 ms), below anything coded from real signal.
-<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">const </span>DTX_MAX_BYTES: usize = <span class="number">10</span>;
-<a href=#294 id=294 data-nosnippet>294</a>
-<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">fn </span>energy(samples: <span class="kw-2">&amp;</span>[i16]) -&gt; f64 {
-<a href=#296 id=296 data-nosnippet>296</a>        samples
-<a href=#297 id=297 data-nosnippet>297</a>            .iter()
-<a href=#298 id=298 data-nosnippet>298</a>            .map(|<span class="kw-2">&amp;</span>s| (s <span class="kw">as </span>f64) * (s <span class="kw">as </span>f64))
-<a href=#299 id=299 data-nosnippet>299</a>            .sum::&lt;f64&gt;()
-<a href=#300 id=300 data-nosnippet>300</a>            / samples.len().max(<span class="number">1</span>) <span class="kw">as </span>f64
-<a href=#301 id=301 data-nosnippet>301</a>    }
-<a href=#302 id=302 data-nosnippet>302</a>
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="doccomment">/// THE proof that needs no device: feed a deterministic sine, encode to Opus,
-<a href=#304 id=304 data-nosnippet>304</a>    /// decode back, and assert the round-trip preserves frame length, sample
-<a href=#305 id=305 data-nosnippet>305</a>    /// rate, and ENERGY (the output is real audio, not silence). This is the
-<a href=#306 id=306 data-nosnippet>306</a>    /// headless go/no-go for the codec leg of the endpoint.
-<a href=#307 id=307 data-nosnippet>307</a>    </span><span class="attr">#[test]
-<a href=#308 id=308 data-nosnippet>308</a>    </span><span class="kw">fn </span>opus_round_trip_preserves_energy_and_shape() {
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span>frame = sine_frame();
-<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">let </span>input_energy = energy(<span class="kw-2">&amp;</span>frame.samples);
-<a href=#311 id=311 data-nosnippet>311</a>        <span class="macro">assert!</span>(input_energy &gt; <span class="number">0.0</span>, <span class="string">"test input must not be silent"</span>);
-<a href=#312 id=312 data-nosnippet>312</a>
-<a href=#313 id=313 data-nosnippet>313</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
-<a href=#314 id=314 data-nosnippet>314</a>        <span class="kw">let </span><span class="kw-2">mut </span>dec = OpusDecoder::new().expect(<span class="string">"decoder"</span>);
-<a href=#315 id=315 data-nosnippet>315</a>
-<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">let </span>packet = enc.encode(<span class="kw-2">&amp;</span>frame).expect(<span class="string">"encode"</span>);
-<a href=#317 id=317 data-nosnippet>317</a>        <span class="comment">// A 20 ms voice frame at 24 kbps is on the order of tens of bytes — must
-<a href=#318 id=318 data-nosnippet>318</a>        // be non-empty and within the single-frame upper bound.
-<a href=#319 id=319 data-nosnippet>319</a>        </span><span class="macro">assert!</span>(
-<a href=#320 id=320 data-nosnippet>320</a>            !packet.data.is_empty() &amp;&amp; packet.data.len() &lt; MAX_PACKET_BYTES,
-<a href=#321 id=321 data-nosnippet>321</a>            <span class="string">"opus packet length sane: {}"</span>,
-<a href=#322 id=322 data-nosnippet>322</a>            packet.data.len()
-<a href=#323 id=323 data-nosnippet>323</a>        );
-<a href=#324 id=324 data-nosnippet>324</a>        <span class="macro">assert_eq!</span>(packet.timestamp_us, frame.timestamp_us);
-<a href=#325 id=325 data-nosnippet>325</a>
-<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">let </span>out = dec
-<a href=#327 id=327 data-nosnippet>327</a>            .decode(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>packet), packet.timestamp_us)
-<a href=#328 id=328 data-nosnippet>328</a>            .expect(<span class="string">"decode"</span>);
-<a href=#329 id=329 data-nosnippet>329</a>
-<a href=#330 id=330 data-nosnippet>330</a>        <span class="comment">// Shape: exactly one frame back, at the endpoint's rate/channels.
-<a href=#331 id=331 data-nosnippet>331</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#332 id=332 data-nosnippet>332</a>            out.samples.len(),
-<a href=#333 id=333 data-nosnippet>333</a>            SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize
-<a href=#334 id=334 data-nosnippet>334</a>        );
-<a href=#335 id=335 data-nosnippet>335</a>        <span class="macro">assert_eq!</span>(out.sample_rate, SAMPLE_RATE);
-<a href=#336 id=336 data-nosnippet>336</a>        <span class="macro">assert_eq!</span>(out.channels, CHANNELS);
-<a href=#337 id=337 data-nosnippet>337</a>        <span class="macro">assert_eq!</span>(out.timestamp_us, frame.timestamp_us);
-<a href=#338 id=338 data-nosnippet>338</a>
-<a href=#339 id=339 data-nosnippet>339</a>        <span class="comment">// Energy preserved: Opus is lossy, so we do not assert sample equality —
-<a href=#340 id=340 data-nosnippet>340</a>        // we assert the decoded block carries comparable energy (NOT silence).
-<a href=#341 id=341 data-nosnippet>341</a>        // A wide tolerance band (within ~12 dB either way) is the right test: it
-<a href=#342 id=342 data-nosnippet>342</a>        // fails hard on silence/garbage but passes on legitimate lossy output.
-<a href=#343 id=343 data-nosnippet>343</a>        </span><span class="kw">let </span>output_energy = energy(<span class="kw-2">&amp;</span>out.samples);
-<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">let </span>ratio = output_energy / input_energy;
-<a href=#345 id=345 data-nosnippet>345</a>        <span class="macro">assert!</span>(
-<a href=#346 id=346 data-nosnippet>346</a>            ratio &gt; <span class="number">0.25 </span>&amp;&amp; ratio &lt; <span class="number">4.0</span>,
-<a href=#347 id=347 data-nosnippet>347</a>            <span class="string">"decoded energy {output_energy:.0} vs input {input_energy:.0} (ratio {ratio:.3}) — \
-<a href=#348 id=348 data-nosnippet>348</a>             expected within ~12 dB; far off means silence or corruption, not lossy codec drift"
-<a href=#349 id=349 data-nosnippet>349</a>        </span>);
-<a href=#350 id=350 data-nosnippet>350</a>
-<a href=#351 id=351 data-nosnippet>351</a>        <span class="comment">// Explicit not-silence guard, independent of the input-relative ratio.
-<a href=#352 id=352 data-nosnippet>352</a>        </span><span class="macro">assert!</span>(
-<a href=#353 id=353 data-nosnippet>353</a>            out.rms() &gt; <span class="number">0.05</span>,
-<a href=#354 id=354 data-nosnippet>354</a>            <span class="string">"decoded RMS {} is ~silent — round trip lost the signal"</span>,
-<a href=#355 id=355 data-nosnippet>355</a>            out.rms()
-<a href=#356 id=356 data-nosnippet>356</a>        );
-<a href=#357 id=357 data-nosnippet>357</a>    }
-<a href=#358 id=358 data-nosnippet>358</a>
-<a href=#359 id=359 data-nosnippet>359</a>    <span class="doccomment">/// PLC path: a `None` packet must still yield a full frame (concealment),
-<a href=#360 id=360 data-nosnippet>360</a>    /// never an error or a short/empty buffer — the decoder API the MoQ
-<a href=#361 id=361 data-nosnippet>361</a>    /// transport step relies on for lost packets.
-<a href=#362 id=362 data-nosnippet>362</a>    </span><span class="attr">#[test]
-<a href=#363 id=363 data-nosnippet>363</a>    </span><span class="kw">fn </span>opus_plc_yields_full_concealment_frame() {
-<a href=#364 id=364 data-nosnippet>364</a>        <span class="kw">let </span>frame = sine_frame();
-<a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
-<a href=#366 id=366 data-nosnippet>366</a>        <span class="kw">let </span><span class="kw-2">mut </span>dec = OpusDecoder::new().expect(<span class="string">"decoder"</span>);
-<a href=#367 id=367 data-nosnippet>367</a>
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="comment">// Prime the decoder with one real packet so PLC has recent history to
-<a href=#369 id=369 data-nosnippet>369</a>        // extrapolate from (concealment off a cold decoder is legitimately near
-<a href=#370 id=370 data-nosnippet>370</a>        // silent; that is not what we are testing).
-<a href=#371 id=371 data-nosnippet>371</a>        </span><span class="kw">let </span>packet = enc.encode(<span class="kw-2">&amp;</span>frame).expect(<span class="string">"encode"</span>);
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">let _ </span>= dec
-<a href=#373 id=373 data-nosnippet>373</a>            .decode(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>packet), TimestampUs::ZERO)
-<a href=#374 id=374 data-nosnippet>374</a>            .expect(<span class="string">"decode real"</span>);
-<a href=#375 id=375 data-nosnippet>375</a>
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">let </span>concealed = dec
-<a href=#377 id=377 data-nosnippet>377</a>            .decode(<span class="prelude-val">None</span>, TimestampUs::from_micros(<span class="number">20_000</span>))
-<a href=#378 id=378 data-nosnippet>378</a>            .expect(<span class="string">"plc decode"</span>);
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="macro">assert_eq!</span>(
-<a href=#380 id=380 data-nosnippet>380</a>            concealed.samples.len(),
-<a href=#381 id=381 data-nosnippet>381</a>            SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize,
-<a href=#382 id=382 data-nosnippet>382</a>            <span class="string">"PLC must produce a full frame"
-<a href=#383 id=383 data-nosnippet>383</a>        </span>);
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="macro">assert_eq!</span>(concealed.timestamp_us, TimestampUs::from_micros(<span class="number">20_000</span>));
-<a href=#385 id=385 data-nosnippet>385</a>    }
-<a href=#386 id=386 data-nosnippet>386</a>
-<a href=#387 id=387 data-nosnippet>387</a>    <span class="doccomment">/// DTX: sustained silence must collapse to comfort-noise-sized packets. libopus
-<a href=#388 id=388 data-nosnippet>388</a>    /// keeps coding for a hangover after the signal stops, so the assertion is on the
-<a href=#389 id=389 data-nosnippet>389</a>    /// STEADY state — every packet past the hangover window, not the first few.
-<a href=#390 id=390 data-nosnippet>390</a>    </span><span class="attr">#[test]
-<a href=#391 id=391 data-nosnippet>391</a>    </span><span class="kw">fn </span>opus_dtx_collapses_sustained_silence() {
-<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
-<a href=#393 id=393 data-nosnippet>393</a>
-<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">let </span>sizes: Vec&lt;usize&gt; = (<span class="number">0</span>..<span class="number">100</span>)
-<a href=#395 id=395 data-nosnippet>395</a>            .map(|i| {
-<a href=#396 id=396 data-nosnippet>396</a>                enc.encode(<span class="kw-2">&amp;</span>silent_frame(i <span class="kw">as </span>i64 * <span class="number">20_000</span>))
-<a href=#397 id=397 data-nosnippet>397</a>                    .expect(<span class="string">"encode silence"</span>)
-<a href=#398 id=398 data-nosnippet>398</a>                    .data
-<a href=#399 id=399 data-nosnippet>399</a>                    .len()
-<a href=#400 id=400 data-nosnippet>400</a>            })
-<a href=#401 id=401 data-nosnippet>401</a>            .collect();
-<a href=#402 id=402 data-nosnippet>402</a>
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="comment">// Past the hangover (~first 20 frames = 400 ms) every packet must be tiny.
-<a href=#404 id=404 data-nosnippet>404</a>        </span><span class="kw">let </span>steady = <span class="kw-2">&amp;</span>sizes[<span class="number">20</span>..];
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="macro">assert!</span>(
-<a href=#406 id=406 data-nosnippet>406</a>            steady.iter().all(|<span class="kw-2">&amp;</span>n| n &lt;= DTX_MAX_BYTES),
-<a href=#407 id=407 data-nosnippet>407</a>            <span class="string">"DTX must collapse sustained silence to ≤{DTX_MAX_BYTES} bytes; steady-state \
-<a href=#408 id=408 data-nosnippet>408</a>             sizes were {steady:?}"
-<a href=#409 id=409 data-nosnippet>409</a>        </span>);
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="comment">// The load-bearing assertion: the steady state must be SUPPRESSED frames, not
-<a href=#411 id=411 data-nosnippet>411</a>        // merely cheaply-coded silence. Without DTX every one of these would be
-<a href=#412 id=412 data-nosnippet>412</a>        // CODED_SILENCE_BYTES, so a vast majority at ≤2 bytes is the thing that can
-<a href=#413 id=413 data-nosnippet>413</a>        // only be true if suppression is really on. The remainder is the periodic
-<a href=#414 id=414 data-nosnippet>414</a>        // comfort-noise refresh.
-<a href=#415 id=415 data-nosnippet>415</a>        </span><span class="kw">let </span>suppressed = steady
-<a href=#416 id=416 data-nosnippet>416</a>            .iter()
-<a href=#417 id=417 data-nosnippet>417</a>            .filter(|&amp;&amp;n| n &lt;= DTX_SUPPRESSED_BYTES)
-<a href=#418 id=418 data-nosnippet>418</a>            .count();
-<a href=#419 id=419 data-nosnippet>419</a>        <span class="macro">assert!</span>(
-<a href=#420 id=420 data-nosnippet>420</a>            suppressed * <span class="number">10 </span>&gt;= steady.len() * <span class="number">9</span>,
-<a href=#421 id=421 data-nosnippet>421</a>            <span class="string">"≥90% of a silent steady state must be SUPPRESSED (≤{DTX_SUPPRESSED_BYTES} B); \
-<a href=#422 id=422 data-nosnippet>422</a>             got {suppressed}/{} — coded silence would be {CODED_SILENCE_BYTES} B every \
-<a href=#423 id=423 data-nosnippet>423</a>             frame, so this failing means DTX is not engaging: {steady:?}"</span>,
-<a href=#424 id=424 data-nosnippet>424</a>            steady.len()
-<a href=#425 id=425 data-nosnippet>425</a>        );
-<a href=#426 id=426 data-nosnippet>426</a>        <span class="comment">// Never zero-length: an empty payload is not a wire frame the decoder can
-<a href=#427 id=427 data-nosnippet>427</a>        // take (`Packet::try_from` rejects it), so the encoder must always emit the
-<a href=#428 id=428 data-nosnippet>428</a>        // TOC byte for the receiver to turn into comfort noise.
-<a href=#429 id=429 data-nosnippet>429</a>        </span><span class="macro">assert!</span>(
-<a href=#430 id=430 data-nosnippet>430</a>            steady.iter().all(|<span class="kw-2">&amp;</span>n| n &gt; <span class="number">0</span>),
-<a href=#431 id=431 data-nosnippet>431</a>            <span class="string">"a DTX packet still carries its TOC byte"
-<a href=#432 id=432 data-nosnippet>432</a>        </span>);
-<a href=#433 id=433 data-nosnippet>433</a>    }
-<a href=#434 id=434 data-nosnippet>434</a>
-<a href=#435 id=435 data-nosnippet>435</a>    <span class="doccomment">/// The MUSIC profile must NOT suppress. DTX is not SILK-exclusive — enabling it
-<a href=#436 id=436 data-nosnippet>436</a>    /// on the fullband screen-audio encoder really does collapse silence to 1-byte
-<a href=#437 id=437 data-nosnippet>437</a>    /// packets — so this pins the deliberate opt-out: shared audio keeps coding its
-<a href=#438 id=438 data-nosnippet>438</a>    /// quiet passages until the silence-boundary listening check is done. Delete this
-<a href=#439 id=439 data-nosnippet>439</a>    /// test the day `OpusProfile::Music::dtx()` flips.
-<a href=#440 id=440 data-nosnippet>440</a>    </span><span class="attr">#[test]
-<a href=#441 id=441 data-nosnippet>441</a>    </span><span class="kw">fn </span>opus_music_profile_does_not_suppress_silence() {
-<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc =
-<a href=#443 id=443 data-nosnippet>443</a>            OpusEncoder::new(Bitrate::kbps(<span class="number">96</span>), OpusProfile::Music).expect(<span class="string">"music encoder"</span>);
-<a href=#444 id=444 data-nosnippet>444</a>        <span class="kw">let </span>sizes: Vec&lt;usize&gt; = (<span class="number">0</span>..<span class="number">100</span>)
-<a href=#445 id=445 data-nosnippet>445</a>            .map(|i| {
-<a href=#446 id=446 data-nosnippet>446</a>                enc.encode(<span class="kw-2">&amp;</span>silent_frame(i <span class="kw">as </span>i64 * <span class="number">20_000</span>))
-<a href=#447 id=447 data-nosnippet>447</a>                    .expect(<span class="string">"encode silence"</span>)
-<a href=#448 id=448 data-nosnippet>448</a>                    .data
-<a href=#449 id=449 data-nosnippet>449</a>                    .len()
-<a href=#450 id=450 data-nosnippet>450</a>            })
-<a href=#451 id=451 data-nosnippet>451</a>            .collect();
-<a href=#452 id=452 data-nosnippet>452</a>        <span class="comment">// Measured ~85 B/frame at 96 kbps: full-rate coded silence, nowhere near
-<a href=#453 id=453 data-nosnippet>453</a>        // either the suppressed or the comfort-noise size.
-<a href=#454 id=454 data-nosnippet>454</a>        </span><span class="macro">assert!</span>(
-<a href=#455 id=455 data-nosnippet>455</a>            sizes.iter().all(|<span class="kw-2">&amp;</span>n| n &gt; DTX_MAX_BYTES),
-<a href=#456 id=456 data-nosnippet>456</a>            <span class="string">"the music profile must keep coding silence at full rate (DTX opted out); \
-<a href=#457 id=457 data-nosnippet>457</a>             got {sizes:?}"
-<a href=#458 id=458 data-nosnippet>458</a>        </span>);
-<a href=#459 id=459 data-nosnippet>459</a>    }
-<a href=#460 id=460 data-nosnippet>460</a>
-<a href=#461 id=461 data-nosnippet>461</a>    <span class="doccomment">/// The other half of the DTX contract: real audio is NOT collapsed. Without this
-<a href=#462 id=462 data-nosnippet>462</a>    /// the test above would pass on an encoder that had simply stopped working.
-<a href=#463 id=463 data-nosnippet>463</a>    </span><span class="attr">#[test]
-<a href=#464 id=464 data-nosnippet>464</a>    </span><span class="kw">fn </span>opus_dtx_leaves_loud_audio_alone() {
-<a href=#465 id=465 data-nosnippet>465</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">let </span>frame = sine_frame();
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">50 </span>{
-<a href=#468 id=468 data-nosnippet>468</a>            <span class="kw">let </span><span class="kw-2">mut </span>f = frame.clone();
-<a href=#469 id=469 data-nosnippet>469</a>            f.timestamp_us = TimestampUs::from_micros(i * <span class="number">20_000</span>);
-<a href=#470 id=470 data-nosnippet>470</a>            <span class="kw">let </span>n = enc.encode(<span class="kw-2">&amp;</span>f).expect(<span class="string">"encode tone"</span>).data.len();
-<a href=#471 id=471 data-nosnippet>471</a>            <span class="macro">assert!</span>(
-<a href=#472 id=472 data-nosnippet>472</a>                n &gt; DTX_MAX_BYTES,
-<a href=#473 id=473 data-nosnippet>473</a>                <span class="string">"a frame with real energy must stay a coded frame, got {n} bytes"
-<a href=#474 id=474 data-nosnippet>474</a>            </span>);
-<a href=#475 id=475 data-nosnippet>475</a>        }
-<a href=#476 id=476 data-nosnippet>476</a>    }
-<a href=#477 id=477 data-nosnippet>477</a>
-<a href=#478 id=478 data-nosnippet>478</a>    <span class="doccomment">/// End to end for the silence path: encode silence until DTX engages, then decode
-<a href=#479 id=479 data-nosnippet>479</a>    /// that comfort-noise packet the way `audio_rx` does — it must succeed, yield a
-<a href=#480 id=480 data-nosnippet>480</a>    /// full frame, and be silent. Plus `decode(None)` PLC still works afterwards, so
-<a href=#481 id=481 data-nosnippet>481</a>    /// the DTX packet does not poison the decoder's state.
-<a href=#482 id=482 data-nosnippet>482</a>    </span><span class="attr">#[test]
-<a href=#483 id=483 data-nosnippet>483</a>    </span><span class="kw">fn </span>opus_dtx_packet_round_trips_to_silence() {
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
-<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">let </span><span class="kw-2">mut </span>dec = OpusDecoder::new().expect(<span class="string">"decoder"</span>);
-<a href=#486 id=486 data-nosnippet>486</a>
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="comment">// Encode past the hangover, keeping the last (definitely-DTX) packet.
-<a href=#488 id=488 data-nosnippet>488</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>packet = <span class="prelude-val">None</span>;
-<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">60 </span>{
-<a href=#490 id=490 data-nosnippet>490</a>            packet = <span class="prelude-val">Some</span>(enc.encode(<span class="kw-2">&amp;</span>silent_frame(i * <span class="number">20_000</span>)).expect(<span class="string">"encode"</span>));
-<a href=#491 id=491 data-nosnippet>491</a>        }
-<a href=#492 id=492 data-nosnippet>492</a>        <span class="kw">let </span>packet = packet.expect(<span class="string">"a packet"</span>);
-<a href=#493 id=493 data-nosnippet>493</a>        <span class="macro">assert!</span>(
-<a href=#494 id=494 data-nosnippet>494</a>            packet.data.len() &lt;= DTX_MAX_BYTES,
-<a href=#495 id=495 data-nosnippet>495</a>            <span class="string">"expected a DTX packet, got {} bytes"</span>,
-<a href=#496 id=496 data-nosnippet>496</a>            packet.data.len()
-<a href=#497 id=497 data-nosnippet>497</a>        );
-<a href=#498 id=498 data-nosnippet>498</a>
-<a href=#499 id=499 data-nosnippet>499</a>        <span class="kw">let </span>out = dec
-<a href=#500 id=500 data-nosnippet>500</a>            .decode(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>packet), packet.timestamp_us)
-<a href=#501 id=501 data-nosnippet>501</a>            .expect(<span class="string">"a DTX comfort-noise packet must decode"</span>);
-<a href=#502 id=502 data-nosnippet>502</a>        <span class="macro">assert_eq!</span>(
-<a href=#503 id=503 data-nosnippet>503</a>            out.samples.len(),
-<a href=#504 id=504 data-nosnippet>504</a>            SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize,
-<a href=#505 id=505 data-nosnippet>505</a>            <span class="string">"a DTX packet still yields a full frame of playout"
-<a href=#506 id=506 data-nosnippet>506</a>        </span>);
-<a href=#507 id=507 data-nosnippet>507</a>        <span class="macro">assert_eq!</span>(out.timestamp_us, packet.timestamp_us);
-<a href=#508 id=508 data-nosnippet>508</a>        <span class="comment">// Comfort noise, not speech: well under the mix bus's SILENCE_FLOOR
-<a href=#509 id=509 data-nosnippet>509</a>        // (`crate::audio::starve`), so it never reads as an active talker.
-<a href=#510 id=510 data-nosnippet>510</a>        </span><span class="macro">assert!</span>(
-<a href=#511 id=511 data-nosnippet>511</a>            out.rms() &lt; <span class="number">0.01</span>,
-<a href=#512 id=512 data-nosnippet>512</a>            <span class="string">"DTX must decode to silence/comfort noise, got RMS {}"</span>,
-<a href=#513 id=513 data-nosnippet>513</a>            out.rms()
-<a href=#514 id=514 data-nosnippet>514</a>        );
-<a href=#515 id=515 data-nosnippet>515</a>
-<a href=#516 id=516 data-nosnippet>516</a>        <span class="comment">// PLC after a DTX packet still produces a full concealment frame.
-<a href=#517 id=517 data-nosnippet>517</a>        </span><span class="kw">let </span>concealed = dec
-<a href=#518 id=518 data-nosnippet>518</a>            .decode(<span class="prelude-val">None</span>, TimestampUs::from_micros(<span class="number">60 </span>* <span class="number">20_000</span>))
-<a href=#519 id=519 data-nosnippet>519</a>            .expect(<span class="string">"PLC after DTX"</span>);
-<a href=#520 id=520 data-nosnippet>520</a>        <span class="macro">assert_eq!</span>(
-<a href=#521 id=521 data-nosnippet>521</a>            concealed.samples.len(),
-<a href=#522 id=522 data-nosnippet>522</a>            SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize
-<a href=#523 id=523 data-nosnippet>523</a>        );
-<a href=#524 id=524 data-nosnippet>524</a>    }
-<a href=#525 id=525 data-nosnippet>525</a>
-<a href=#526 id=526 data-nosnippet>526</a>    <span class="doccomment">/// Wrong-size input is a pipeline bug and must be rejected, not silently
-<a href=#527 id=527 data-nosnippet>527</a>    /// mis-encoded (Opus only accepts exact frame sizes).
-<a href=#528 id=528 data-nosnippet>528</a>    </span><span class="attr">#[test]
-<a href=#529 id=529 data-nosnippet>529</a>    </span><span class="kw">fn </span>opus_rejects_wrong_frame_size() {
-<a href=#530 id=530 data-nosnippet>530</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
-<a href=#531 id=531 data-nosnippet>531</a>        <span class="kw">let </span>bad = PcmFrame::at_engine_rate(<span class="macro">vec!</span>[<span class="number">0i16</span>; SAMPLES_PER_FRAME + <span class="number">1</span>], TimestampUs::ZERO);
-<a href=#532 id=532 data-nosnippet>532</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#533 id=533 data-nosnippet>533</a>            enc.encode(<span class="kw-2">&amp;</span>bad),
-<a href=#534 id=534 data-nosnippet>534</a>            <span class="prelude-val">Err</span>(AudioError::UnsupportedFormat(<span class="kw">_</span>))
-<a href=#535 id=535 data-nosnippet>535</a>        ));
-<a href=#536 id=536 data-nosnippet>536</a>    }
-<a href=#537 id=537 data-nosnippet>537</a>}
+<a href=#267 id=267 data-nosnippet>267</a>    <span class="doccomment">/// One frame of the SYNTHETIC CAPTURE SOURCE's signal — what every headless /
+<a href=#268 id=268 data-nosnippet>268</a>    /// e2e client publishes as its mic. Calls the source's own
+<a href=#269 id=269 data-nosnippet>269</a>    /// [`crate::platform::generic::synthetic_audio::sample_at`] rather than
+<a href=#270 id=270 data-nosnippet>270</a>    /// reimplementing it, so this can never test a signal the source stopped
+<a href=#271 id=271 data-nosnippet>271</a>    /// emitting. `frame_idx` walks the absolute sample index exactly as the running
+<a href=#272 id=272 data-nosnippet>272</a>    /// source does.
+<a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">fn </span>synthetic_source_frame(frame_idx: u64) -&gt; PcmFrame {
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="kw">use </span><span class="kw">crate</span>::platform::generic::synthetic_audio::sample_at;
+<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">let </span>base = frame_idx * SAMPLES_PER_FRAME <span class="kw">as </span>u64;
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>samples: Vec&lt;i16&gt; = (<span class="number">0</span>..SAMPLES_PER_FRAME)
+<a href=#277 id=277 data-nosnippet>277</a>            .map(|i| sample_at(base + i <span class="kw">as </span>u64))
+<a href=#278 id=278 data-nosnippet>278</a>            .collect();
+<a href=#279 id=279 data-nosnippet>279</a>        PcmFrame::at_engine_rate(samples, TimestampUs::from_micros(frame_idx <span class="kw">as </span>i64 * <span class="number">20_000</span>))
+<a href=#280 id=280 data-nosnippet>280</a>    }
+<a href=#281 id=281 data-nosnippet>281</a>
+<a href=#282 id=282 data-nosnippet>282</a>    <span class="doccomment">/// A frame of digital silence (bit-exact zeros) at `ts_us` — what a muted room
+<a href=#283 id=283 data-nosnippet>283</a>    /// delivers, and the only input DTX is allowed to collapse.
+<a href=#284 id=284 data-nosnippet>284</a>    </span><span class="kw">fn </span>silent_frame(ts_us: i64) -&gt; PcmFrame {
+<a href=#285 id=285 data-nosnippet>285</a>        PcmFrame::at_engine_rate(
+<a href=#286 id=286 data-nosnippet>286</a>            <span class="macro">vec!</span>[<span class="number">0i16</span>; SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize],
+<a href=#287 id=287 data-nosnippet>287</a>            TimestampUs::from_micros(ts_us),
+<a href=#288 id=288 data-nosnippet>288</a>        )
+<a href=#289 id=289 data-nosnippet>289</a>    }
+<a href=#290 id=290 data-nosnippet>290</a>
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="doccomment">/// A SUPPRESSED frame: libopus emits 1 byte (the TOC alone), occasionally 2.
+<a href=#292 id=292 data-nosnippet>292</a>    ///
+<a href=#293 id=293 data-nosnippet>293</a>    /// The threshold that matters is not DTX-vs-speech (1 byte vs ~60 — trivially
+<a href=#294 id=294 data-nosnippet>294</a>    /// separable) but DTX-vs-CODED SILENCE. With DTX off a silent 20 ms voice frame
+<a href=#295 id=295 data-nosnippet>295</a>    /// still costs [`CODED_SILENCE_BYTES`], and that is exactly what this encoder
+<a href=#296 id=296 data-nosnippet>296</a>    /// emits during the pre-DTX hangover — so a threshold set loosely above it would
+<a href=#297 id=297 data-nosnippet>297</a>    /// pass on an encoder where DTX did nothing at all. Suppression is proven by
+<a href=#298 id=298 data-nosnippet>298</a>    /// beating coded silence, not by being "small".
+<a href=#299 id=299 data-nosnippet>299</a>    </span><span class="kw">const </span>DTX_SUPPRESSED_BYTES: usize = <span class="number">2</span>;
+<a href=#300 id=300 data-nosnippet>300</a>
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="doccomment">/// What a silent voice frame costs with DTX OFF (measured: the hangover frames
+<a href=#302 id=302 data-nosnippet>302</a>    /// before suppression kicks in). The number the suppressed steady state must beat.
+<a href=#303 id=303 data-nosnippet>303</a>    </span><span class="kw">const </span>CODED_SILENCE_BYTES: usize = <span class="number">8</span>;
+<a href=#304 id=304 data-nosnippet>304</a>
+<a href=#305 id=305 data-nosnippet>305</a>    <span class="doccomment">/// Upper bound for ANY packet in the suppressed steady state. Above the periodic
+<a href=#306 id=306 data-nosnippet>306</a>    /// SILK comfort-noise refresh (which is [`CODED_SILENCE_BYTES`]-sized and lands
+<a href=#307 id=307 data-nosnippet>307</a>    /// roughly every 400 ms), below anything coded from real signal.
+<a href=#308 id=308 data-nosnippet>308</a>    </span><span class="kw">const </span>DTX_MAX_BYTES: usize = <span class="number">10</span>;
+<a href=#309 id=309 data-nosnippet>309</a>
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">fn </span>energy(samples: <span class="kw-2">&amp;</span>[i16]) -&gt; f64 {
+<a href=#311 id=311 data-nosnippet>311</a>        samples
+<a href=#312 id=312 data-nosnippet>312</a>            .iter()
+<a href=#313 id=313 data-nosnippet>313</a>            .map(|<span class="kw-2">&amp;</span>s| (s <span class="kw">as </span>f64) * (s <span class="kw">as </span>f64))
+<a href=#314 id=314 data-nosnippet>314</a>            .sum::&lt;f64&gt;()
+<a href=#315 id=315 data-nosnippet>315</a>            / samples.len().max(<span class="number">1</span>) <span class="kw">as </span>f64
+<a href=#316 id=316 data-nosnippet>316</a>    }
+<a href=#317 id=317 data-nosnippet>317</a>
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="doccomment">/// THE proof that needs no device: feed a deterministic sine, encode to Opus,
+<a href=#319 id=319 data-nosnippet>319</a>    /// decode back, and assert the round-trip preserves frame length, sample
+<a href=#320 id=320 data-nosnippet>320</a>    /// rate, and ENERGY (the output is real audio, not silence). This is the
+<a href=#321 id=321 data-nosnippet>321</a>    /// headless go/no-go for the codec leg of the endpoint.
+<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="attr">#[test]
+<a href=#323 id=323 data-nosnippet>323</a>    </span><span class="kw">fn </span>opus_round_trip_preserves_energy_and_shape() {
+<a href=#324 id=324 data-nosnippet>324</a>        <span class="kw">let </span>frame = sine_frame();
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="kw">let </span>input_energy = energy(<span class="kw-2">&amp;</span>frame.samples);
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="macro">assert!</span>(input_energy &gt; <span class="number">0.0</span>, <span class="string">"test input must not be silent"</span>);
+<a href=#327 id=327 data-nosnippet>327</a>
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">let </span><span class="kw-2">mut </span>dec = OpusDecoder::new().expect(<span class="string">"decoder"</span>);
+<a href=#330 id=330 data-nosnippet>330</a>
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">let </span>packet = enc.encode(<span class="kw-2">&amp;</span>frame).expect(<span class="string">"encode"</span>);
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="comment">// A 20 ms voice frame at 24 kbps is on the order of tens of bytes — must
+<a href=#333 id=333 data-nosnippet>333</a>        // be non-empty and within the single-frame upper bound.
+<a href=#334 id=334 data-nosnippet>334</a>        </span><span class="macro">assert!</span>(
+<a href=#335 id=335 data-nosnippet>335</a>            !packet.data.is_empty() &amp;&amp; packet.data.len() &lt; MAX_PACKET_BYTES,
+<a href=#336 id=336 data-nosnippet>336</a>            <span class="string">"opus packet length sane: {}"</span>,
+<a href=#337 id=337 data-nosnippet>337</a>            packet.data.len()
+<a href=#338 id=338 data-nosnippet>338</a>        );
+<a href=#339 id=339 data-nosnippet>339</a>        <span class="macro">assert_eq!</span>(packet.timestamp_us, frame.timestamp_us);
+<a href=#340 id=340 data-nosnippet>340</a>
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">let </span>out = dec
+<a href=#342 id=342 data-nosnippet>342</a>            .decode(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>packet), packet.timestamp_us)
+<a href=#343 id=343 data-nosnippet>343</a>            .expect(<span class="string">"decode"</span>);
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="comment">// Shape: exactly one frame back, at the endpoint's rate/channels.
+<a href=#346 id=346 data-nosnippet>346</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#347 id=347 data-nosnippet>347</a>            out.samples.len(),
+<a href=#348 id=348 data-nosnippet>348</a>            SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize
+<a href=#349 id=349 data-nosnippet>349</a>        );
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="macro">assert_eq!</span>(out.sample_rate, SAMPLE_RATE);
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="macro">assert_eq!</span>(out.channels, CHANNELS);
+<a href=#352 id=352 data-nosnippet>352</a>        <span class="macro">assert_eq!</span>(out.timestamp_us, frame.timestamp_us);
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a>        <span class="comment">// Energy preserved: Opus is lossy, so we do not assert sample equality —
+<a href=#355 id=355 data-nosnippet>355</a>        // we assert the decoded block carries comparable energy (NOT silence).
+<a href=#356 id=356 data-nosnippet>356</a>        // A wide tolerance band (within ~12 dB either way) is the right test: it
+<a href=#357 id=357 data-nosnippet>357</a>        // fails hard on silence/garbage but passes on legitimate lossy output.
+<a href=#358 id=358 data-nosnippet>358</a>        </span><span class="kw">let </span>output_energy = energy(<span class="kw-2">&amp;</span>out.samples);
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">let </span>ratio = output_energy / input_energy;
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="macro">assert!</span>(
+<a href=#361 id=361 data-nosnippet>361</a>            ratio &gt; <span class="number">0.25 </span>&amp;&amp; ratio &lt; <span class="number">4.0</span>,
+<a href=#362 id=362 data-nosnippet>362</a>            <span class="string">"decoded energy {output_energy:.0} vs input {input_energy:.0} (ratio {ratio:.3}) — \
+<a href=#363 id=363 data-nosnippet>363</a>             expected within ~12 dB; far off means silence or corruption, not lossy codec drift"
+<a href=#364 id=364 data-nosnippet>364</a>        </span>);
+<a href=#365 id=365 data-nosnippet>365</a>
+<a href=#366 id=366 data-nosnippet>366</a>        <span class="comment">// Explicit not-silence guard, independent of the input-relative ratio.
+<a href=#367 id=367 data-nosnippet>367</a>        </span><span class="macro">assert!</span>(
+<a href=#368 id=368 data-nosnippet>368</a>            out.rms() &gt; <span class="number">0.05</span>,
+<a href=#369 id=369 data-nosnippet>369</a>            <span class="string">"decoded RMS {} is ~silent — round trip lost the signal"</span>,
+<a href=#370 id=370 data-nosnippet>370</a>            out.rms()
+<a href=#371 id=371 data-nosnippet>371</a>        );
+<a href=#372 id=372 data-nosnippet>372</a>    }
+<a href=#373 id=373 data-nosnippet>373</a>
+<a href=#374 id=374 data-nosnippet>374</a>    <span class="doccomment">/// PLC path: a `None` packet must still yield a full frame (concealment),
+<a href=#375 id=375 data-nosnippet>375</a>    /// never an error or a short/empty buffer — the decoder API the MoQ
+<a href=#376 id=376 data-nosnippet>376</a>    /// transport step relies on for lost packets.
+<a href=#377 id=377 data-nosnippet>377</a>    </span><span class="attr">#[test]
+<a href=#378 id=378 data-nosnippet>378</a>    </span><span class="kw">fn </span>opus_plc_yields_full_concealment_frame() {
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">let </span>frame = sine_frame();
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
+<a href=#381 id=381 data-nosnippet>381</a>        <span class="kw">let </span><span class="kw-2">mut </span>dec = OpusDecoder::new().expect(<span class="string">"decoder"</span>);
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a>        <span class="comment">// Prime the decoder with one real packet so PLC has recent history to
+<a href=#384 id=384 data-nosnippet>384</a>        // extrapolate from (concealment off a cold decoder is legitimately near
+<a href=#385 id=385 data-nosnippet>385</a>        // silent; that is not what we are testing).
+<a href=#386 id=386 data-nosnippet>386</a>        </span><span class="kw">let </span>packet = enc.encode(<span class="kw-2">&amp;</span>frame).expect(<span class="string">"encode"</span>);
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let _ </span>= dec
+<a href=#388 id=388 data-nosnippet>388</a>            .decode(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>packet), TimestampUs::ZERO)
+<a href=#389 id=389 data-nosnippet>389</a>            .expect(<span class="string">"decode real"</span>);
+<a href=#390 id=390 data-nosnippet>390</a>
+<a href=#391 id=391 data-nosnippet>391</a>        <span class="kw">let </span>concealed = dec
+<a href=#392 id=392 data-nosnippet>392</a>            .decode(<span class="prelude-val">None</span>, TimestampUs::from_micros(<span class="number">20_000</span>))
+<a href=#393 id=393 data-nosnippet>393</a>            .expect(<span class="string">"plc decode"</span>);
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="macro">assert_eq!</span>(
+<a href=#395 id=395 data-nosnippet>395</a>            concealed.samples.len(),
+<a href=#396 id=396 data-nosnippet>396</a>            SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize,
+<a href=#397 id=397 data-nosnippet>397</a>            <span class="string">"PLC must produce a full frame"
+<a href=#398 id=398 data-nosnippet>398</a>        </span>);
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="macro">assert_eq!</span>(concealed.timestamp_us, TimestampUs::from_micros(<span class="number">20_000</span>));
+<a href=#400 id=400 data-nosnippet>400</a>    }
+<a href=#401 id=401 data-nosnippet>401</a>
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="doccomment">/// DTX: sustained silence must collapse to comfort-noise-sized packets. libopus
+<a href=#403 id=403 data-nosnippet>403</a>    /// keeps coding for a hangover after the signal stops, so the assertion is on the
+<a href=#404 id=404 data-nosnippet>404</a>    /// STEADY state — every packet past the hangover window, not the first few.
+<a href=#405 id=405 data-nosnippet>405</a>    </span><span class="attr">#[test]
+<a href=#406 id=406 data-nosnippet>406</a>    </span><span class="kw">fn </span>opus_dtx_collapses_sustained_silence() {
+<a href=#407 id=407 data-nosnippet>407</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
+<a href=#408 id=408 data-nosnippet>408</a>
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw">let </span>sizes: Vec&lt;usize&gt; = (<span class="number">0</span>..<span class="number">100</span>)
+<a href=#410 id=410 data-nosnippet>410</a>            .map(|i| {
+<a href=#411 id=411 data-nosnippet>411</a>                enc.encode(<span class="kw-2">&amp;</span>silent_frame(i <span class="kw">as </span>i64 * <span class="number">20_000</span>))
+<a href=#412 id=412 data-nosnippet>412</a>                    .expect(<span class="string">"encode silence"</span>)
+<a href=#413 id=413 data-nosnippet>413</a>                    .data
+<a href=#414 id=414 data-nosnippet>414</a>                    .len()
+<a href=#415 id=415 data-nosnippet>415</a>            })
+<a href=#416 id=416 data-nosnippet>416</a>            .collect();
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="comment">// Past the hangover (~first 20 frames = 400 ms) every packet must be tiny.
+<a href=#419 id=419 data-nosnippet>419</a>        </span><span class="kw">let </span>steady = <span class="kw-2">&amp;</span>sizes[<span class="number">20</span>..];
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="macro">assert!</span>(
+<a href=#421 id=421 data-nosnippet>421</a>            steady.iter().all(|<span class="kw-2">&amp;</span>n| n &lt;= DTX_MAX_BYTES),
+<a href=#422 id=422 data-nosnippet>422</a>            <span class="string">"DTX must collapse sustained silence to ≤{DTX_MAX_BYTES} bytes; steady-state \
+<a href=#423 id=423 data-nosnippet>423</a>             sizes were {steady:?}"
+<a href=#424 id=424 data-nosnippet>424</a>        </span>);
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="comment">// The load-bearing assertion: the steady state must be SUPPRESSED frames, not
+<a href=#426 id=426 data-nosnippet>426</a>        // merely cheaply-coded silence. Without DTX every one of these would be
+<a href=#427 id=427 data-nosnippet>427</a>        // CODED_SILENCE_BYTES, so a vast majority at ≤2 bytes is the thing that can
+<a href=#428 id=428 data-nosnippet>428</a>        // only be true if suppression is really on. The remainder is the periodic
+<a href=#429 id=429 data-nosnippet>429</a>        // comfort-noise refresh.
+<a href=#430 id=430 data-nosnippet>430</a>        </span><span class="kw">let </span>suppressed = steady
+<a href=#431 id=431 data-nosnippet>431</a>            .iter()
+<a href=#432 id=432 data-nosnippet>432</a>            .filter(|&amp;&amp;n| n &lt;= DTX_SUPPRESSED_BYTES)
+<a href=#433 id=433 data-nosnippet>433</a>            .count();
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="macro">assert!</span>(
+<a href=#435 id=435 data-nosnippet>435</a>            suppressed * <span class="number">10 </span>&gt;= steady.len() * <span class="number">9</span>,
+<a href=#436 id=436 data-nosnippet>436</a>            <span class="string">"≥90% of a silent steady state must be SUPPRESSED (≤{DTX_SUPPRESSED_BYTES} B); \
+<a href=#437 id=437 data-nosnippet>437</a>             got {suppressed}/{} — coded silence would be {CODED_SILENCE_BYTES} B every \
+<a href=#438 id=438 data-nosnippet>438</a>             frame, so this failing means DTX is not engaging: {steady:?}"</span>,
+<a href=#439 id=439 data-nosnippet>439</a>            steady.len()
+<a href=#440 id=440 data-nosnippet>440</a>        );
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="comment">// Never zero-length: an empty payload is not a wire frame the decoder can
+<a href=#442 id=442 data-nosnippet>442</a>        // take (`Packet::try_from` rejects it), so the encoder must always emit the
+<a href=#443 id=443 data-nosnippet>443</a>        // TOC byte for the receiver to turn into comfort noise.
+<a href=#444 id=444 data-nosnippet>444</a>        </span><span class="macro">assert!</span>(
+<a href=#445 id=445 data-nosnippet>445</a>            steady.iter().all(|<span class="kw-2">&amp;</span>n| n &gt; <span class="number">0</span>),
+<a href=#446 id=446 data-nosnippet>446</a>            <span class="string">"a DTX packet still carries its TOC byte"
+<a href=#447 id=447 data-nosnippet>447</a>        </span>);
+<a href=#448 id=448 data-nosnippet>448</a>    }
+<a href=#449 id=449 data-nosnippet>449</a>
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="doccomment">/// **CI-sensitivity guard: DTX must NOT suppress the synthetic capture source.**
+<a href=#451 id=451 data-nosnippet>451</a>    ///
+<a href=#452 id=452 data-nosnippet>452</a>    /// The history this protects against. The synthetic mic used to emit a bare
+<a href=#453 id=453 data-nosnippet>453</a>    /// 440 Hz sine, and Opus suppressed ~77% of it. DTX is gated on SILK's *voice
+<a href=#454 id=454 data-nosnippet>454</a>    /// activity detector*, not on energy, and a mathematically pure steady tone is the
+<a href=#455 id=455 data-nosnippet>455</a>    /// textbook non-speech signal — one spectral line, no envelope, no noise floor.
+<a href=#456 id=456 data-nosnippet>456</a>    /// "It's never silent, so DTX can't touch it" is simply false.
+<a href=#457 id=457 data-nosnippet>457</a>    ///
+<a href=#458 id=458 data-nosnippet>458</a>    /// Nothing turned red, which is what made it dangerous. Frame COUNTS kept growing
+<a href=#459 id=459 data-nosnippet>459</a>    /// (suppressed packets are still published) so `expect_audio_growth` was fine —
+<a href=#460 id=460 data-nosnippet>460</a>    /// but the receiver's mix slot then released sub-`SILENCE_FLOOR` audio, so
+<a href=#461 id=461 data-nosnippet>461</a>    /// `crate::audio::starve` correctly classified every synthetic peer as SILENT and
+<a href=#462 id=462 data-nosnippet>462</a>    /// stopped counting dry carries. That is precisely the signal
+<a href=#463 id=463 data-nosnippet>463</a>    /// `call_health::sample_call_health` gates on, so `expect_steady_audio` and
+<a href=#464 id=464 data-nosnippet>464</a>    /// houndbot's nightly verdict silently lost their ability to detect real stutter.
+<a href=#465 id=465 data-nosnippet>465</a>    ///
+<a href=#466 id=466 data-nosnippet>466</a>    /// The source was fixed (speech-like envelope + harmonics + noise floor — see
+<a href=#467 id=467 data-nosnippet>467</a>    /// `platform::generic::synthetic_audio`), and this asserts it STAYS fixed. It
+<a href=#468 id=468 data-nosnippet>468</a>    /// encodes the source's own `sample_at`, so it cannot drift from reality.
+<a href=#469 id=469 data-nosnippet>469</a>    ///
+<a href=#470 id=470 data-nosnippet>470</a>    /// Threshold: measured 250/250 and 1500/1500 frames coded at full rate (zero
+<a href=#471 id=471 data-nosnippet>471</a>    /// suppressed). Pinned at ≥98% rather than 100% to leave room for a brief VAD dip
+<a href=#472 id=472 data-nosnippet>472</a>    /// across a syllable trough without flapping; a regression to tone-like behaviour
+<a href=#473 id=473 data-nosnippet>473</a>    /// lands near 23% and fails by a mile.
+<a href=#474 id=474 data-nosnippet>474</a>    </span><span class="attr">#[test]
+<a href=#475 id=475 data-nosnippet>475</a>    </span><span class="kw">fn </span>dtx_never_suppresses_the_synthetic_capture_source() {
+<a href=#476 id=476 data-nosnippet>476</a>        <span class="doccomment">/// 30 s at 20 ms/frame — long enough that a late-onset VAD decision (the old
+<a href=#477 id=477 data-nosnippet>477</a>        /// tone gave up after ~1 s) cannot hide inside the window.
+<a href=#478 id=478 data-nosnippet>478</a>        </span><span class="kw">const </span>FRAMES: u64 = <span class="number">1500</span>;
+<a href=#479 id=479 data-nosnippet>479</a>        <span class="doccomment">/// Fraction of frames that must be genuinely coded audio.
+<a href=#480 id=480 data-nosnippet>480</a>        </span><span class="kw">const </span>MIN_CODED_PCT: usize = <span class="number">98</span>;
+<a href=#481 id=481 data-nosnippet>481</a>
+<a href=#482 id=482 data-nosnippet>482</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
+<a href=#483 id=483 data-nosnippet>483</a>        <span class="kw">let </span>sizes: Vec&lt;usize&gt; = (<span class="number">0</span>..FRAMES)
+<a href=#484 id=484 data-nosnippet>484</a>            .map(|i| {
+<a href=#485 id=485 data-nosnippet>485</a>                enc.encode(<span class="kw-2">&amp;</span>synthetic_source_frame(i))
+<a href=#486 id=486 data-nosnippet>486</a>                    .expect(<span class="string">"encode synthetic source"</span>)
+<a href=#487 id=487 data-nosnippet>487</a>                    .data
+<a href=#488 id=488 data-nosnippet>488</a>                    .len()
+<a href=#489 id=489 data-nosnippet>489</a>            })
+<a href=#490 id=490 data-nosnippet>490</a>            .collect();
+<a href=#491 id=491 data-nosnippet>491</a>
+<a href=#492 id=492 data-nosnippet>492</a>        <span class="kw">let </span>coded = sizes.iter().filter(|&amp;&amp;n| n &gt; DTX_MAX_BYTES).count();
+<a href=#493 id=493 data-nosnippet>493</a>        <span class="macro">eprintln!</span>(
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="string">"DTX measurement: {coded}/{} frames coded ({:.1}%) over {} s"</span>,
+<a href=#495 id=495 data-nosnippet>495</a>            sizes.len(),
+<a href=#496 id=496 data-nosnippet>496</a>            coded <span class="kw">as </span>f64 * <span class="number">100.0 </span>/ sizes.len() <span class="kw">as </span>f64,
+<a href=#497 id=497 data-nosnippet>497</a>            FRAMES * <span class="number">20 </span>/ <span class="number">1000
+<a href=#498 id=498 data-nosnippet>498</a>        </span>);
+<a href=#499 id=499 data-nosnippet>499</a>        <span class="macro">assert!</span>(
+<a href=#500 id=500 data-nosnippet>500</a>            coded * <span class="number">100 </span>&gt;= sizes.len() * MIN_CODED_PCT,
+<a href=#501 id=501 data-nosnippet>501</a>            <span class="string">"the synthetic capture source must stay VAD-ACTIVE so Opus keeps coding it: \
+<a href=#502 id=502 data-nosnippet>502</a>             only {coded}/{} frames were coded (&lt;{MIN_CODED_PCT}%). Suppressed frames make \
+<a href=#503 id=503 data-nosnippet>503</a>             every headless client read as a SILENT peer on the receiver's mix bus, which \
+<a href=#504 id=504 data-nosnippet>504</a>             disables the starvation signal `expect_steady_audio` and houndbot's verdict \
+<a href=#505 id=505 data-nosnippet>505</a>             depend on. Fix the SOURCE's signal (envelope / harmonics / noise floor), not \
+<a href=#506 id=506 data-nosnippet>506</a>             this threshold."</span>,
+<a href=#507 id=507 data-nosnippet>507</a>            sizes.len()
+<a href=#508 id=508 data-nosnippet>508</a>        );
+<a href=#509 id=509 data-nosnippet>509</a>    }
+<a href=#510 id=510 data-nosnippet>510</a>
+<a href=#511 id=511 data-nosnippet>511</a>    <span class="doccomment">/// The MUSIC profile must NOT suppress. DTX is not SILK-exclusive — enabling it
+<a href=#512 id=512 data-nosnippet>512</a>    /// on the fullband screen-audio encoder really does collapse silence to 1-byte
+<a href=#513 id=513 data-nosnippet>513</a>    /// packets — so this pins the deliberate opt-out: shared audio keeps coding its
+<a href=#514 id=514 data-nosnippet>514</a>    /// quiet passages until the silence-boundary listening check is done. Delete this
+<a href=#515 id=515 data-nosnippet>515</a>    /// test the day `OpusProfile::Music::dtx()` flips.
+<a href=#516 id=516 data-nosnippet>516</a>    </span><span class="attr">#[test]
+<a href=#517 id=517 data-nosnippet>517</a>    </span><span class="kw">fn </span>opus_music_profile_does_not_suppress_silence() {
+<a href=#518 id=518 data-nosnippet>518</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc =
+<a href=#519 id=519 data-nosnippet>519</a>            OpusEncoder::new(Bitrate::kbps(<span class="number">96</span>), OpusProfile::Music).expect(<span class="string">"music encoder"</span>);
+<a href=#520 id=520 data-nosnippet>520</a>        <span class="kw">let </span>sizes: Vec&lt;usize&gt; = (<span class="number">0</span>..<span class="number">100</span>)
+<a href=#521 id=521 data-nosnippet>521</a>            .map(|i| {
+<a href=#522 id=522 data-nosnippet>522</a>                enc.encode(<span class="kw-2">&amp;</span>silent_frame(i <span class="kw">as </span>i64 * <span class="number">20_000</span>))
+<a href=#523 id=523 data-nosnippet>523</a>                    .expect(<span class="string">"encode silence"</span>)
+<a href=#524 id=524 data-nosnippet>524</a>                    .data
+<a href=#525 id=525 data-nosnippet>525</a>                    .len()
+<a href=#526 id=526 data-nosnippet>526</a>            })
+<a href=#527 id=527 data-nosnippet>527</a>            .collect();
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="comment">// Measured ~85 B/frame at 96 kbps: full-rate coded silence, nowhere near
+<a href=#529 id=529 data-nosnippet>529</a>        // either the suppressed or the comfort-noise size.
+<a href=#530 id=530 data-nosnippet>530</a>        </span><span class="macro">assert!</span>(
+<a href=#531 id=531 data-nosnippet>531</a>            sizes.iter().all(|<span class="kw-2">&amp;</span>n| n &gt; DTX_MAX_BYTES),
+<a href=#532 id=532 data-nosnippet>532</a>            <span class="string">"the music profile must keep coding silence at full rate (DTX opted out); \
+<a href=#533 id=533 data-nosnippet>533</a>             got {sizes:?}"
+<a href=#534 id=534 data-nosnippet>534</a>        </span>);
+<a href=#535 id=535 data-nosnippet>535</a>    }
+<a href=#536 id=536 data-nosnippet>536</a>
+<a href=#537 id=537 data-nosnippet>537</a>    <span class="doccomment">/// The other half of the DTX contract: real audio is NOT collapsed. Without this
+<a href=#538 id=538 data-nosnippet>538</a>    /// the test above would pass on an encoder that had simply stopped working.
+<a href=#539 id=539 data-nosnippet>539</a>    </span><span class="attr">#[test]
+<a href=#540 id=540 data-nosnippet>540</a>    </span><span class="kw">fn </span>opus_dtx_leaves_loud_audio_alone() {
+<a href=#541 id=541 data-nosnippet>541</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
+<a href=#542 id=542 data-nosnippet>542</a>        <span class="kw">let </span>frame = sine_frame();
+<a href=#543 id=543 data-nosnippet>543</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">50 </span>{
+<a href=#544 id=544 data-nosnippet>544</a>            <span class="kw">let </span><span class="kw-2">mut </span>f = frame.clone();
+<a href=#545 id=545 data-nosnippet>545</a>            f.timestamp_us = TimestampUs::from_micros(i * <span class="number">20_000</span>);
+<a href=#546 id=546 data-nosnippet>546</a>            <span class="kw">let </span>n = enc.encode(<span class="kw-2">&amp;</span>f).expect(<span class="string">"encode tone"</span>).data.len();
+<a href=#547 id=547 data-nosnippet>547</a>            <span class="macro">assert!</span>(
+<a href=#548 id=548 data-nosnippet>548</a>                n &gt; DTX_MAX_BYTES,
+<a href=#549 id=549 data-nosnippet>549</a>                <span class="string">"a frame with real energy must stay a coded frame, got {n} bytes"
+<a href=#550 id=550 data-nosnippet>550</a>            </span>);
+<a href=#551 id=551 data-nosnippet>551</a>        }
+<a href=#552 id=552 data-nosnippet>552</a>    }
+<a href=#553 id=553 data-nosnippet>553</a>
+<a href=#554 id=554 data-nosnippet>554</a>    <span class="doccomment">/// End to end for the silence path: encode silence until DTX engages, then decode
+<a href=#555 id=555 data-nosnippet>555</a>    /// that comfort-noise packet the way `audio_rx` does — it must succeed, yield a
+<a href=#556 id=556 data-nosnippet>556</a>    /// full frame, and be silent. Plus `decode(None)` PLC still works afterwards, so
+<a href=#557 id=557 data-nosnippet>557</a>    /// the DTX packet does not poison the decoder's state.
+<a href=#558 id=558 data-nosnippet>558</a>    </span><span class="attr">#[test]
+<a href=#559 id=559 data-nosnippet>559</a>    </span><span class="kw">fn </span>opus_dtx_packet_round_trips_to_silence() {
+<a href=#560 id=560 data-nosnippet>560</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
+<a href=#561 id=561 data-nosnippet>561</a>        <span class="kw">let </span><span class="kw-2">mut </span>dec = OpusDecoder::new().expect(<span class="string">"decoder"</span>);
+<a href=#562 id=562 data-nosnippet>562</a>
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="comment">// Encode past the hangover, keeping the last (definitely-DTX) packet.
+<a href=#564 id=564 data-nosnippet>564</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>packet = <span class="prelude-val">None</span>;
+<a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">60 </span>{
+<a href=#566 id=566 data-nosnippet>566</a>            packet = <span class="prelude-val">Some</span>(enc.encode(<span class="kw-2">&amp;</span>silent_frame(i * <span class="number">20_000</span>)).expect(<span class="string">"encode"</span>));
+<a href=#567 id=567 data-nosnippet>567</a>        }
+<a href=#568 id=568 data-nosnippet>568</a>        <span class="kw">let </span>packet = packet.expect(<span class="string">"a packet"</span>);
+<a href=#569 id=569 data-nosnippet>569</a>        <span class="macro">assert!</span>(
+<a href=#570 id=570 data-nosnippet>570</a>            packet.data.len() &lt;= DTX_MAX_BYTES,
+<a href=#571 id=571 data-nosnippet>571</a>            <span class="string">"expected a DTX packet, got {} bytes"</span>,
+<a href=#572 id=572 data-nosnippet>572</a>            packet.data.len()
+<a href=#573 id=573 data-nosnippet>573</a>        );
+<a href=#574 id=574 data-nosnippet>574</a>
+<a href=#575 id=575 data-nosnippet>575</a>        <span class="kw">let </span>out = dec
+<a href=#576 id=576 data-nosnippet>576</a>            .decode(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>packet), packet.timestamp_us)
+<a href=#577 id=577 data-nosnippet>577</a>            .expect(<span class="string">"a DTX comfort-noise packet must decode"</span>);
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="macro">assert_eq!</span>(
+<a href=#579 id=579 data-nosnippet>579</a>            out.samples.len(),
+<a href=#580 id=580 data-nosnippet>580</a>            SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize,
+<a href=#581 id=581 data-nosnippet>581</a>            <span class="string">"a DTX packet still yields a full frame of playout"
+<a href=#582 id=582 data-nosnippet>582</a>        </span>);
+<a href=#583 id=583 data-nosnippet>583</a>        <span class="macro">assert_eq!</span>(out.timestamp_us, packet.timestamp_us);
+<a href=#584 id=584 data-nosnippet>584</a>        <span class="comment">// Comfort noise, not speech: well under the mix bus's SILENCE_FLOOR
+<a href=#585 id=585 data-nosnippet>585</a>        // (`crate::audio::starve`), so it never reads as an active talker.
+<a href=#586 id=586 data-nosnippet>586</a>        </span><span class="macro">assert!</span>(
+<a href=#587 id=587 data-nosnippet>587</a>            out.rms() &lt; <span class="number">0.01</span>,
+<a href=#588 id=588 data-nosnippet>588</a>            <span class="string">"DTX must decode to silence/comfort noise, got RMS {}"</span>,
+<a href=#589 id=589 data-nosnippet>589</a>            out.rms()
+<a href=#590 id=590 data-nosnippet>590</a>        );
+<a href=#591 id=591 data-nosnippet>591</a>
+<a href=#592 id=592 data-nosnippet>592</a>        <span class="comment">// PLC after a DTX packet still produces a full concealment frame.
+<a href=#593 id=593 data-nosnippet>593</a>        </span><span class="kw">let </span>concealed = dec
+<a href=#594 id=594 data-nosnippet>594</a>            .decode(<span class="prelude-val">None</span>, TimestampUs::from_micros(<span class="number">60 </span>* <span class="number">20_000</span>))
+<a href=#595 id=595 data-nosnippet>595</a>            .expect(<span class="string">"PLC after DTX"</span>);
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="macro">assert_eq!</span>(
+<a href=#597 id=597 data-nosnippet>597</a>            concealed.samples.len(),
+<a href=#598 id=598 data-nosnippet>598</a>            SAMPLES_PER_FRAME * CHANNELS.count() <span class="kw">as </span>usize
+<a href=#599 id=599 data-nosnippet>599</a>        );
+<a href=#600 id=600 data-nosnippet>600</a>    }
+<a href=#601 id=601 data-nosnippet>601</a>
+<a href=#602 id=602 data-nosnippet>602</a>    <span class="doccomment">/// Wrong-size input is a pipeline bug and must be rejected, not silently
+<a href=#603 id=603 data-nosnippet>603</a>    /// mis-encoded (Opus only accepts exact frame sizes).
+<a href=#604 id=604 data-nosnippet>604</a>    </span><span class="attr">#[test]
+<a href=#605 id=605 data-nosnippet>605</a>    </span><span class="kw">fn </span>opus_rejects_wrong_frame_size() {
+<a href=#606 id=606 data-nosnippet>606</a>        <span class="kw">let </span><span class="kw-2">mut </span>enc = OpusEncoder::new(DEFAULT_BITRATE, OpusProfile::Voice).expect(<span class="string">"encoder"</span>);
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="kw">let </span>bad = PcmFrame::at_engine_rate(<span class="macro">vec!</span>[<span class="number">0i16</span>; SAMPLES_PER_FRAME + <span class="number">1</span>], TimestampUs::ZERO);
+<a href=#608 id=608 data-nosnippet>608</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#609 id=609 data-nosnippet>609</a>            enc.encode(<span class="kw-2">&amp;</span>bad),
+<a href=#610 id=610 data-nosnippet>610</a>            <span class="prelude-val">Err</span>(AudioError::UnsupportedFormat(<span class="kw">_</span>))
+<a href=#611 id=611 data-nosnippet>611</a>        ));
+<a href=#612 id=612 data-nosnippet>612</a>    }
+<a href=#613 id=613 data-nosnippet>613</a>}
 </code></pre></div></section></main></body></html>
