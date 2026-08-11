@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["C1","C2","C3","DOMINANT_K","IDLE_US","IMMEDIATE_SAMPLES","LONG_SAMPLES","MAX_CATCHUP_SAMPLES","MEDIUM_SAMPLES","RECENT_SPEAKERS","REPORT_INTERVAL_US","SPEECH_SUBBAND","SUBBANDS","SWITCH_DWELL_US"],"enum":["SpeakerTier"],"fn":["subband_from_level"],"struct":["Speaker","SpeakerRanking","SpeakerTiers"]};

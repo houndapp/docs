@@ -1,0 +1,85 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Dominant-speaker ranking — the receiver-side half of Jitsi’s Last-N, as a pure reducer over a coarse per-peer speaking-level series."><title>hound_media::speaking - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_media" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module speaking</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../hound_media/index.html">hound_<wbr>media</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module speaking</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#what-this-is-for" title="What this is for">What this is for</a></li><li><a href="#the-signal-and-why-it-is-not-rtp-audio-levels" title="The signal, and why it is not RTP audio levels">The signal, and why it is not RTP audio levels</a></li><li><a href="#the-anti-flap-and-how-faithfully-it-is-jitsis" title="The anti-flap, and how faithfully it is Jitsi’s">The anti-flap, and how faithfully it is Jitsi’s</a></li><li><a href="#determinism" title="Determinism">Determinism</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate hound_<wbr>media</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">hound_media</a></div><h1>Module <span>speaking</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/hound_media/speaking.rs.html#1-689">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Dominant-speaker ranking — the receiver-side half of Jitsi’s Last-N, as a pure
+reducer over a coarse per-peer speaking-level series.</p>
+<h3 id="what-this-is-for"><a class="doc-anchor" href="#what-this-is-for">§</a>What this is for</h3>
+<p>A gallery receiver prices every tile from its rendered size (<a href="../layer/index.html" title="mod hound_media::layer"><code>crate::layer</code></a>).
+Size alone cannot know that the 320×180 stamp in the corner is the person
+currently talking, so a large call spends the same 130 kbps on the speaker as on
+the 31 people listening. Ranking is the missing signal: the top of the ranking
+buys a richer rung, the bottom (observed silent, in a crowded call) buys a
+cheaper one, and the moq subscription for the dominant speaker’s video is opened
+in a higher priority band. Jitsi measured <strong>45% less CPU and 63% less bandwidth</strong>
+for a 30-participant conference forwarding 10 endpoints on exactly this lever
+(Grozev et al., <em>Last N</em>, NOSSDAV 2015).</p>
+<h3 id="the-signal-and-why-it-is-not-rtp-audio-levels"><a class="doc-anchor" href="#the-signal-and-why-it-is-not-rtp-audio-levels">§</a>The signal, and why it is not RTP audio levels</h3>
+<p>Jitsi’s <code>DominantSpeakerIdentification</code> reads RFC 6464 audio levels (0–127) off
+every RTP packet inside the SFU. hound’s SFU is codec-blind and forward-no-
+transcode — it must never look inside media — so the level comes from the
+<strong>sender</strong>, which already computes it for its own mic meter, and rides the
+control plane as a coarse <a href="fn.subband_from_level.html" title="fn hound_media::speaking::subband_from_level"><code>subband</code></a> at
+<a href="constant.REPORT_INTERVAL_US.html" title="constant hound_media::speaking::REPORT_INTERVAL_US"><code>REPORT_INTERVAL_US</code></a>. Every receiver therefore ranks from the <em>same</em> numbers
+and independently reaches the <em>same</em> ranking, which is what lets a producer’s
+shared low layer be sized for “the speaker” without anyone negotiating.</p>
+<h3 id="the-anti-flap-and-how-faithfully-it-is-jitsis"><a class="doc-anchor" href="#the-anti-flap-and-how-faithfully-it-is-jitsis">§</a>The anti-flap, and how faithfully it is Jitsi’s</h3>
+<p>Taken verbatim from <code>DominantSpeakerIdentification</code>: the <strong>300 ms</strong> decision
+cadence, the <strong>13 subbands</strong>, the three history windows (<strong>5 / 10 / longs</strong>), and
+the three-timescale <strong>AND</strong> with its constants <strong>C1=3 ∧ C2=2 ∧ C3=0</strong> — you must
+be loud <em>now</em>, <em>recently</em>, and <em>sustained</em> to take dominance from the incumbent.
+Plus the standard minimum dwell before a switch commits
+(<a href="constant.SWITCH_DWELL_US.html" title="constant hound_media::speaking::SWITCH_DWELL_US"><code>SWITCH_DWELL_US</code></a>), which is also Meta’s US10079994B2 refinement (weight
+dominance by time since the last switch).</p>
+<p>Adapted, deliberately and named here so nobody mistakes it for the original:</p>
+<ul>
+<li>Jitsi’s input is a 20 ms RTP level series and its “relative speech activity” is
+a <strong>log-likelihood ratio</strong> over per-subband histograms. Ours is one RMS-derived
+subband per 300 ms, so a histogram over 13 bands of a single sample carries no
+information. The per-window quantity is instead the <strong>count of ACTIVE samples</strong>
+(subband ≥ <a href="constant.SPEECH_SUBBAND.html" title="constant hound_media::speaking::SPEECH_SUBBAND"><code>SPEECH_SUBBAND</code></a>) in the window, and C1/C2/C3 gate the challenger’s
+<strong>margin</strong> over the incumbent rather than a log ratio. The shape — three
+timescales combined with AND, with a wider margin required on the shortest —
+is preserved exactly; the units are not the same units.</li>
+<li>Jitsi’s “assume no levels after 40 ms idle” becomes <a href="constant.IDLE_US.html" title="constant hound_media::speaking::IDLE_US"><code>IDLE_US</code></a> (2 s), because
+our reports are 300 ms apart and are suppressed while a peer is silent (a
+silent peer sends one trailing zero and then nothing — see the emitter).</li>
+<li>The long window is <strong>30 samples (9 s)</strong>; Jitsi’s “longs” have no published
+count, only the ratio of medium-to-long aggregation.</li>
+</ul>
+<h3 id="determinism"><a class="doc-anchor" href="#determinism">§</a>Determinism</h3>
+<p>No clock, no IO, no floats in the decision: <a href="struct.SpeakerRanking.html#method.decide" title="method hound_media::speaking::SpeakerRanking::decide"><code>SpeakerRanking::decide</code></a> takes
+<code>now_us</code> and materializes the sample grid itself, so a test drives ten minutes of
+call in a loop and the ranking is a pure function of the reports it was fed.
+Peers are held in a <a href="https://doc.rust-lang.org/1.93.0/alloc/collections/btree/map/struct.BTreeMap.html" title="struct alloc::collections::btree::map::BTreeMap"><code>BTreeMap</code></a> so ties break identically on every machine.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Speaker.html" title="struct hound_media::speaking::Speaker">Speaker</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>One peer’s level history.</dd><dt><a class="struct" href="struct.SpeakerRanking.html" title="struct hound_media::speaking::SpeakerRanking">Speaker<wbr>Ranking</a></dt><dd>The ranker. One per call; fed every peer’s reported speaking level and asked for
+<a href="struct.SpeakerRanking.html#method.tiers" title="method hound_media::speaking::SpeakerRanking::tiers"><code>SpeakerRanking::tiers</code></a> once per policy pass.</dd><dt><a class="struct" href="struct.SpeakerTiers.html" title="struct hound_media::speaking::SpeakerTiers">Speaker<wbr>Tiers</a></dt><dd>An immutable snapshot of the ranking, cheap to take once per reconcile pass so
+the policy loop never holds the ranker’s lock while it works.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.SpeakerTier.html" title="enum hound_media::speaking::SpeakerTier">Speaker<wbr>Tier</a></dt><dd>Where a peer sits in the ranking, and the only thing policy is allowed to read.
+The four cases are deliberately not an ordering: <code>Unknown</code> and <code>Silent</code> are
+<em>different</em> — the first is a peer we have no evidence about (an un-upgraded
+client that never reports, a peer that just joined), the second is a peer we
+have watched be quiet for the whole long window. Only the second may be
+downgraded, for the same reason <code>TileDemand</code> trusts a reported hide but bounds
+an inferred one.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.C1.html" title="constant hound_media::speaking::C1">C1</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The three-timescale margins a challenger must beat the incumbent by,
+simultaneously, to take dominance: <code>C1=3 ∧ C2=2 ∧ C3=0</code>. Verbatim from
+<code>DominantSpeakerIdentification</code>; see the module docs for what the numbers are a
+margin <em>of</em> here.</dd><dt><a class="constant" href="constant.C2.html" title="constant hound_media::speaking::C2">C2</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.C3.html" title="constant hound_media::speaking::C3">C3</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.DOMINANT_K.html" title="constant hound_media::speaking::DOMINANT_K">DOMINANT_<wbr>K</a></dt><dd>How many of the ranked speakers are treated as “the people who matter” — the
+dominant plus the two who spoke before them. Three is the industry’s answer
+everywhere it is visible: Jitsi’s <code>loudest.num-loudest = 3</code>, and Google Meet
+creating exactly three receive-only audio m-lines.</dd><dt><a class="constant" href="constant.IDLE_US.html" title="constant hound_media::speaking::IDLE_US">IDLE_US</a></dt><dd>A peer with no report for this long is read as silent from then on. Jitsi’s
+equivalent is 40 ms, sized to a 20 ms RTP level cadence; ours is sized to a
+300 ms report cadence that is <em>suppressed while silent</em> (a silent peer sends one
+trailing zero and then nothing at all, so the absence of reports is the steady
+state, not evidence of a lost peer). Six missed intervals is unambiguous.</dd><dt><a class="constant" href="constant.IMMEDIATE_SAMPLES.html" title="constant hound_media::speaking::IMMEDIATE_SAMPLES">IMMEDIATE_<wbr>SAMPLES</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>History windows, in 300 ms samples: 1.5 s / 3 s / 9 s. The first two counts are
+Jitsi’s (5 immediates, 10 mediums).</dd><dt><a class="constant" href="constant.LONG_SAMPLES.html" title="constant hound_media::speaking::LONG_SAMPLES">LONG_<wbr>SAMPLES</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.MAX_CATCHUP_SAMPLES.html" title="constant hound_media::speaking::MAX_CATCHUP_SAMPLES">MAX_<wbr>CATCHUP_<wbr>SAMPLES</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Ceiling on the sample grid a single <a href="struct.SpeakerRanking.html#method.decide" title="method hound_media::speaking::SpeakerRanking::decide"><code>SpeakerRanking::decide</code></a> will materialize.
+A call that was suspended (a backgrounded app, a debugger breakpoint) resumes
+with an arbitrarily large gap; filling it sample by sample would be unbounded
+work for a series that is entirely silence anyway. Past this the grid is reset
+to <code>now</code>, which reads as “no history”, the safe state.</dd><dt><a class="constant" href="constant.MEDIUM_SAMPLES.html" title="constant hound_media::speaking::MEDIUM_SAMPLES">MEDIUM_<wbr>SAMPLES</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.RECENT_SPEAKERS.html" title="constant hound_media::speaking::RECENT_SPEAKERS">RECENT_<wbr>SPEAKERS</a></dt><dd>How many past dominant speakers stay ranked. Jitsi’s
+<code>speech-activity.recent-speakers-count = 10</code>.</dd><dt><a class="constant" href="constant.REPORT_INTERVAL_US.html" title="constant hound_media::speaking::REPORT_INTERVAL_US">REPORT_<wbr>INTERVAL_<wbr>US</a></dt><dd>The decision cadence, and the reporting cadence that feeds it —
+<code>DominantSpeakerIdentification</code> re-decides every 300 ms.</dd><dt><a class="constant" href="constant.SPEECH_SUBBAND.html" title="constant hound_media::speaking::SPEECH_SUBBAND">SPEECH_<wbr>SUBBAND</a></dt><dd>The subband at or above which a sample counts as somebody <strong>speaking</strong>.</dd><dt><a class="constant" href="constant.SUBBANDS.html" title="constant hound_media::speaking::SUBBANDS">SUBBANDS</a></dt><dd>How many coarse levels the wire carries. Jitsi buckets RFC 6464’s 0–127 into
+<strong>13 subbands</strong> for exactly this decision; the same 13 buckets over our
+<code>0.0..=1.0</code> meter level make the wire byte a stable, flap-resistant quantization
+(a level jittering by ±3% cannot change the reported band).</dd><dt><a class="constant" href="constant.SWITCH_DWELL_US.html" title="constant hound_media::speaking::SWITCH_DWELL_US">SWITCH_<wbr>DWELL_<wbr>US</a></dt><dd>Minimum dwell on a dominant speaker before another may take over. The
+three-timescale AND already rejects an interjection; this bounds the switch
+<em>rate</em> when two people genuinely alternate — the same fast-down/slow-up spirit
+as <code>LayerHysteresis</code>, and the mechanism Meta’s US10079994B2 describes as
+weighting dominance by time since the last switch.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.subband_from_level.html" title="fn hound_media::speaking::subband_from_level">subband_<wbr>from_<wbr>level</a></dt><dd>Quantize a <code>0.0..=1.0</code> meter level to its wire subband (<code>0..SUBBANDS</code>).
+Saturating and total: NaN and out-of-range levels land at the ends rather than
+panicking, because this runs on the capture path against a device-derived float.</dd></dl></section></div></main></body></html>

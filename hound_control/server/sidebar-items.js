@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Target"],"struct":["Outgoing","SessionServer"]};
+window.SIDEBAR_ITEMS = {"constant":["SPEAKING_BURST","SPEAKING_INTERVAL_US"],"enum":["Target"],"struct":["Outgoing","SessionServer"]};

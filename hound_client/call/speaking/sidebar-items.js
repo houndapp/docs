@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SPEAKING_REASSERT"],"fn":["spawn_speaking_report"],"struct":["Inner","ReportGate","SharedSpeakers"]};

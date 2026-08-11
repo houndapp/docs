@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["control_ws_url","dial_relay","local_decode_caps","wait_for_self_id"],"struct":["ControlClient"]};
+window.SIDEBAR_ITEMS = {"fn":["consume_reader_only","control_ws_url","dial_relay","local_decode_caps","wait_for_self_id"],"struct":["ControlClient"]};
