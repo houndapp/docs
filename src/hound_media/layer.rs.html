@@ -17,7 +17,7 @@
 <a href=#17 id=17 data-nosnippet>17</a>//! place and out of the IO glue.
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">use </span><span class="kw">crate</span>::TrackKind;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::congestion::QualityRequest;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::congestion::{QualityRequest, camera_bitrate_bps, screen_bitrate_bps};
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a><span class="doccomment">/// Spatial scalability layer — each maps to its own moq track.
 <a href=#23 id=23 data-nosnippet>23</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,110 +79,461 @@
 <a href=#79 id=79 data-nosnippet>79</a>    }
 <a href=#80 id=80 data-nosnippet>80</a>}
 <a href=#81 id=81 data-nosnippet>81</a>
-<a href=#82 id=82 data-nosnippet>82</a><span class="doccomment">/// A rendered tile smaller (in pixels) than this wants the low layer, not the source.
-<a href=#83 id=83 data-nosnippet>83</a>/// ~360p — below it the source's extra resolution is wasted on a thumbnail.
-<a href=#84 id=84 data-nosnippet>84</a></span><span class="kw">pub const </span>TILE_SOURCE_MIN_PIXELS: u64 = <span class="number">640 </span>* <span class="number">360</span>;
-<a href=#85 id=85 data-nosnippet>85</a>
-<a href=#86 id=86 data-nosnippet>86</a><span class="doccomment">/// The bitrate a tile-driven low request caps to. The producer coalesces every
-<a href=#87 id=87 data-nosnippet>87</a>/// receiver's cap into ONE shared low layer sized to the most-constrained requester,
-<a href=#88 id=88 data-nosnippet>88</a>/// so this is the target the low encoder runs at when small tiles ask for it.
-<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">pub const </span>LOW_LAYER_TARGET_BPS: u64 = <span class="number">1_000_000</span>;
-<a href=#90 id=90 data-nosnippet>90</a>
-<a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// Map a rendered tile's pixel size + visibility to a [`QualityRequest`]. A hidden or
-<a href=#92 id=92 data-nosnippet>92</a>/// small tile wants the low layer; a large, visible tile wants the source. This is the
-<a href=#93 id=93 data-nosnippet>93</a>/// *demand* half of demand-driven simulcast — it never asks for more than the tile can
-<a href=#94 id=94 data-nosnippet>94</a>/// use, which is exactly the receiver-CPU win (a thumbnail pulls the low track).
-<a href=#95 id=95 data-nosnippet>95</a></span><span class="kw">pub fn </span>tile_quality_request(width: u32, height: u32, visible: bool) -&gt; QualityRequest {
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">if </span>!visible || (width <span class="kw">as </span>u64) * (height <span class="kw">as </span>u64) &lt; TILE_SOURCE_MIN_PIXELS {
-<a href=#97 id=97 data-nosnippet>97</a>        QualityRequest::Capped(LOW_LAYER_TARGET_BPS)
-<a href=#98 id=98 data-nosnippet>98</a>    } <span class="kw">else </span>{
-<a href=#99 id=99 data-nosnippet>99</a>        QualityRequest::Source
-<a href=#100 id=100 data-nosnippet>100</a>    }
-<a href=#101 id=101 data-nosnippet>101</a>}
-<a href=#102 id=102 data-nosnippet>102</a>
-<a href=#103 id=103 data-nosnippet>103</a><span class="doccomment">/// Fold two demands into the more-constrained one (`Capped` beats `Source`; the lower
-<a href=#104 id=104 data-nosnippet>104</a>/// cap wins). Used to combine a tile-size demand with a bandwidth demand so the
-<a href=#105 id=105 data-nosnippet>105</a>/// receiver can never over-request beyond what either signal allows.
-<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">pub fn </span>most_constrained(a: QualityRequest, b: QualityRequest) -&gt; QualityRequest {
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">use </span>QualityRequest::{Capped, Source};
-<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw">match </span>(a, b) {
-<a href=#109 id=109 data-nosnippet>109</a>        (Source, other) | (other, Source) =&gt; other,
-<a href=#110 id=110 data-nosnippet>110</a>        (Capped(x), Capped(y)) =&gt; Capped(x.min(y)),
-<a href=#111 id=111 data-nosnippet>111</a>    }
-<a href=#112 id=112 data-nosnippet>112</a>}
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a><span class="attr">#[cfg(test)]
-<a href=#115 id=115 data-nosnippet>115</a></span><span class="kw">mod </span>tests {
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="attr">#[test]
-<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">fn </span>track_names_are_layer_distinct() {
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="macro">assert_eq!</span>(track_name(VideoSource::Camera, SpatialLayer::Source), <span class="string">"cam"</span>);
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="macro">assert_eq!</span>(track_name(VideoSource::Camera, SpatialLayer::Low), <span class="string">"cam_l0"</span>);
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">assert_eq!</span>(
-<a href=#123 id=123 data-nosnippet>123</a>            track_name(VideoSource::Screen, SpatialLayer::Source),
-<a href=#124 id=124 data-nosnippet>124</a>            <span class="string">"screen"
-<a href=#125 id=125 data-nosnippet>125</a>        </span>);
-<a href=#126 id=126 data-nosnippet>126</a>        <span class="macro">assert_eq!</span>(
-<a href=#127 id=127 data-nosnippet>127</a>            track_name(VideoSource::Screen, SpatialLayer::Low),
-<a href=#128 id=128 data-nosnippet>128</a>            <span class="string">"screen_l0"
-<a href=#129 id=129 data-nosnippet>129</a>        </span>);
-<a href=#130 id=130 data-nosnippet>130</a>    }
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="attr">#[test]
-<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">fn </span>track_kinds_match_wire() {
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="macro">assert_eq!</span>(
-<a href=#135 id=135 data-nosnippet>135</a>            track_kind(VideoSource::Camera, SpatialLayer::Low),
-<a href=#136 id=136 data-nosnippet>136</a>            TrackKind::CamVideoLow
-<a href=#137 id=137 data-nosnippet>137</a>        );
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="macro">assert_eq!</span>(
-<a href=#139 id=139 data-nosnippet>139</a>            track_kind(VideoSource::Screen, SpatialLayer::Low),
-<a href=#140 id=140 data-nosnippet>140</a>            TrackKind::ScrVideoLow
-<a href=#141 id=141 data-nosnippet>141</a>        );
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="comment">// Source layers keep the original wire kinds (un-upgraded peers unaffected).
-<a href=#143 id=143 data-nosnippet>143</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#144 id=144 data-nosnippet>144</a>            track_kind(VideoSource::Screen, SpatialLayer::Source),
-<a href=#145 id=145 data-nosnippet>145</a>            TrackKind::ScrVideo
-<a href=#146 id=146 data-nosnippet>146</a>        );
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="attr">#[test]
-<a href=#150 id=150 data-nosnippet>150</a>    </span><span class="kw">fn </span>temporal_id_round_trips() {
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="macro">assert_eq!</span>(TemporalLayer::from_id(<span class="number">0</span>), TemporalLayer::Base);
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="macro">assert_eq!</span>(TemporalLayer::from_id(<span class="number">1</span>), TemporalLayer::Enhanced);
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="macro">assert_eq!</span>(TemporalLayer::from_id(<span class="number">7</span>), TemporalLayer::Enhanced);
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="macro">assert_eq!</span>(TemporalLayer::Base.id(), <span class="number">0</span>);
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="macro">assert_eq!</span>(TemporalLayer::Enhanced.id(), <span class="number">1</span>);
-<a href=#156 id=156 data-nosnippet>156</a>    }
-<a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="attr">#[test]
-<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="kw">fn </span>tile_demand_tracks_size_and_visibility() {
-<a href=#160 id=160 data-nosnippet>160</a>        <span class="comment">// Large + visible → source.
-<a href=#161 id=161 data-nosnippet>161</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#162 id=162 data-nosnippet>162</a>            tile_quality_request(<span class="number">1920</span>, <span class="number">1080</span>, <span class="bool-val">true</span>),
-<a href=#163 id=163 data-nosnippet>163</a>            QualityRequest::Source
-<a href=#164 id=164 data-nosnippet>164</a>        );
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="comment">// Small tile → low.
-<a href=#166 id=166 data-nosnippet>166</a>        </span><span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#167 id=167 data-nosnippet>167</a>            tile_quality_request(<span class="number">320</span>, <span class="number">180</span>, <span class="bool-val">true</span>),
-<a href=#168 id=168 data-nosnippet>168</a>            QualityRequest::Capped(<span class="kw">_</span>)
-<a href=#169 id=169 data-nosnippet>169</a>        ));
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="comment">// Hidden at any size → low.
-<a href=#171 id=171 data-nosnippet>171</a>        </span><span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#172 id=172 data-nosnippet>172</a>            tile_quality_request(<span class="number">1920</span>, <span class="number">1080</span>, <span class="bool-val">false</span>),
-<a href=#173 id=173 data-nosnippet>173</a>            QualityRequest::Capped(<span class="kw">_</span>)
-<a href=#174 id=174 data-nosnippet>174</a>        ));
+<a href=#82 id=82 data-nosnippet>82</a><span class="doccomment">/// One below-source rung: a geometry (16:9 reference height) and a frame rate. Its
+<a href=#83 id=83 data-nosnippet>83</a>/// *price* is not stored — it comes from the content-aware bitrate model
+<a href=#84 id=84 data-nosnippet>84</a>/// ([`rung_bps`]), so a rung and its cost can never drift apart.
+<a href=#85 id=85 data-nosnippet>85</a>///
+<a href=#86 id=86 data-nosnippet>86</a>/// A rung is a nominal shape, not an encode geometry: the producer fits it to its
+<a href=#87 id=87 data-nosnippet>87</a>/// own capture aspect, so a non-16:9 source is never stretched — by HEIGHT
+<a href=#88 id=88 data-nosnippet>88</a>/// (`fit_encode_dims`) where the aspect is fixed and the height is the ladder's
+<a href=#89 id=89 data-nosnippet>89</a>/// unit (the camera), and by AREA (`fit_encode_area`) where it is not and the
+<a href=#90 id=90 data-nosnippet>90</a>/// rung's price is what must be held (a screen share). See [`Self::pixels`].
+<a href=#91 id=91 data-nosnippet>91</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">pub struct </span>VideoRung {
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="doccomment">/// 16:9 reference height (the encoder fits this to the source's own aspect).
+<a href=#94 id=94 data-nosnippet>94</a>    </span><span class="kw">pub </span>height: u32,
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">pub </span>fps: u32,
+<a href=#96 id=96 data-nosnippet>96</a>}
+<a href=#97 id=97 data-nosnippet>97</a>
+<a href=#98 id=98 data-nosnippet>98</a><span class="kw">impl </span>VideoRung {
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// The rung's own pixel count at its 16:9 reference geometry.
+<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="kw">pub const fn </span>pixels(<span class="self">self</span>) -&gt; u64 {
+<a href=#101 id=101 data-nosnippet>101</a>        (<span class="self">self</span>.height <span class="kw">as </span>u64) * <span class="number">16 </span>/ <span class="number">9 </span>* (<span class="self">self</span>.height <span class="kw">as </span>u64)
+<a href=#102 id=102 data-nosnippet>102</a>    }
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a>    <span class="doccomment">/// The largest tile this rung may be asked to fill, in **physical** pixels:
+<a href=#105 id=105 data-nosnippet>105</a>    /// its own area times [`TILE_UPSCALE_TOLERANCE_NUM`]/[`TILE_UPSCALE_TOLERANCE_DEN`].
+<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub const fn </span>covers_up_to_pixels(<span class="self">self</span>) -&gt; u64 {
+<a href=#107 id=107 data-nosnippet>107</a>        <span class="self">self</span>.pixels() * TILE_UPSCALE_TOLERANCE_NUM / TILE_UPSCALE_TOLERANCE_DEN
+<a href=#108 id=108 data-nosnippet>108</a>    }
+<a href=#109 id=109 data-nosnippet>109</a>}
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a><span class="doccomment">/// How far a rung may be stretched to fill a tile before the next rung up is worth
+<a href=#112 id=112 data-nosnippet>112</a>/// its extra bits — an **area** ratio of 3/2, i.e. ~22% of linear upscale in each
+<a href=#113 id=113 data-nosnippet>113</a>/// dimension. Expressed as an integer fraction so the boundary is exact.
+<a href=#114 id=114 data-nosnippet>114</a></span><span class="kw">pub const </span>TILE_UPSCALE_TOLERANCE_NUM: u64 = <span class="number">3</span>;
+<a href=#115 id=115 data-nosnippet>115</a><span class="kw">pub const </span>TILE_UPSCALE_TOLERANCE_DEN: u64 = <span class="number">2</span>;
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a><span class="doccomment">/// The **thumbnail** rung: a grid cell, a filmstrip stamp, an off-screen tile.
+<a href=#118 id=118 data-nosnippet>118</a>/// 320×180 @ 15 fps ≈ 130 kbps — LiveKit ships `h180` at this geometry, Jitsi's
+<a href=#119 id=119 data-nosnippet>119</a>/// bridge defaults its thumbnails to 180p, and Daily publishes 320×180 @ 10 fps.
+<a href=#120 id=120 data-nosnippet>120</a>/// Against the 1 Mbps flat low rung this replaces it is **4× fewer pixels and half
+<a href=#121 id=121 data-nosnippet>121</a>/// the frames**, which is where the large-call receive-CPU win comes from.
+<a href=#122 id=122 data-nosnippet>122</a></span><span class="kw">pub const </span>THUMB_RUNG: VideoRung = VideoRung {
+<a href=#123 id=123 data-nosnippet>123</a>    height: <span class="number">180</span>,
+<a href=#124 id=124 data-nosnippet>124</a>    fps: <span class="number">15</span>,
+<a href=#125 id=125 data-nosnippet>125</a>};
+<a href=#126 id=126 data-nosnippet>126</a>
+<a href=#127 id=127 data-nosnippet>127</a><span class="doccomment">/// The **low** rung: a mid-sized tile that is still below source. 640×360 @ 20 fps
+<a href=#128 id=128 data-nosnippet>128</a>/// ≈ 420 kbps — the old `cam_l0` geometry, re-priced (it was 1 Mbps at 30 fps).
+<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">pub const </span>LOW_RUNG: VideoRung = VideoRung {
+<a href=#130 id=130 data-nosnippet>130</a>    height: <span class="number">360</span>,
+<a href=#131 id=131 data-nosnippet>131</a>    fps: <span class="number">20</span>,
+<a href=#132 id=132 data-nosnippet>132</a>};
+<a href=#133 id=133 data-nosnippet>133</a>
+<a href=#134 id=134 data-nosnippet>134</a><span class="doccomment">/// The **only** below-source screen rung. Screen share degrades by
+<a href=#135 id=135 data-nosnippet>135</a>/// `DegradePriority::Legibility` — drop frames before pixels — so a small share
+<a href=#136 id=136 data-nosnippet>136</a>/// tile keeps 360p (a 180p thumbnail of shared *text* is unreadable, where a 180p
+<a href=#137 id=137 data-nosnippet>137</a>/// thumbnail of a face is fine) and gives up frame rate instead: 15 fps is the
+<a href=#138 id=138 data-nosnippet>138</a>/// same floor the screen ladder's legibility ordering uses. ≈200 kbps against the
+<a href=#139 id=139 data-nosnippet>139</a>/// 1 Mbps it used to cost, at identical resolution.
+<a href=#140 id=140 data-nosnippet>140</a></span><span class="kw">pub const </span>SCREEN_LOW_RUNG: VideoRung = VideoRung {
+<a href=#141 id=141 data-nosnippet>141</a>    height: <span class="number">360</span>,
+<a href=#142 id=142 data-nosnippet>142</a>    fps: <span class="number">15</span>,
+<a href=#143 id=143 data-nosnippet>143</a>};
+<a href=#144 id=144 data-nosnippet>144</a>
+<a href=#145 id=145 data-nosnippet>145</a><span class="doccomment">/// A visible tile larger than this — in **physical** pixels — takes the source
+<a href=#146 id=146 data-nosnippet>146</a>/// rather than any below-source rung: it is past what the richest low rung
+<a href=#147 id=147 data-nosnippet>147</a>/// ([`LOW_RUNG`], and [`SCREEN_LOW_RUNG`] at the same geometry) can fill within
+<a href=#148 id=148 data-nosnippet>148</a>/// [`TILE_UPSCALE_TOLERANCE_NUM`]/[`TILE_UPSCALE_TOLERANCE_DEN`].
+<a href=#149 id=149 data-nosnippet>149</a>///
+<a href=#150 id=150 data-nosnippet>150</a>/// Worked examples, in the PHYSICAL pixels the UI actually reports (its own 16 px
+<a href=#151 id=151 data-nosnippet>151</a>/// bucketing already applied, so these are the exact numbers that arrive), for the
+<a href=#152 id=152 data-nosnippet>152</a>/// two shapes the shipped UI produces — `tile_grid.dart`'s
+<a href=#153 id=153 data-nosnippet>153</a>/// `maxCrossAxisExtent: 360` logical grid cell and its 96 px-tall filmstrip:
+<a href=#154 id=154 data-nosnippet>154</a>///
+<a href=#155 id=155 data-nosnippet>155</a>/// | surface | @ DPR 1 | @ DPR 2 |
+<a href=#156 id=156 data-nosnippet>156</a>/// |---|---|---|
+<a href=#157 id=157 data-nosnippet>157</a>/// | grid cell | 368×208 = 76 544 px → **thumb** | 720×400 = 288 000 px → **low** |
+<a href=#158 id=158 data-nosnippet>158</a>/// | filmstrip stamp | 176×96 = 16 896 px → **thumb** | 336×192 = 64 512 px → **thumb** |
+<a href=#159 id=159 data-nosnippet>159</a>/// | expanded / stage | 1280×720 = 921 600 px → **source** | **source** |
+<a href=#160 id=160 data-nosnippet>160</a>///
+<a href=#161 id=161 data-nosnippet>161</a>/// The 2× grid cell is the case this boundary exists for: it is a genuine 720-wide
+<a href=#162 id=162 data-nosnippet>162</a>/// surface, and filling it from a 320-wide thumbnail would be a 2.25× linear
+<a href=#163 id=163 data-nosnippet>163</a>/// upscale of a face.
+<a href=#164 id=164 data-nosnippet>164</a></span><span class="kw">pub const </span>TILE_SOURCE_MIN_PIXELS: u64 = LOW_RUNG.covers_up_to_pixels();
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a><span class="doccomment">/// What one below-source rung costs for this content, from the bits-per-pixel
+<a href=#167 id=167 data-nosnippet>167</a>/// model in [`crate::congestion`]. Camera and screen are priced by different
+<a href=#168 id=168 data-nosnippet>168</a>/// models: screen content (text, flat regions, sharp edges) compresses several
+<a href=#169 id=169 data-nosnippet>169</a>/// times better than motion video, so pricing a shared window like a talking head
+<a href=#170 id=170 data-nosnippet>170</a>/// would oversize it.
+<a href=#171 id=171 data-nosnippet>171</a></span><span class="kw">pub fn </span>rung_bps(source: VideoSource, rung: VideoRung) -&gt; u64 {
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">match </span>source {
+<a href=#173 id=173 data-nosnippet>173</a>        VideoSource::Camera =&gt; camera_bitrate_bps(rung.height, rung.fps),
+<a href=#174 id=174 data-nosnippet>174</a>        VideoSource::Screen =&gt; screen_bitrate_bps(rung.height, rung.fps),
 <a href=#175 id=175 data-nosnippet>175</a>    }
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="attr">#[test]
-<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">fn </span>most_constrained_takes_the_floor() {
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">use </span>QualityRequest::{Capped, Source};
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="macro">assert_eq!</span>(most_constrained(Source, Source), Source);
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="comment">// Source is the least constrained — the other wins.
-<a href=#182 id=182 data-nosnippet>182</a>        </span><span class="macro">assert_eq!</span>(most_constrained(Source, Capped(<span class="number">500</span>)), Capped(<span class="number">500</span>));
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="macro">assert_eq!</span>(most_constrained(Capped(<span class="number">500</span>), Source), Capped(<span class="number">500</span>));
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="comment">// Two caps → the lower (more constrained).
-<a href=#185 id=185 data-nosnippet>185</a>        </span><span class="macro">assert_eq!</span>(most_constrained(Capped(<span class="number">800</span>), Capped(<span class="number">500</span>)), Capped(<span class="number">500</span>));
+<a href=#176 id=176 data-nosnippet>176</a>}
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a><span class="doccomment">/// The below-source rungs available for `source`, **cheapest first**. Every caller
+<a href=#179 id=179 data-nosnippet>179</a>/// walks this in order; the ascending-price invariant is asserted in debug builds
+<a href=#180 id=180 data-nosnippet>180</a>/// by [`debug_assert_ascending`].
+<a href=#181 id=181 data-nosnippet>181</a></span><span class="kw">fn </span>low_rungs(source: VideoSource) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[VideoRung] {
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">match </span>source {
+<a href=#183 id=183 data-nosnippet>183</a>        VideoSource::Camera =&gt; <span class="kw-2">&amp;</span>[THUMB_RUNG, LOW_RUNG],
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="comment">// Legibility: no thumbnail rung for shared content — see [`SCREEN_LOW_RUNG`].
+<a href=#185 id=185 data-nosnippet>185</a>        </span>VideoSource::Screen =&gt; <span class="kw-2">&amp;</span>[SCREEN_LOW_RUNG],
 <a href=#186 id=186 data-nosnippet>186</a>    }
 <a href=#187 id=187 data-nosnippet>187</a>}
+<a href=#188 id=188 data-nosnippet>188</a>
+<a href=#189 id=189 data-nosnippet>189</a><span class="doccomment">/// The ladder must be strictly ascending in price AND in area, or "cheapest rung
+<a href=#190 id=190 data-nosnippet>190</a>/// that covers the tile" and "richest rung this cap affords" stop being inverses of
+<a href=#191 id=191 data-nosnippet>191</a>/// each other and a tile could round-trip to a rung it never asked for.
+<a href=#192 id=192 data-nosnippet>192</a></span><span class="kw">fn </span>debug_assert_ascending(source: VideoSource, rungs: <span class="kw-2">&amp;</span>[VideoRung]) {
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="macro">debug_assert!</span>(
+<a href=#194 id=194 data-nosnippet>194</a>        rungs
+<a href=#195 id=195 data-nosnippet>195</a>            .windows(<span class="number">2</span>)
+<a href=#196 id=196 data-nosnippet>196</a>            .all(|w| rung_bps(source, w[<span class="number">0</span>]) &lt; rung_bps(source, w[<span class="number">1</span>])
+<a href=#197 id=197 data-nosnippet>197</a>                &amp;&amp; w[<span class="number">0</span>].pixels() &lt; w[<span class="number">1</span>].pixels()),
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="string">"{source:?} rung ladder is not strictly ascending: {rungs:?}"
+<a href=#199 id=199 data-nosnippet>199</a>    </span>);
+<a href=#200 id=200 data-nosnippet>200</a>}
+<a href=#201 id=201 data-nosnippet>201</a>
+<a href=#202 id=202 data-nosnippet>202</a><span class="doccomment">/// Map a rendered tile's **physical** pixel size + visibility to a
+<a href=#203 id=203 data-nosnippet>203</a>/// [`QualityRequest`]. This is the *demand* half of demand-driven simulcast — it
+<a href=#204 id=204 data-nosnippet>204</a>/// never asks for more than the tile can use, which is exactly the receiver-CPU win
+<a href=#205 id=205 data-nosnippet>205</a>/// (a thumbnail pulls the low track).
+<a href=#206 id=206 data-nosnippet>206</a>///
+<a href=#207 id=207 data-nosnippet>207</a>/// `width`/`height` are physical (device) pixels, not logical ones: decode and
+<a href=#208 id=208 data-nosnippet>208</a>/// render cost scale with the pixels the GPU actually paints, so the same 360-wide
+<a href=#209 id=209 data-nosnippet>209</a>/// grid cell is a thumbnail on a 1× display and a genuine 720-wide surface on a 2×
+<a href=#210 id=210 data-nosnippet>210</a>/// one. The UI multiplies by `MediaQuery.devicePixelRatioOf` before reporting.
+<a href=#211 id=211 data-nosnippet>211</a>///
+<a href=#212 id=212 data-nosnippet>212</a>/// The cap is **derived from the tile's own pixel count**, not a constant: the tile
+<a href=#213 id=213 data-nosnippet>213</a>/// takes the cheapest rung that covers it (within
+<a href=#214 id=214 data-nosnippet>214</a>/// [`TILE_UPSCALE_TOLERANCE_NUM`]/[`TILE_UPSCALE_TOLERANCE_DEN`]), priced through
+<a href=#215 id=215 data-nosnippet>215</a>/// [`rung_bps`]; past the richest rung it takes the source. A 1 Mbps flat cap —
+<a href=#216 id=216 data-nosnippet>216</a>/// what this used to return for *every* sub-360p tile, including a 171×96 filmstrip
+<a href=#217 id=217 data-nosnippet>217</a>/// stamp — is 6–12× the per-tile budget Zoom, Daily and LiveKit all converged on,
+<a href=#218 id=218 data-nosnippet>218</a>/// and it was the dominant cost of a large call.
+<a href=#219 id=219 data-nosnippet>219</a></span><span class="kw">pub fn </span>tile_quality_request(
+<a href=#220 id=220 data-nosnippet>220</a>    source: VideoSource,
+<a href=#221 id=221 data-nosnippet>221</a>    width: u32,
+<a href=#222 id=222 data-nosnippet>222</a>    height: u32,
+<a href=#223 id=223 data-nosnippet>223</a>    visible: bool,
+<a href=#224 id=224 data-nosnippet>224</a>) -&gt; QualityRequest {
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let </span>rungs = low_rungs(source);
+<a href=#226 id=226 data-nosnippet>226</a>    debug_assert_ascending(source, rungs);
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">let </span>pixels = (width <span class="kw">as </span>u64) * (height <span class="kw">as </span>u64);
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="comment">// Not rendered: the cheapest rung, and flagged so the producer's fold ignores
+<a href=#229 id=229 data-nosnippet>229</a>    // it while anyone is actually watching (see [`crate::plan_layers`]).
+<a href=#230 id=230 data-nosnippet>230</a>    </span><span class="kw">if </span>!visible {
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">return </span>QualityRequest::Hidden(rung_bps(source, rungs[<span class="number">0</span>]));
+<a href=#232 id=232 data-nosnippet>232</a>    }
+<a href=#233 id=233 data-nosnippet>233</a>    rungs
+<a href=#234 id=234 data-nosnippet>234</a>        .iter()
+<a href=#235 id=235 data-nosnippet>235</a>        .find(|r| pixels &lt;= r.covers_up_to_pixels())
+<a href=#236 id=236 data-nosnippet>236</a>        .map_or(QualityRequest::Source, |r| {
+<a href=#237 id=237 data-nosnippet>237</a>            QualityRequest::Capped(rung_bps(source, <span class="kw-2">*</span>r))
+<a href=#238 id=238 data-nosnippet>238</a>        })
+<a href=#239 id=239 data-nosnippet>239</a>}
+<a href=#240 id=240 data-nosnippet>240</a>
+<a href=#241 id=241 data-nosnippet>241</a><span class="doccomment">/// Invert a coalesced cap back into the rung the producer should encode: the
+<a href=#242 id=242 data-nosnippet>242</a>/// richest rung this cap can pay for, never below the cheapest one.
+<a href=#243 id=243 data-nosnippet>243</a>///
+<a href=#244 id=244 data-nosnippet>244</a>/// The producer cannot simply look the cap up: `RequestQuality { cap_bps }` carries
+<a href=#245 id=245 data-nosnippet>245</a>/// a *bitrate*, and the cap that arrives has been folded ([`most_constrained`])
+<a href=#246 id=246 data-nosnippet>246</a>/// with the receiver's bandwidth-driven demand (`DownlinkDemand`), which produces
+<a href=#247 id=247 data-nosnippet>247</a>/// arbitrary values — and it is a **cross-receiver minimum** over everyone still
+<a href=#248 id=248 data-nosnippet>248</a>/// rendering the track (see [`crate::plan_layers`]). So the mapping is "what fits",
+<a href=#249 id=249 data-nosnippet>249</a>/// not "what was asked for" — and a cap below even the cheapest rung still yields
+<a href=#250 id=250 data-nosnippet>250</a>/// that rung rather than nothing, because the encoder's own bitrate is then set to
+<a href=#251 id=251 data-nosnippet>251</a>/// the cap and the geometry is the floor the ladder allows (the same
+<a href=#252 id=252 data-nosnippet>252</a>/// never-degenerate-toward-zero contract as `DownlinkDemand`'s `MIN_CAP_BPS`).
+<a href=#253 id=253 data-nosnippet>253</a></span><span class="kw">pub fn </span>low_rung_for_cap(source: VideoSource, cap_bps: u64) -&gt; VideoRung {
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span>rungs = low_rungs(source);
+<a href=#255 id=255 data-nosnippet>255</a>    debug_assert_ascending(source, rungs);
+<a href=#256 id=256 data-nosnippet>256</a>    rungs
+<a href=#257 id=257 data-nosnippet>257</a>        .iter()
+<a href=#258 id=258 data-nosnippet>258</a>        .rev()
+<a href=#259 id=259 data-nosnippet>259</a>        .find(|r| rung_bps(source, <span class="kw-2">**</span>r) &lt;= cap_bps)
+<a href=#260 id=260 data-nosnippet>260</a>        .copied()
+<a href=#261 id=261 data-nosnippet>261</a>        .unwrap_or(rungs[<span class="number">0</span>])
+<a href=#262 id=262 data-nosnippet>262</a>}
+<a href=#263 id=263 data-nosnippet>263</a>
+<a href=#264 id=264 data-nosnippet>264</a><span class="doccomment">/// Fold two demands into the more-constrained one. `Hidden` beats everything (a
+<a href=#265 id=265 data-nosnippet>265</a>/// tile nobody is looking at cannot become one that is by way of a bandwidth
+<a href=#266 id=266 data-nosnippet>266</a>/// estimate), `Capped` beats `Source`, and two of a kind take the lower cap. Used
+<a href=#267 id=267 data-nosnippet>267</a>/// to combine a tile-size demand with a bandwidth demand so the receiver can never
+<a href=#268 id=268 data-nosnippet>268</a>/// over-request beyond what either signal allows.
+<a href=#269 id=269 data-nosnippet>269</a></span><span class="kw">pub fn </span>most_constrained(a: QualityRequest, b: QualityRequest) -&gt; QualityRequest {
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">use </span>QualityRequest::{Capped, Hidden, Source};
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">match </span>(a, b) {
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="comment">// Hidden wins, at the lower of the two caps it could be carrying.
+<a href=#273 id=273 data-nosnippet>273</a>        </span>(Hidden(x), Hidden(y)) =&gt; Hidden(x.min(y)),
+<a href=#274 id=274 data-nosnippet>274</a>        (Hidden(x), Capped(y)) | (Capped(y), Hidden(x)) =&gt; Hidden(x.min(y)),
+<a href=#275 id=275 data-nosnippet>275</a>        (Hidden(x), Source) | (Source, Hidden(x)) =&gt; Hidden(x),
+<a href=#276 id=276 data-nosnippet>276</a>        (Source, other) | (other, Source) =&gt; other,
+<a href=#277 id=277 data-nosnippet>277</a>        (Capped(x), Capped(y)) =&gt; Capped(x.min(y)),
+<a href=#278 id=278 data-nosnippet>278</a>    }
+<a href=#279 id=279 data-nosnippet>279</a>}
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a><span class="attr">#[cfg(test)]
+<a href=#282 id=282 data-nosnippet>282</a></span><span class="kw">mod </span>tests {
+<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#284 id=284 data-nosnippet>284</a>
+<a href=#285 id=285 data-nosnippet>285</a>    <span class="attr">#[test]
+<a href=#286 id=286 data-nosnippet>286</a>    </span><span class="kw">fn </span>track_names_are_layer_distinct() {
+<a href=#287 id=287 data-nosnippet>287</a>        <span class="macro">assert_eq!</span>(track_name(VideoSource::Camera, SpatialLayer::Source), <span class="string">"cam"</span>);
+<a href=#288 id=288 data-nosnippet>288</a>        <span class="macro">assert_eq!</span>(track_name(VideoSource::Camera, SpatialLayer::Low), <span class="string">"cam_l0"</span>);
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="macro">assert_eq!</span>(
+<a href=#290 id=290 data-nosnippet>290</a>            track_name(VideoSource::Screen, SpatialLayer::Source),
+<a href=#291 id=291 data-nosnippet>291</a>            <span class="string">"screen"
+<a href=#292 id=292 data-nosnippet>292</a>        </span>);
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="macro">assert_eq!</span>(
+<a href=#294 id=294 data-nosnippet>294</a>            track_name(VideoSource::Screen, SpatialLayer::Low),
+<a href=#295 id=295 data-nosnippet>295</a>            <span class="string">"screen_l0"
+<a href=#296 id=296 data-nosnippet>296</a>        </span>);
+<a href=#297 id=297 data-nosnippet>297</a>    }
+<a href=#298 id=298 data-nosnippet>298</a>
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="attr">#[test]
+<a href=#300 id=300 data-nosnippet>300</a>    </span><span class="kw">fn </span>track_kinds_match_wire() {
+<a href=#301 id=301 data-nosnippet>301</a>        <span class="macro">assert_eq!</span>(
+<a href=#302 id=302 data-nosnippet>302</a>            track_kind(VideoSource::Camera, SpatialLayer::Low),
+<a href=#303 id=303 data-nosnippet>303</a>            TrackKind::CamVideoLow
+<a href=#304 id=304 data-nosnippet>304</a>        );
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="macro">assert_eq!</span>(
+<a href=#306 id=306 data-nosnippet>306</a>            track_kind(VideoSource::Screen, SpatialLayer::Low),
+<a href=#307 id=307 data-nosnippet>307</a>            TrackKind::ScrVideoLow
+<a href=#308 id=308 data-nosnippet>308</a>        );
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="comment">// Source layers keep the original wire kinds (un-upgraded peers unaffected).
+<a href=#310 id=310 data-nosnippet>310</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#311 id=311 data-nosnippet>311</a>            track_kind(VideoSource::Screen, SpatialLayer::Source),
+<a href=#312 id=312 data-nosnippet>312</a>            TrackKind::ScrVideo
+<a href=#313 id=313 data-nosnippet>313</a>        );
+<a href=#314 id=314 data-nosnippet>314</a>    }
+<a href=#315 id=315 data-nosnippet>315</a>
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="attr">#[test]
+<a href=#317 id=317 data-nosnippet>317</a>    </span><span class="kw">fn </span>temporal_id_round_trips() {
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="macro">assert_eq!</span>(TemporalLayer::from_id(<span class="number">0</span>), TemporalLayer::Base);
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="macro">assert_eq!</span>(TemporalLayer::from_id(<span class="number">1</span>), TemporalLayer::Enhanced);
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="macro">assert_eq!</span>(TemporalLayer::from_id(<span class="number">7</span>), TemporalLayer::Enhanced);
+<a href=#321 id=321 data-nosnippet>321</a>        <span class="macro">assert_eq!</span>(TemporalLayer::Base.id(), <span class="number">0</span>);
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="macro">assert_eq!</span>(TemporalLayer::Enhanced.id(), <span class="number">1</span>);
+<a href=#323 id=323 data-nosnippet>323</a>    }
+<a href=#324 id=324 data-nosnippet>324</a>
+<a href=#325 id=325 data-nosnippet>325</a>    <span class="doccomment">/// Extract the cap of a RENDERED demand, or fail loudly.
+<a href=#326 id=326 data-nosnippet>326</a>    </span><span class="kw">fn </span>cap(req: QualityRequest) -&gt; u64 {
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">match </span>req {
+<a href=#328 id=328 data-nosnippet>328</a>            QualityRequest::Capped(bps) =&gt; bps,
+<a href=#329 id=329 data-nosnippet>329</a>            other =&gt; <span class="macro">panic!</span>(<span class="string">"expected a capped demand, got {other:?}"</span>),
+<a href=#330 id=330 data-nosnippet>330</a>        }
+<a href=#331 id=331 data-nosnippet>331</a>    }
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="attr">#[test]
+<a href=#334 id=334 data-nosnippet>334</a>    </span><span class="kw">fn </span>tile_demand_tracks_size_and_visibility() {
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">use </span>VideoSource::Camera;
+<a href=#336 id=336 data-nosnippet>336</a>        <span class="comment">// Large + visible → source.
+<a href=#337 id=337 data-nosnippet>337</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#338 id=338 data-nosnippet>338</a>            tile_quality_request(Camera, <span class="number">1920</span>, <span class="number">1080</span>, <span class="bool-val">true</span>),
+<a href=#339 id=339 data-nosnippet>339</a>            QualityRequest::Source
+<a href=#340 id=340 data-nosnippet>340</a>        );
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="comment">// Small tile → low.
+<a href=#342 id=342 data-nosnippet>342</a>        </span><span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#343 id=343 data-nosnippet>343</a>            tile_quality_request(Camera, <span class="number">320</span>, <span class="number">180</span>, <span class="bool-val">true</span>),
+<a href=#344 id=344 data-nosnippet>344</a>            QualityRequest::Capped(<span class="kw">_</span>)
+<a href=#345 id=345 data-nosnippet>345</a>        ));
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="comment">// Hidden at any size → the not-rendered demand, never source.
+<a href=#347 id=347 data-nosnippet>347</a>        </span><span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#348 id=348 data-nosnippet>348</a>            tile_quality_request(Camera, <span class="number">1920</span>, <span class="number">1080</span>, <span class="bool-val">false</span>),
+<a href=#349 id=349 data-nosnippet>349</a>            QualityRequest::Hidden(<span class="kw">_</span>)
+<a href=#350 id=350 data-nosnippet>350</a>        ));
+<a href=#351 id=351 data-nosnippet>351</a>    }
+<a href=#352 id=352 data-nosnippet>352</a>
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="doccomment">/// THE re-pricing contract: a tile's cap comes from its own PHYSICAL pixel
+<a href=#354 id=354 data-nosnippet>354</a>    /// count. The two shapes the shipped UI renders are checked at both display
+<a href=#355 id=355 data-nosnippet>355</a>    /// densities, because the same logical cell is a different amount of decode and
+<a href=#356 id=356 data-nosnippet>356</a>    /// render work on a 1× and a 2× display — which is the whole reason the demand
+<a href=#357 id=357 data-nosnippet>357</a>    /// is reported in physical pixels.
+<a href=#358 id=358 data-nosnippet>358</a>    </span><span class="attr">#[test]
+<a href=#359 id=359 data-nosnippet>359</a>    </span><span class="kw">fn </span>tile_cap_is_priced_from_the_tile() {
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">use </span>VideoSource::Camera;
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>thumb = rung_bps(Camera, THUMB_RUNG);
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>low = rung_bps(Camera, LOW_RUNG);
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="macro">assert!</span>(thumb &lt; low, <span class="string">"the ladder must be strictly ascending"</span>);
+<a href=#364 id=364 data-nosnippet>364</a>
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="comment">// The exact reports the UI sends for the shipped grid cell, bucketing
+<a href=#366 id=366 data-nosnippet>366</a>        // included (`ui/test/demand_test.dart` pins the other side of this pair).
+<a href=#367 id=367 data-nosnippet>367</a>        // At 1× it is a thumbnail; at 2× it is a real 720-wide surface and takes
+<a href=#368 id=368 data-nosnippet>368</a>        // LOW — filling it from 180p would be a 2.25× linear upscale of a face.
+<a href=#369 id=369 data-nosnippet>369</a>        </span><span class="macro">assert_eq!</span>(cap(tile_quality_request(Camera, <span class="number">368</span>, <span class="number">208</span>, <span class="bool-val">true</span>)), thumb);
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="macro">assert_eq!</span>(cap(tile_quality_request(Camera, <span class="number">720</span>, <span class="number">400</span>, <span class="bool-val">true</span>)), low);
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="comment">// The filmstrip stamp stays on the thumbnail rung at BOTH densities — it is
+<a href=#372 id=372 data-nosnippet>372</a>        // 96 logical px tall by design.
+<a href=#373 id=373 data-nosnippet>373</a>        </span><span class="macro">assert_eq!</span>(cap(tile_quality_request(Camera, <span class="number">176</span>, <span class="number">96</span>, <span class="bool-val">true</span>)), thumb);
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="macro">assert_eq!</span>(cap(tile_quality_request(Camera, <span class="number">336</span>, <span class="number">192</span>, <span class="bool-val">true</span>)), thumb);
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="comment">// An exact-match tile takes its own rung, not the next one up.
+<a href=#376 id=376 data-nosnippet>376</a>        </span><span class="macro">assert_eq!</span>(cap(tile_quality_request(Camera, <span class="number">320</span>, <span class="number">180</span>, <span class="bool-val">true</span>)), thumb);
+<a href=#377 id=377 data-nosnippet>377</a>        <span class="macro">assert_eq!</span>(cap(tile_quality_request(Camera, <span class="number">640</span>, <span class="number">360</span>, <span class="bool-val">true</span>)), low);
+<a href=#378 id=378 data-nosnippet>378</a>        <span class="comment">// And it is a real saving, not a rename: an order of magnitude under the
+<a href=#379 id=379 data-nosnippet>379</a>        // flat 1 Mbps every sub-360p tile used to demand.
+<a href=#380 id=380 data-nosnippet>380</a>        </span><span class="macro">assert!</span>(thumb * <span class="number">6 </span>&lt; <span class="number">1_000_000</span>, <span class="string">"thumbnail rung still costs {thumb}"</span>);
+<a href=#381 id=381 data-nosnippet>381</a>    }
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a>    <span class="doccomment">/// The tolerance is an AREA ratio, and the boundary sits exactly where the
+<a href=#384 id=384 data-nosnippet>384</a>    /// constants say it does.
+<a href=#385 id=385 data-nosnippet>385</a>    </span><span class="attr">#[test]
+<a href=#386 id=386 data-nosnippet>386</a>    </span><span class="kw">fn </span>a_rung_covers_its_own_area_times_the_tolerance() {
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">use </span>VideoSource::Camera;
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="macro">assert_eq!</span>(THUMB_RUNG.pixels(), <span class="number">320 </span>* <span class="number">180</span>);
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="macro">assert_eq!</span>(LOW_RUNG.pixels(), <span class="number">640 </span>* <span class="number">360</span>);
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="macro">assert_eq!</span>(THUMB_RUNG.covers_up_to_pixels(), <span class="number">320 </span>* <span class="number">180 </span>* <span class="number">3 </span>/ <span class="number">2</span>);
+<a href=#391 id=391 data-nosnippet>391</a>        <span class="macro">assert_eq!</span>(TILE_SOURCE_MIN_PIXELS, <span class="number">640 </span>* <span class="number">360 </span>* <span class="number">3 </span>/ <span class="number">2</span>);
+<a href=#392 id=392 data-nosnippet>392</a>
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="comment">// Straddle the thumb/low boundary by one pixel of area, at a fixed height
+<a href=#394 id=394 data-nosnippet>394</a>        // so only the area moves.
+<a href=#395 id=395 data-nosnippet>395</a>        </span><span class="kw">let </span>boundary = THUMB_RUNG.covers_up_to_pixels();
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">let </span>(w, h) = ((boundary / <span class="number">180</span>) <span class="kw">as </span>u32, <span class="number">180u32</span>);
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="macro">assert_eq!</span>(
+<a href=#398 id=398 data-nosnippet>398</a>            cap(tile_quality_request(Camera, w, h, <span class="bool-val">true</span>)),
+<a href=#399 id=399 data-nosnippet>399</a>            rung_bps(Camera, THUMB_RUNG)
+<a href=#400 id=400 data-nosnippet>400</a>        );
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="macro">assert_eq!</span>(
+<a href=#402 id=402 data-nosnippet>402</a>            cap(tile_quality_request(Camera, w + <span class="number">1</span>, h, <span class="bool-val">true</span>)),
+<a href=#403 id=403 data-nosnippet>403</a>            rung_bps(Camera, LOW_RUNG)
+<a href=#404 id=404 data-nosnippet>404</a>        );
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="comment">// And the low/source boundary the same way.
+<a href=#406 id=406 data-nosnippet>406</a>        </span><span class="kw">let </span>boundary = TILE_SOURCE_MIN_PIXELS;
+<a href=#407 id=407 data-nosnippet>407</a>        <span class="kw">let </span>(w, h) = ((boundary / <span class="number">360</span>) <span class="kw">as </span>u32, <span class="number">360u32</span>);
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="macro">assert_eq!</span>(
+<a href=#409 id=409 data-nosnippet>409</a>            cap(tile_quality_request(Camera, w, h, <span class="bool-val">true</span>)),
+<a href=#410 id=410 data-nosnippet>410</a>            rung_bps(Camera, LOW_RUNG)
+<a href=#411 id=411 data-nosnippet>411</a>        );
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="macro">assert_eq!</span>(
+<a href=#413 id=413 data-nosnippet>413</a>            tile_quality_request(Camera, w + <span class="number">1</span>, h, <span class="bool-val">true</span>),
+<a href=#414 id=414 data-nosnippet>414</a>            QualityRequest::Source
+<a href=#415 id=415 data-nosnippet>415</a>        );
+<a href=#416 id=416 data-nosnippet>416</a>    }
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a>    <span class="doccomment">/// Screen keeps `DegradePriority::Legibility`: a small share tile drops frame
+<a href=#419 id=419 data-nosnippet>419</a>    /// rate, never resolution, so shared text stays readable. It still gets
+<a href=#420 id=420 data-nosnippet>420</a>    /// re-priced — same 360p, a fifth of the bitrate.
+<a href=#421 id=421 data-nosnippet>421</a>    </span><span class="attr">#[test]
+<a href=#422 id=422 data-nosnippet>422</a>    </span><span class="kw">fn </span>screen_never_takes_the_thumbnail_geometry() {
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">use </span>VideoSource::Screen;
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="kw">let </span>screen_low = rung_bps(Screen, SCREEN_LOW_RUNG);
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="kw">for </span>tile <span class="kw">in </span>[(<span class="number">171u32</span>, <span class="number">96u32</span>), (<span class="number">320</span>, <span class="number">180</span>), (<span class="number">480</span>, <span class="number">270</span>), (<span class="number">720</span>, <span class="number">405</span>)] {
+<a href=#426 id=426 data-nosnippet>426</a>            <span class="macro">assert_eq!</span>(
+<a href=#427 id=427 data-nosnippet>427</a>                cap(tile_quality_request(Screen, tile.<span class="number">0</span>, tile.<span class="number">1</span>, <span class="bool-val">true</span>)),
+<a href=#428 id=428 data-nosnippet>428</a>                screen_low,
+<a href=#429 id=429 data-nosnippet>429</a>                <span class="string">"a {}×{} screen tile must stay on the legible rung"</span>,
+<a href=#430 id=430 data-nosnippet>430</a>                tile.<span class="number">0</span>,
+<a href=#431 id=431 data-nosnippet>431</a>                tile.<span class="number">1
+<a href=#432 id=432 data-nosnippet>432</a>            </span>);
+<a href=#433 id=433 data-nosnippet>433</a>        }
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="comment">// Legibility, spelled out: the screen rung keeps the camera LOW rung's
+<a href=#435 id=435 data-nosnippet>435</a>        // resolution (never the thumbnail's) and gives up frame rate instead.
+<a href=#436 id=436 data-nosnippet>436</a>        </span><span class="kw">let </span>(screen, low, thumb) = (SCREEN_LOW_RUNG, LOW_RUNG, THUMB_RUNG);
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="macro">assert_eq!</span>(
+<a href=#438 id=438 data-nosnippet>438</a>            screen.height, low.height,
+<a href=#439 id=439 data-nosnippet>439</a>            <span class="string">"same resolution as the camera low"
+<a href=#440 id=440 data-nosnippet>440</a>        </span>);
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="macro">assert_ne!</span>(screen.height, thumb.height, <span class="string">"never the thumbnail geometry"</span>);
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="macro">assert!</span>(screen.fps &lt; low.fps, <span class="string">"frames are what it gives up"</span>);
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="macro">assert!</span>(screen_low * <span class="number">4 </span>&lt; <span class="number">1_000_000</span>);
+<a href=#444 id=444 data-nosnippet>444</a>    }
+<a href=#445 id=445 data-nosnippet>445</a>
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="doccomment">/// A tile past the richest below-source rung takes the source — the "expand a
+<a href=#447 id=447 data-nosnippet>447</a>    /// tile, get sharp video" behaviour and its e2e guard.
+<a href=#448 id=448 data-nosnippet>448</a>    </span><span class="attr">#[test]
+<a href=#449 id=449 data-nosnippet>449</a>    </span><span class="kw">fn </span>a_tile_past_the_ladder_takes_the_source() {
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">use </span>VideoSource::{Camera, Screen};
+<a href=#451 id=451 data-nosnippet>451</a>        <span class="comment">// The e2e guard's stage tile, at any density.
+<a href=#452 id=452 data-nosnippet>452</a>        </span><span class="kw">for </span>source <span class="kw">in </span>[Camera, Screen] {
+<a href=#453 id=453 data-nosnippet>453</a>            <span class="macro">assert_eq!</span>(
+<a href=#454 id=454 data-nosnippet>454</a>                tile_quality_request(source, <span class="number">1280</span>, <span class="number">720</span>, <span class="bool-val">true</span>),
+<a href=#455 id=455 data-nosnippet>455</a>                QualityRequest::Source
+<a href=#456 id=456 data-nosnippet>456</a>            );
+<a href=#457 id=457 data-nosnippet>457</a>            <span class="macro">assert_eq!</span>(
+<a href=#458 id=458 data-nosnippet>458</a>                tile_quality_request(source, <span class="number">2560</span>, <span class="number">1440</span>, <span class="bool-val">true</span>),
+<a href=#459 id=459 data-nosnippet>459</a>                QualityRequest::Source
+<a href=#460 id=460 data-nosnippet>460</a>            );
+<a href=#461 id=461 data-nosnippet>461</a>        }
+<a href=#462 id=462 data-nosnippet>462</a>    }
+<a href=#463 id=463 data-nosnippet>463</a>
+<a href=#464 id=464 data-nosnippet>464</a>    <span class="doccomment">/// The producer's inversion: a coalesced cap buys the richest rung it can pay
+<a href=#465 id=465 data-nosnippet>465</a>    /// for. It must accept ARBITRARY values, because `most_constrained` folds the
+<a href=#466 id=466 data-nosnippet>466</a>    /// tile demand with `DownlinkDemand`'s bandwidth estimate.
+<a href=#467 id=467 data-nosnippet>467</a>    </span><span class="attr">#[test]
+<a href=#468 id=468 data-nosnippet>468</a>    </span><span class="kw">fn </span>a_cap_buys_the_richest_rung_it_can_afford() {
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="kw">use </span>VideoSource::{Camera, Screen};
+<a href=#470 id=470 data-nosnippet>470</a>        <span class="kw">let </span>thumb = rung_bps(Camera, THUMB_RUNG);
+<a href=#471 id=471 data-nosnippet>471</a>        <span class="kw">let </span>low = rung_bps(Camera, LOW_RUNG);
+<a href=#472 id=472 data-nosnippet>472</a>
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="macro">assert_eq!</span>(low_rung_for_cap(Camera, thumb), THUMB_RUNG);
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="macro">assert_eq!</span>(low_rung_for_cap(Camera, low), LOW_RUNG);
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="macro">assert_eq!</span>(low_rung_for_cap(Camera, low - <span class="number">1</span>), THUMB_RUNG);
+<a href=#476 id=476 data-nosnippet>476</a>        <span class="macro">assert_eq!</span>(low_rung_for_cap(Camera, low * <span class="number">10</span>), LOW_RUNG, <span class="string">"never above"</span>);
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="comment">// A bandwidth-crushed receiver still gets the floor rung, never nothing —
+<a href=#478 id=478 data-nosnippet>478</a>        // its encoder simply runs at the cap.
+<a href=#479 id=479 data-nosnippet>479</a>        </span><span class="macro">assert_eq!</span>(low_rung_for_cap(Camera, <span class="number">1</span>), THUMB_RUNG);
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="comment">// Screen has exactly one below-source rung at every cap.
+<a href=#481 id=481 data-nosnippet>481</a>        </span><span class="macro">assert_eq!</span>(low_rung_for_cap(Screen, <span class="number">1</span>), SCREEN_LOW_RUNG);
+<a href=#482 id=482 data-nosnippet>482</a>        <span class="macro">assert_eq!</span>(low_rung_for_cap(Screen, <span class="number">10_000_000</span>), SCREEN_LOW_RUNG);
+<a href=#483 id=483 data-nosnippet>483</a>    }
+<a href=#484 id=484 data-nosnippet>484</a>
+<a href=#485 id=485 data-nosnippet>485</a>    <span class="doccomment">/// Round trip: what a tile asks for is what the producer builds. This is the
+<a href=#486 id=486 data-nosnippet>486</a>    /// property that makes the ladder work end to end — the demand crosses the
+<a href=#487 id=487 data-nosnippet>487</a>    /// wire as a bare bitrate, so a rung that could not be recovered from its own
+<a href=#488 id=488 data-nosnippet>488</a>    /// price would silently encode at the wrong geometry.
+<a href=#489 id=489 data-nosnippet>489</a>    ///
+<a href=#490 id=490 data-nosnippet>490</a>    /// Every case here is a tile shape the ladder genuinely produces (both display
+<a href=#491 id=491 data-nosnippet>491</a>    /// densities of the two shipped surfaces), so a rung is never asserted for a
+<a href=#492 id=492 data-nosnippet>492</a>    /// size that could not ask for it.
+<a href=#493 id=493 data-nosnippet>493</a>    </span><span class="attr">#[test]
+<a href=#494 id=494 data-nosnippet>494</a>    </span><span class="kw">fn </span>every_tile_demand_round_trips_to_its_rung() {
+<a href=#495 id=495 data-nosnippet>495</a>        <span class="kw">use </span>VideoSource::Camera;
+<a href=#496 id=496 data-nosnippet>496</a>        <span class="kw">for </span>(tile, want) <span class="kw">in </span>[
+<a href=#497 id=497 data-nosnippet>497</a>            ((<span class="number">176u32</span>, <span class="number">96u32</span>), THUMB_RUNG), <span class="comment">// filmstrip stamp @1x
+<a href=#498 id=498 data-nosnippet>498</a>            </span>((<span class="number">336</span>, <span class="number">192</span>), THUMB_RUNG),      <span class="comment">// filmstrip stamp @2x
+<a href=#499 id=499 data-nosnippet>499</a>            </span>((<span class="number">320</span>, <span class="number">180</span>), THUMB_RUNG),      <span class="comment">// the rung's own geometry
+<a href=#500 id=500 data-nosnippet>500</a>            </span>((<span class="number">368</span>, <span class="number">208</span>), THUMB_RUNG),      <span class="comment">// grid cell @1x
+<a href=#501 id=501 data-nosnippet>501</a>            </span>((<span class="number">480</span>, <span class="number">272</span>), LOW_RUNG),        <span class="comment">// a mid-sized tile
+<a href=#502 id=502 data-nosnippet>502</a>            </span>((<span class="number">640</span>, <span class="number">360</span>), LOW_RUNG),        <span class="comment">// the rung's own geometry
+<a href=#503 id=503 data-nosnippet>503</a>            </span>((<span class="number">720</span>, <span class="number">400</span>), LOW_RUNG),        <span class="comment">// grid cell @2x
+<a href=#504 id=504 data-nosnippet>504</a>        </span>] {
+<a href=#505 id=505 data-nosnippet>505</a>            <span class="kw">let </span>asked = cap(tile_quality_request(Camera, tile.<span class="number">0</span>, tile.<span class="number">1</span>, <span class="bool-val">true</span>));
+<a href=#506 id=506 data-nosnippet>506</a>            <span class="macro">assert_eq!</span>(
+<a href=#507 id=507 data-nosnippet>507</a>                low_rung_for_cap(Camera, asked),
+<a href=#508 id=508 data-nosnippet>508</a>                want,
+<a href=#509 id=509 data-nosnippet>509</a>                <span class="string">"a {}×{} tile asked {asked} bps and got the wrong rung back"</span>,
+<a href=#510 id=510 data-nosnippet>510</a>                tile.<span class="number">0</span>,
+<a href=#511 id=511 data-nosnippet>511</a>                tile.<span class="number">1
+<a href=#512 id=512 data-nosnippet>512</a>            </span>);
+<a href=#513 id=513 data-nosnippet>513</a>        }
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="comment">// A hidden tile round-trips too — its carried cap is a real rung price.
+<a href=#515 id=515 data-nosnippet>515</a>        </span><span class="kw">let </span>QualityRequest::Hidden(bps) = tile_quality_request(Camera, <span class="number">368</span>, <span class="number">208</span>, <span class="bool-val">false</span>) <span class="kw">else </span>{
+<a href=#516 id=516 data-nosnippet>516</a>            <span class="macro">panic!</span>(<span class="string">"a hidden tile must report Hidden"</span>);
+<a href=#517 id=517 data-nosnippet>517</a>        };
+<a href=#518 id=518 data-nosnippet>518</a>        <span class="macro">assert_eq!</span>(low_rung_for_cap(Camera, bps), THUMB_RUNG);
+<a href=#519 id=519 data-nosnippet>519</a>    }
+<a href=#520 id=520 data-nosnippet>520</a>
+<a href=#521 id=521 data-nosnippet>521</a>    <span class="attr">#[test]
+<a href=#522 id=522 data-nosnippet>522</a>    </span><span class="kw">fn </span>most_constrained_takes_the_floor() {
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="kw">use </span>QualityRequest::{Capped, Hidden, Source};
+<a href=#524 id=524 data-nosnippet>524</a>        <span class="macro">assert_eq!</span>(most_constrained(Source, Source), Source);
+<a href=#525 id=525 data-nosnippet>525</a>        <span class="comment">// Source is the least constrained — the other wins.
+<a href=#526 id=526 data-nosnippet>526</a>        </span><span class="macro">assert_eq!</span>(most_constrained(Source, Capped(<span class="number">500</span>)), Capped(<span class="number">500</span>));
+<a href=#527 id=527 data-nosnippet>527</a>        <span class="macro">assert_eq!</span>(most_constrained(Capped(<span class="number">500</span>), Source), Capped(<span class="number">500</span>));
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="comment">// Two caps → the lower (more constrained).
+<a href=#529 id=529 data-nosnippet>529</a>        </span><span class="macro">assert_eq!</span>(most_constrained(Capped(<span class="number">800</span>), Capped(<span class="number">500</span>)), Capped(<span class="number">500</span>));
+<a href=#530 id=530 data-nosnippet>530</a>        <span class="comment">// Hidden outranks everything: a link estimate cannot make an unmounted
+<a href=#531 id=531 data-nosnippet>531</a>        // tile visible again.
+<a href=#532 id=532 data-nosnippet>532</a>        </span><span class="macro">assert_eq!</span>(most_constrained(Hidden(<span class="number">500</span>), Source), Hidden(<span class="number">500</span>));
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="macro">assert_eq!</span>(most_constrained(Source, Hidden(<span class="number">500</span>)), Hidden(<span class="number">500</span>));
+<a href=#534 id=534 data-nosnippet>534</a>        <span class="macro">assert_eq!</span>(most_constrained(Hidden(<span class="number">500</span>), Capped(<span class="number">800</span>)), Hidden(<span class="number">500</span>));
+<a href=#535 id=535 data-nosnippet>535</a>        <span class="macro">assert_eq!</span>(most_constrained(Capped(<span class="number">300</span>), Hidden(<span class="number">500</span>)), Hidden(<span class="number">300</span>));
+<a href=#536 id=536 data-nosnippet>536</a>        <span class="macro">assert_eq!</span>(most_constrained(Hidden(<span class="number">800</span>), Hidden(<span class="number">500</span>)), Hidden(<span class="number">500</span>));
+<a href=#537 id=537 data-nosnippet>537</a>    }
+<a href=#538 id=538 data-nosnippet>538</a>}
 </code></pre></div></section></main></body></html>

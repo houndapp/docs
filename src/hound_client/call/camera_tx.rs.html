@@ -236,9 +236,9 @@
 <a href=#236 id=236 data-nosnippet>236</a>    adapt: Arc&lt;AdaptShared&gt;,
 <a href=#237 id=237 data-nosnippet>237</a>    stats: Arc&lt;CallStats&gt;,
 <a href=#238 id=238 data-nosnippet>238</a>    <span class="comment">// Demand-driven LOW simulcast layer: `Some(bps)` ⇒ also downscale + encode this
-<a href=#239 id=239 data-nosnippet>239</a>    // capture at `LOW_CAM_DIMS` and forward on `low_vid_tx` (the `cam_l0` track).
-<a href=#240 id=240 data-nosnippet>240</a>    // Stays `None` (inert, source path byte-identical) until a receiver demands it
-<a href=#241 id=241 data-nosnippet>241</a>    // AND `SIMULCAST_ACTUATE` is on.
+<a href=#239 id=239 data-nosnippet>239</a>    // capture at the rung that cap buys (`hound_media::low_rung_for_cap`) and forward
+<a href=#240 id=240 data-nosnippet>240</a>    // it on `low_vid_tx` (the `cam_l0` track). Stays `None` (inert, source path
+<a href=#241 id=241 data-nosnippet>241</a>    // byte-identical) until a receiver demands it AND `SIMULCAST_ACTUATE` is on.
 <a href=#242 id=242 data-nosnippet>242</a>    </span>low_active: watch::Receiver&lt;<span class="prelude-ty">Option</span>&lt;u64&gt;&gt;,
 <a href=#243 id=243 data-nosnippet>243</a>    low_vid_tx: tokio::sync::mpsc::Sender&lt;WireFrame&gt;,
 <a href=#244 id=244 data-nosnippet>244</a>    low_keyframe: Arc&lt;AtomicBool&gt;,
@@ -268,269 +268,350 @@
 <a href=#268 id=268 data-nosnippet>268</a>    // per transition and retries slowly.
 <a href=#269 id=269 data-nosnippet>269</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>open_retry = OpenRetry::default();
 <a href=#270 id=270 data-nosnippet>270</a>
-<a href=#271 id=271 data-nosnippet>271</a>    <span class="comment">// LOW simulcast layer state — mirrors the source's, at `LOW_CAM_DIMS`. Built
-<a href=#272 id=272 data-nosnippet>272</a>    // lazily the first frame `low_active` is `Some`, torn down when it goes `None`,
-<a href=#273 id=273 data-nosnippet>273</a>    // rebuilt on a codec switch (tracks the same `target_codec` as the source).
-<a href=#274 id=274 data-nosnippet>274</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>low_encoder: <span class="prelude-ty">Option</span>&lt;hound_engine::api::VideoEncoder&gt; = <span class="prelude-val">None</span>;
-<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_last_target: <span class="prelude-ty">Option</span>&lt;VideoCodec&gt; = <span class="prelude-val">None</span>;
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_applied_bps = <span class="number">0u32</span>;
-<a href=#277 id=277 data-nosnippet>277</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_frame_seq = <span class="number">0u32</span>;
-<a href=#278 id=278 data-nosnippet>278</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_fps_gate = hound_media::FrameRateGate::new();
-<a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_fail_streak = EncodeFailStreak::default();
-<a href=#280 id=280 data-nosnippet>280</a>    <span class="kw">let </span>low_adapt = Arc::new(AdaptShared::default());
-<a href=#281 id=281 data-nosnippet>281</a>    low_adapt.target_fps.store(CAM_FPS.get(), Ordering::Relaxed);
-<a href=#282 id=282 data-nosnippet>282</a>
-<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="comment">// Camera disabled: release the device and idle.
-<a href=#285 id=285 data-nosnippet>285</a>        </span><span class="kw">if </span>!enabled.load(Ordering::Relaxed) {
-<a href=#286 id=286 data-nosnippet>286</a>            <span class="kw">if </span>camera.is_some() {
-<a href=#287 id=287 data-nosnippet>287</a>                drop(camera.take());
-<a href=#288 id=288 data-nosnippet>288</a>                drop(encoder.take());
-<a href=#289 id=289 data-nosnippet>289</a>            }
-<a href=#290 id=290 data-nosnippet>290</a>            <span class="comment">// Tell the RTC-debug snapshot the camera pipeline is DOWN. Without this
-<a href=#291 id=291 data-nosnippet>291</a>            // the gauge stays latched from whenever the camera last ran, and since
-<a href=#292 id=292 data-nosnippet>292</a>            // `AdaptShared::live` is latched too, turning video off mid-call would
-<a href=#293 id=293 data-nosnippet>293</a>            // leave the snapshot reading enabled + publish_live + 0 fps captured —
-<a href=#294 id=294 data-nosnippet>294</a>            // which is precisely `video_report`'s send-capture-stalled signature. It
-<a href=#295 id=295 data-nosnippet>295</a>            // would then diagnose a dead camera every window, WARN once the streak
-<a href=#296 id=296 data-nosnippet>296</a>            // latches, and pollute the Sentry `video_stage` tag for the rest of the
-<a href=#297 id=297 data-nosnippet>297</a>            // call, all for a user who simply turned their camera off.
-<a href=#298 id=298 data-nosnippet>298</a>            </span>stats.set_video_enabled(<span class="bool-val">false</span>);
-<a href=#299 id=299 data-nosnippet>299</a>            std::thread::sleep(std::time::Duration::from_millis(<span class="number">100</span>));
-<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">continue</span>;
-<a href=#301 id=301 data-nosnippet>301</a>        }
-<a href=#302 id=302 data-nosnippet>302</a>
-<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">if </span>device_rx.has_changed().unwrap_or(<span class="bool-val">false</span>) {
-<a href=#304 id=304 data-nosnippet>304</a>            choice = device_rx.borrow_and_update().clone();
-<a href=#305 id=305 data-nosnippet>305</a>            drop(camera.take());
-<a href=#306 id=306 data-nosnippet>306</a>            drop(encoder.take());
-<a href=#307 id=307 data-nosnippet>307</a>        }
-<a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a>        <span class="comment">// Open (or re-open) the camera + encoder.
-<a href=#310 id=310 data-nosnippet>310</a>        </span><span class="kw">if </span>camera.is_none() {
-<a href=#311 id=311 data-nosnippet>311</a>            <span class="kw">match </span>open_cam(
-<a href=#312 id=312 data-nosnippet>312</a>                <span class="kw-2">&amp;</span>choice,
-<a href=#313 id=313 data-nosnippet>313</a>                clock,
-<a href=#314 id=314 data-nosnippet>314</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#315 id=315 data-nosnippet>315</a>                </span>capture_source,
-<a href=#316 id=316 data-nosnippet>316</a>            ) {
-<a href=#317 id=317 data-nosnippet>317</a>                <span class="prelude-val">Ok</span>(c) =&gt; {
-<a href=#318 id=318 data-nosnippet>318</a>                    camera = <span class="prelude-val">Some</span>(c);
-<a href=#319 id=319 data-nosnippet>319</a>                    open_retry.opened();
-<a href=#320 id=320 data-nosnippet>320</a>                }
-<a href=#321 id=321 data-nosnippet>321</a>                <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#322 id=322 data-nosnippet>322</a>                    <span class="comment">// Classify, then report ONCE per transition into this failure
-<a href=#323 id=323 data-nosnippet>323</a>                    // class — the Sentry bridge promotes `error!` to an event, so a
-<a href=#324 id=324 data-nosnippet>324</a>                    // sticky denial must not log per tick. Keep looping either way:
-<a href=#325 id=325 data-nosnippet>325</a>                    // the camera (or the grant) can still show up.
-<a href=#326 id=326 data-nosnippet>326</a>                    </span><span class="kw">let </span>failure = OpenFailure::of_capture(<span class="kw-2">&amp;</span>e);
-<a href=#327 id=327 data-nosnippet>327</a>                    <span class="kw">let </span>(log, wait) = open_retry.failed(failure);
-<a href=#328 id=328 data-nosnippet>328</a>                    <span class="kw">if </span>log {
-<a href=#329 id=329 data-nosnippet>329</a>                        <span class="kw">match </span>failure {
-<a href=#330 id=330 data-nosnippet>330</a>                            OpenFailure::PermissionDenied =&gt; <span class="macro">tracing::error!</span>(
-<a href=#331 id=331 data-nosnippet>331</a>                                track = <span class="string">"cam"</span>,
-<a href=#332 id=332 data-nosnippet>332</a>                                %e,
-<a href=#333 id=333 data-nosnippet>333</a>                                <span class="string">"camera permission denied — enable hound in System Settings → \
-<a href=#334 id=334 data-nosnippet>334</a>                                 Privacy &amp; Security → Camera"
-<a href=#335 id=335 data-nosnippet>335</a>                            </span>),
-<a href=#336 id=336 data-nosnippet>336</a>                            OpenFailure::Other =&gt; <span class="macro">tracing::warn!</span>(
-<a href=#337 id=337 data-nosnippet>337</a>                                track = <span class="string">"cam"</span>,
-<a href=#338 id=338 data-nosnippet>338</a>                                %e,
-<a href=#339 id=339 data-nosnippet>339</a>                                <span class="string">"cam: camera open failed — retrying"
-<a href=#340 id=340 data-nosnippet>340</a>                            </span>),
-<a href=#341 id=341 data-nosnippet>341</a>                        }
-<a href=#342 id=342 data-nosnippet>342</a>                    }
-<a href=#343 id=343 data-nosnippet>343</a>                    std::thread::sleep(wait);
-<a href=#344 id=344 data-nosnippet>344</a>                    <span class="kw">continue</span>;
-<a href=#345 id=345 data-nosnippet>345</a>                }
-<a href=#346 id=346 data-nosnippet>346</a>            }
-<a href=#347 id=347 data-nosnippet>347</a>            <span class="comment">// Build in the negotiated codec (HW-encode ∩ all-peers decode), seeded by
-<a href=#348 id=348 data-nosnippet>348</a>            // `spawn_cam_publish` and re-driven by the mid-call re-negotiator,
-<a href=#349 id=349 data-nosnippet>349</a>            // descending the ladder if it won't open.
-<a href=#350 id=350 data-nosnippet>350</a>            </span><span class="kw">let </span>want = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
-<a href=#351 id=351 data-nosnippet>351</a>            encoder =
-<a href=#352 id=352 data-nosnippet>352</a>                open_encoder_laddered(want, CAM_DIMS, CAM_FPS, CAM_BITRATE, CAM_KEYFRAME_CADENCE);
-<a href=#353 id=353 data-nosnippet>353</a>            last_target = want;
-<a href=#354 id=354 data-nosnippet>354</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(enc) = encoder.as_ref() {
-<a href=#355 id=355 data-nosnippet>355</a>                <span class="kw">use </span>hound_engine::backend::VideoEncode;
-<a href=#356 id=356 data-nosnippet>356</a>                <span class="macro">tracing::info!</span>(
-<a href=#357 id=357 data-nosnippet>357</a>                    target: <span class="string">"video_encode"</span>,
-<a href=#358 id=358 data-nosnippet>358</a>                    track = <span class="string">"cam"</span>,
-<a href=#359 id=359 data-nosnippet>359</a>                    codec = <span class="question-mark">?</span>enc.codec(),
-<a href=#360 id=360 data-nosnippet>360</a>                    backend = enc.backend(),
-<a href=#361 id=361 data-nosnippet>361</a>                    width = CAM_DIMS.width(),
-<a href=#362 id=362 data-nosnippet>362</a>                    height = CAM_DIMS.height(),
-<a href=#363 id=363 data-nosnippet>363</a>                    <span class="string">"video: encode path selected"
-<a href=#364 id=364 data-nosnippet>364</a>                </span>);
-<a href=#365 id=365 data-nosnippet>365</a>            }
-<a href=#366 id=366 data-nosnippet>366</a>            <span class="comment">// Re-baseline so the first frame re-applies the live BWE target, and
-<a href=#367 id=367 data-nosnippet>367</a>            // open at a fresh IDR for any subscriber that attached meanwhile. A
-<a href=#368 id=368 data-nosnippet>368</a>            // (re)open always starts at native geometry — the geometry dwell only
-<a href=#369 id=369 data-nosnippet>369</a>            // degrades it once a fresh adaptation decision settles.
-<a href=#370 id=370 data-nosnippet>370</a>            </span>applied_bps = CAM_BITRATE.bps();
-<a href=#371 id=371 data-nosnippet>371</a>            enc_dims = CAM_DIMS;
-<a href=#372 id=372 data-nosnippet>372</a>            adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#373 id=373 data-nosnippet>373</a>            <span class="comment">// The camera pipeline is UP: a device is open and about to deliver
-<a href=#374 id=374 data-nosnippet>374</a>            // frames. This is the only place the gauge goes true, so it always means
-<a href=#375 id=375 data-nosnippet>375</a>            // "capture is running" — the thing every capture/encode rule in
-<a href=#376 id=376 data-nosnippet>376</a>            // `video_report` is judged against.
-<a href=#377 id=377 data-nosnippet>377</a>            </span>stats.set_video_enabled(<span class="bool-val">true</span>);
-<a href=#378 id=378 data-nosnippet>378</a>        }
-<a href=#379 id=379 data-nosnippet>379</a>
-<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(cap) = camera.as_mut() <span class="kw">else </span>{
-<a href=#381 id=381 data-nosnippet>381</a>            <span class="kw">continue</span>;
-<a href=#382 id=382 data-nosnippet>382</a>        };
-<a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cap.next_frame()));
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span>frame = <span class="kw">match </span>pulled {
-<a href=#385 id=385 data-nosnippet>385</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(f)) =&gt; f,
-<a href=#386 id=386 data-nosnippet>386</a>            <span class="kw">_ </span>=&gt; {
-<a href=#387 id=387 data-nosnippet>387</a>                drop(camera.take());
-<a href=#388 id=388 data-nosnippet>388</a>                drop(encoder.take());
-<a href=#389 id=389 data-nosnippet>389</a>                std::thread::sleep(std::time::Duration::from_millis(<span class="number">200</span>));
-<a href=#390 id=390 data-nosnippet>390</a>                <span class="kw">continue</span>;
-<a href=#391 id=391 data-nosnippet>391</a>            }
-<a href=#392 id=392 data-nosnippet>392</a>        };
-<a href=#393 id=393 data-nosnippet>393</a>
-<a href=#394 id=394 data-nosnippet>394</a>        <span class="comment">// RTC-debug: one raw camera frame pulled from the device.
-<a href=#395 id=395 data-nosnippet>395</a>        </span>stats.video_captured();
-<a href=#396 id=396 data-nosnippet>396</a>
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="comment">// Self-preview keyed "self" (runs even while paused, so the local preview
-<a href=#398 id=398 data-nosnippet>398</a>        // never freezes mid-call). Surface-first: a surface-backed camera frame is
-<a href=#399 id=399 data-nosnippet>399</a>        // rendered zero-copy; a scaled/I420 frame falls back to bytes. The capture
-<a href=#400 id=400 data-nosnippet>400</a>        // geometry gauge is what the self tile sizes its texture from (stable,
-<a href=#401 id=401 data-nosnippet>401</a>        // unlike the BWE-driven encode rung) — kept fresh per frame so a camera
-<a href=#402 id=402 data-nosnippet>402</a>        // hot-swap with a different geometry follows automatically.
-<a href=#403 id=403 data-nosnippet>403</a>        </span>stats.set_video_capture_dims(frame.dims.width(), frame.dims.height());
-<a href=#404 id=404 data-nosnippet>404</a>        push_preview(sink.as_ref(), SELF_KEY, <span class="kw-2">&amp;</span>frame);
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="comment">// LOW simulcast layer state. Built lazily the first frame `low_active` is
+<a href=#272 id=272 data-nosnippet>272</a>    // `Some`, torn down when it goes `None`, rebuilt on a codec switch (tracks the
+<a href=#273 id=273 data-nosnippet>273</a>    // same `target_codec` as the source) or on a RUNG change.
+<a href=#274 id=274 data-nosnippet>274</a>    //
+<a href=#275 id=275 data-nosnippet>275</a>    // The rung — geometry AND frame rate — is derived from the coalesced cap
+<a href=#276 id=276 data-nosnippet>276</a>    // (`hound_media::low_rung_for_cap`), not pinned at 640×360@30: a call full of
+<a href=#277 id=277 data-nosnippet>277</a>    // grid thumbnails now runs this encoder at 320×180@15. `low_geometry` is the
+<a href=#278 id=278 data-nosnippet>278</a>    // same dwell the source path uses, seeded at the rung the first cap buys
+<a href=#279 id=279 data-nosnippet>279</a>    // (`with_committed`) so activation is immediate while a LATER rung change still
+<a href=#280 id=280 data-nosnippet>280</a>    // has to hold for `GEOMETRY_REBUILD_DWELL_US` before the encoder is rebuilt —
+<a href=#281 id=281 data-nosnippet>281</a>    // a receiver resizing tiles must not churn the encoder, and an encoder whose
+<a href=#282 id=282 data-nosnippet>282</a>    // geometry moves out from under the frames it is fed is the exact failure the
+<a href=#283 id=283 data-nosnippet>283</a>    // dwell exists to prevent.
+<a href=#284 id=284 data-nosnippet>284</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>low_encoder: <span class="prelude-ty">Option</span>&lt;hound_engine::api::VideoEncoder&gt; = <span class="prelude-val">None</span>;
+<a href=#285 id=285 data-nosnippet>285</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_last_target: <span class="prelude-ty">Option</span>&lt;VideoCodec&gt; = <span class="prelude-val">None</span>;
+<a href=#286 id=286 data-nosnippet>286</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_applied_bps = <span class="number">0u32</span>;
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_frame_seq = <span class="number">0u32</span>;
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_fps_gate = hound_media::FrameRateGate::new();
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_fail_streak = EncodeFailStreak::default();
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="kw">let </span><span class="kw-2">mut </span>low_geometry: <span class="prelude-ty">Option</span>&lt;hound_media::GeometryDwell&gt; = <span class="prelude-val">None</span>;
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="comment">// The rung the live `low_encoder` was actually built at (geometry + fps).
+<a href=#292 id=292 data-nosnippet>292</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>low_rung: <span class="prelude-ty">Option</span>&lt;(Dimensions, hound_media::VideoRung)&gt; = <span class="prelude-val">None</span>;
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span>low_adapt = Arc::new(AdaptShared::default());
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="comment">// Camera disabled: release the device and idle.
+<a href=#297 id=297 data-nosnippet>297</a>        </span><span class="kw">if </span>!enabled.load(Ordering::Relaxed) {
+<a href=#298 id=298 data-nosnippet>298</a>            <span class="kw">if </span>camera.is_some() {
+<a href=#299 id=299 data-nosnippet>299</a>                drop(camera.take());
+<a href=#300 id=300 data-nosnippet>300</a>                drop(encoder.take());
+<a href=#301 id=301 data-nosnippet>301</a>            }
+<a href=#302 id=302 data-nosnippet>302</a>            <span class="comment">// Tell the RTC-debug snapshot the camera pipeline is DOWN. Without this
+<a href=#303 id=303 data-nosnippet>303</a>            // the gauge stays latched from whenever the camera last ran, and since
+<a href=#304 id=304 data-nosnippet>304</a>            // `AdaptShared::live` is latched too, turning video off mid-call would
+<a href=#305 id=305 data-nosnippet>305</a>            // leave the snapshot reading enabled + publish_live + 0 fps captured —
+<a href=#306 id=306 data-nosnippet>306</a>            // which is precisely `video_report`'s send-capture-stalled signature. It
+<a href=#307 id=307 data-nosnippet>307</a>            // would then diagnose a dead camera every window, WARN once the streak
+<a href=#308 id=308 data-nosnippet>308</a>            // latches, and pollute the Sentry `video_stage` tag for the rest of the
+<a href=#309 id=309 data-nosnippet>309</a>            // call, all for a user who simply turned their camera off.
+<a href=#310 id=310 data-nosnippet>310</a>            </span>stats.set_video_enabled(<span class="bool-val">false</span>);
+<a href=#311 id=311 data-nosnippet>311</a>            std::thread::sleep(std::time::Duration::from_millis(<span class="number">100</span>));
+<a href=#312 id=312 data-nosnippet>312</a>            <span class="kw">continue</span>;
+<a href=#313 id=313 data-nosnippet>313</a>        }
+<a href=#314 id=314 data-nosnippet>314</a>
+<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">if </span>device_rx.has_changed().unwrap_or(<span class="bool-val">false</span>) {
+<a href=#316 id=316 data-nosnippet>316</a>            choice = device_rx.borrow_and_update().clone();
+<a href=#317 id=317 data-nosnippet>317</a>            drop(camera.take());
+<a href=#318 id=318 data-nosnippet>318</a>            drop(encoder.take());
+<a href=#319 id=319 data-nosnippet>319</a>        }
+<a href=#320 id=320 data-nosnippet>320</a>
+<a href=#321 id=321 data-nosnippet>321</a>        <span class="comment">// Open (or re-open) the camera + encoder.
+<a href=#322 id=322 data-nosnippet>322</a>        </span><span class="kw">if </span>camera.is_none() {
+<a href=#323 id=323 data-nosnippet>323</a>            <span class="kw">match </span>open_cam(
+<a href=#324 id=324 data-nosnippet>324</a>                <span class="kw-2">&amp;</span>choice,
+<a href=#325 id=325 data-nosnippet>325</a>                clock,
+<a href=#326 id=326 data-nosnippet>326</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#327 id=327 data-nosnippet>327</a>                </span>capture_source,
+<a href=#328 id=328 data-nosnippet>328</a>            ) {
+<a href=#329 id=329 data-nosnippet>329</a>                <span class="prelude-val">Ok</span>(c) =&gt; {
+<a href=#330 id=330 data-nosnippet>330</a>                    camera = <span class="prelude-val">Some</span>(c);
+<a href=#331 id=331 data-nosnippet>331</a>                    open_retry.opened();
+<a href=#332 id=332 data-nosnippet>332</a>                }
+<a href=#333 id=333 data-nosnippet>333</a>                <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#334 id=334 data-nosnippet>334</a>                    <span class="comment">// Classify, then report ONCE per transition into this failure
+<a href=#335 id=335 data-nosnippet>335</a>                    // class — the Sentry bridge promotes `error!` to an event, so a
+<a href=#336 id=336 data-nosnippet>336</a>                    // sticky denial must not log per tick. Keep looping either way:
+<a href=#337 id=337 data-nosnippet>337</a>                    // the camera (or the grant) can still show up.
+<a href=#338 id=338 data-nosnippet>338</a>                    </span><span class="kw">let </span>failure = OpenFailure::of_capture(<span class="kw-2">&amp;</span>e);
+<a href=#339 id=339 data-nosnippet>339</a>                    <span class="kw">let </span>(log, wait) = open_retry.failed(failure);
+<a href=#340 id=340 data-nosnippet>340</a>                    <span class="kw">if </span>log {
+<a href=#341 id=341 data-nosnippet>341</a>                        <span class="kw">match </span>failure {
+<a href=#342 id=342 data-nosnippet>342</a>                            OpenFailure::PermissionDenied =&gt; <span class="macro">tracing::error!</span>(
+<a href=#343 id=343 data-nosnippet>343</a>                                track = <span class="string">"cam"</span>,
+<a href=#344 id=344 data-nosnippet>344</a>                                %e,
+<a href=#345 id=345 data-nosnippet>345</a>                                <span class="string">"camera permission denied — enable hound in System Settings → \
+<a href=#346 id=346 data-nosnippet>346</a>                                 Privacy &amp; Security → Camera"
+<a href=#347 id=347 data-nosnippet>347</a>                            </span>),
+<a href=#348 id=348 data-nosnippet>348</a>                            OpenFailure::Other =&gt; <span class="macro">tracing::warn!</span>(
+<a href=#349 id=349 data-nosnippet>349</a>                                track = <span class="string">"cam"</span>,
+<a href=#350 id=350 data-nosnippet>350</a>                                %e,
+<a href=#351 id=351 data-nosnippet>351</a>                                <span class="string">"cam: camera open failed — retrying"
+<a href=#352 id=352 data-nosnippet>352</a>                            </span>),
+<a href=#353 id=353 data-nosnippet>353</a>                        }
+<a href=#354 id=354 data-nosnippet>354</a>                    }
+<a href=#355 id=355 data-nosnippet>355</a>                    std::thread::sleep(wait);
+<a href=#356 id=356 data-nosnippet>356</a>                    <span class="kw">continue</span>;
+<a href=#357 id=357 data-nosnippet>357</a>                }
+<a href=#358 id=358 data-nosnippet>358</a>            }
+<a href=#359 id=359 data-nosnippet>359</a>            <span class="comment">// Build in the negotiated codec (HW-encode ∩ all-peers decode), seeded by
+<a href=#360 id=360 data-nosnippet>360</a>            // `spawn_cam_publish` and re-driven by the mid-call re-negotiator,
+<a href=#361 id=361 data-nosnippet>361</a>            // descending the ladder if it won't open.
+<a href=#362 id=362 data-nosnippet>362</a>            </span><span class="kw">let </span>want = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
+<a href=#363 id=363 data-nosnippet>363</a>            encoder =
+<a href=#364 id=364 data-nosnippet>364</a>                open_encoder_laddered(want, CAM_DIMS, CAM_FPS, CAM_BITRATE, CAM_KEYFRAME_CADENCE);
+<a href=#365 id=365 data-nosnippet>365</a>            last_target = want;
+<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(enc) = encoder.as_ref() {
+<a href=#367 id=367 data-nosnippet>367</a>                <span class="kw">use </span>hound_engine::backend::VideoEncode;
+<a href=#368 id=368 data-nosnippet>368</a>                <span class="macro">tracing::info!</span>(
+<a href=#369 id=369 data-nosnippet>369</a>                    target: <span class="string">"video_encode"</span>,
+<a href=#370 id=370 data-nosnippet>370</a>                    track = <span class="string">"cam"</span>,
+<a href=#371 id=371 data-nosnippet>371</a>                    codec = <span class="question-mark">?</span>enc.codec(),
+<a href=#372 id=372 data-nosnippet>372</a>                    backend = enc.backend(),
+<a href=#373 id=373 data-nosnippet>373</a>                    width = CAM_DIMS.width(),
+<a href=#374 id=374 data-nosnippet>374</a>                    height = CAM_DIMS.height(),
+<a href=#375 id=375 data-nosnippet>375</a>                    <span class="string">"video: encode path selected"
+<a href=#376 id=376 data-nosnippet>376</a>                </span>);
+<a href=#377 id=377 data-nosnippet>377</a>            }
+<a href=#378 id=378 data-nosnippet>378</a>            <span class="comment">// Re-baseline so the first frame re-applies the live BWE target, and
+<a href=#379 id=379 data-nosnippet>379</a>            // open at a fresh IDR for any subscriber that attached meanwhile. A
+<a href=#380 id=380 data-nosnippet>380</a>            // (re)open always starts at native geometry — the geometry dwell only
+<a href=#381 id=381 data-nosnippet>381</a>            // degrades it once a fresh adaptation decision settles.
+<a href=#382 id=382 data-nosnippet>382</a>            </span>applied_bps = CAM_BITRATE.bps();
+<a href=#383 id=383 data-nosnippet>383</a>            enc_dims = CAM_DIMS;
+<a href=#384 id=384 data-nosnippet>384</a>            adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#385 id=385 data-nosnippet>385</a>            <span class="comment">// The camera pipeline is UP: a device is open and about to deliver
+<a href=#386 id=386 data-nosnippet>386</a>            // frames. This is the only place the gauge goes true, so it always means
+<a href=#387 id=387 data-nosnippet>387</a>            // "capture is running" — the thing every capture/encode rule in
+<a href=#388 id=388 data-nosnippet>388</a>            // `video_report` is judged against.
+<a href=#389 id=389 data-nosnippet>389</a>            </span>stats.set_video_enabled(<span class="bool-val">true</span>);
+<a href=#390 id=390 data-nosnippet>390</a>        }
+<a href=#391 id=391 data-nosnippet>391</a>
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(cap) = camera.as_mut() <span class="kw">else </span>{
+<a href=#393 id=393 data-nosnippet>393</a>            <span class="kw">continue</span>;
+<a href=#394 id=394 data-nosnippet>394</a>        };
+<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cap.next_frame()));
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">let </span>frame = <span class="kw">match </span>pulled {
+<a href=#397 id=397 data-nosnippet>397</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(f)) =&gt; f,
+<a href=#398 id=398 data-nosnippet>398</a>            <span class="kw">_ </span>=&gt; {
+<a href=#399 id=399 data-nosnippet>399</a>                drop(camera.take());
+<a href=#400 id=400 data-nosnippet>400</a>                drop(encoder.take());
+<a href=#401 id=401 data-nosnippet>401</a>                std::thread::sleep(std::time::Duration::from_millis(<span class="number">200</span>));
+<a href=#402 id=402 data-nosnippet>402</a>                <span class="kw">continue</span>;
+<a href=#403 id=403 data-nosnippet>403</a>            }
+<a href=#404 id=404 data-nosnippet>404</a>        };
 <a href=#405 id=405 data-nosnippet>405</a>
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="comment">// AudioOnly: the ladder dropped video under severe congestion. Keep pulling the
-<a href=#407 id=407 data-nosnippet>407</a>        // device (resume is instant) but skip encode + publish entirely.
-<a href=#408 id=408 data-nosnippet>408</a>        </span><span class="kw">if </span>adapt.paused.load(Ordering::Relaxed) {
-<a href=#409 id=409 data-nosnippet>409</a>            <span class="kw">continue</span>;
-<a href=#410 id=410 data-nosnippet>410</a>        }
-<a href=#411 id=411 data-nosnippet>411</a>
-<a href=#412 id=412 data-nosnippet>412</a>        <span class="comment">// Subscriber-gated SOURCE encode. While the publish loop's live gate is still
-<a href=#413 id=413 data-nosnippet>413</a>        // dark (nobody subscribed, no control-plane demand) every encoded frame was
-<a href=#414 id=414 data-nosnippet>414</a>        // discarded downstream — a whole H.264/AV1 encode per captured frame for
-<a href=#415 id=415 data-nosnippet>415</a>        // nothing. Skip the encode (and the mid-call rebuild that only serves it);
-<a href=#416 id=416 data-nosnippet>416</a>        // capture, self-preview and the LOW rung below are untouched. Going live arms
-<a href=#417 id=417 data-nosnippet>417</a>        // `force_keyframe`, so the first frame encoded after the transition is an IDR.
-<a href=#418 id=418 data-nosnippet>418</a>        </span><span class="kw">if </span>adapt.source_encode_open() {
-<a href=#419 id=419 data-nosnippet>419</a>            <span class="comment">// Mid-call codec switch (a peer joined/left mid-call) AND/OR mid-call
-<a href=#420 id=420 data-nosnippet>420</a>            // resolution-rung change (the adaptation tick's DWELLED geometry —
-<a href=#421 id=421 data-nosnippet>421</a>            // `adapt.encoder_w/h`, see `hound_media::GeometryDwell` — settled on
-<a href=#422 id=422 data-nosnippet>422</a>            // something different from what's built): rebuild the encoder to match
-<a href=#423 id=423 data-nosnippet>423</a>            // either, at the live bitrate. `0` on the geometry atomics means "no
-<a href=#424 id=424 data-nosnippet>424</a>            // adaptation decision yet" (before the first tick), so fall back to the
-<a href=#425 id=425 data-nosnippet>425</a>            // current `enc_dims` rather than a bogus 0×0 rebuild. Either change forces
-<a href=#426 id=426 data-nosnippet>426</a>            // a fresh IDR — a decoder can't switch codec OR resolution mid-GOP, so
-<a href=#427 id=427 data-nosnippet>427</a>            // every receiver must resync.
-<a href=#428 id=428 data-nosnippet>428</a>            </span><span class="kw">let </span>want_codec = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
-<a href=#429 id=429 data-nosnippet>429</a>            <span class="kw">let </span>(want_w, want_h) = (
-<a href=#430 id=430 data-nosnippet>430</a>                adapt.encoder_w.load(Ordering::Relaxed),
-<a href=#431 id=431 data-nosnippet>431</a>                adapt.encoder_h.load(Ordering::Relaxed),
-<a href=#432 id=432 data-nosnippet>432</a>            );
-<a href=#433 id=433 data-nosnippet>433</a>            <span class="kw">let </span>want_dims = <span class="kw">if </span>want_w &gt; <span class="number">0 </span>&amp;&amp; want_h &gt; <span class="number">0 </span>{
-<a href=#434 id=434 data-nosnippet>434</a>                Dimensions::even_clamped(want_w, want_h)
-<a href=#435 id=435 data-nosnippet>435</a>            } <span class="kw">else </span>{
-<a href=#436 id=436 data-nosnippet>436</a>                enc_dims
-<a href=#437 id=437 data-nosnippet>437</a>            };
-<a href=#438 id=438 data-nosnippet>438</a>            <span class="kw">if </span>encoder.is_some() &amp;&amp; (<span class="macro">want_codec !</span>= last_target || <span class="macro">want_dims !</span>= enc_dims) {
-<a href=#439 id=439 data-nosnippet>439</a>                last_target = want_codec;
-<a href=#440 id=440 data-nosnippet>440</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(e) = open_encoder_laddered(
-<a href=#441 id=441 data-nosnippet>441</a>                    want_codec,
-<a href=#442 id=442 data-nosnippet>442</a>                    want_dims,
-<a href=#443 id=443 data-nosnippet>443</a>                    CAM_FPS,
-<a href=#444 id=444 data-nosnippet>444</a>                    Bitrate::from_bps(applied_bps),
-<a href=#445 id=445 data-nosnippet>445</a>                    CAM_KEYFRAME_CADENCE,
-<a href=#446 id=446 data-nosnippet>446</a>                ) {
-<a href=#447 id=447 data-nosnippet>447</a>                    <span class="macro">tracing::info!</span>(
-<a href=#448 id=448 data-nosnippet>448</a>                        track = <span class="string">"cam"</span>,
-<a href=#449 id=449 data-nosnippet>449</a>                        codec = <span class="question-mark">?</span>want_codec,
-<a href=#450 id=450 data-nosnippet>450</a>                        from = %enc_dims,
-<a href=#451 id=451 data-nosnippet>451</a>                        to = %want_dims,
-<a href=#452 id=452 data-nosnippet>452</a>                        <span class="string">"call: rebuilding encoder mid-call (codec/geometry)"
-<a href=#453 id=453 data-nosnippet>453</a>                    </span>);
-<a href=#454 id=454 data-nosnippet>454</a>                    encoder = <span class="prelude-val">Some</span>(e);
-<a href=#455 id=455 data-nosnippet>455</a>                    enc_dims = want_dims;
-<a href=#456 id=456 data-nosnippet>456</a>                    adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#457 id=457 data-nosnippet>457</a>                } <span class="kw">else </span>{
-<a href=#458 id=458 data-nosnippet>458</a>                    <span class="macro">tracing::warn!</span>(track = <span class="string">"cam"</span>, codec = <span class="question-mark">?</span>want_codec, <span class="string">"call: mid-call encoder rebuild found no usable encoder; keeping current"</span>);
-<a href=#459 id=459 data-nosnippet>459</a>                }
-<a href=#460 id=460 data-nosnippet>460</a>            }
-<a href=#461 id=461 data-nosnippet>461</a>
-<a href=#462 id=462 data-nosnippet>462</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(enc) = encoder.as_mut() {
-<a href=#463 id=463 data-nosnippet>463</a>                encode_and_publish_adaptive(
-<a href=#464 id=464 data-nosnippet>464</a>                    <span class="kw-2">&amp;</span>frame,
-<a href=#465 id=465 data-nosnippet>465</a>                    enc,
-<a href=#466 id=466 data-nosnippet>466</a>                    <span class="kw-2">&amp;</span>adapt,
-<a href=#467 id=467 data-nosnippet>467</a>                    <span class="kw-2">&amp;mut </span>applied_bps,
-<a href=#468 id=468 data-nosnippet>468</a>                    <span class="kw-2">&amp;mut </span>fps_gate,
-<a href=#469 id=469 data-nosnippet>469</a>                    enc_dims,
-<a href=#470 id=470 data-nosnippet>470</a>                    |wire| enc_tx.try_send(wire).is_ok(),
-<a href=#471 id=471 data-nosnippet>471</a>                    <span class="kw-2">&amp;mut </span>frame_seq,
-<a href=#472 id=472 data-nosnippet>472</a>                    sender,
-<a href=#473 id=473 data-nosnippet>473</a>                    TrackKind::CamVideo,
-<a href=#474 id=474 data-nosnippet>474</a>                    <span class="kw-2">&amp;</span>stats,
-<a href=#475 id=475 data-nosnippet>475</a>                    <span class="kw-2">&amp;mut </span>fail_streak,
-<a href=#476 id=476 data-nosnippet>476</a>                );
-<a href=#477 id=477 data-nosnippet>477</a>            }
-<a href=#478 id=478 data-nosnippet>478</a>        }
-<a href=#479 id=479 data-nosnippet>479</a>
-<a href=#480 id=480 data-nosnippet>480</a>        <span class="comment">// LOW simulcast layer: when a constrained / small-tile receiver demands it,
-<a href=#481 id=481 data-nosnippet>481</a>        // downscale this same capture frame and encode + forward it on the cam_l0
-<a href=#482 id=482 data-nosnippet>482</a>        // track. Inert while `low_active` is `None` (dark until SIMULCAST_ACTUATE),
-<a href=#483 id=483 data-nosnippet>483</a>        // so the source path above is byte-identical to a no-simulcast build.
-<a href=#484 id=484 data-nosnippet>484</a>        </span><span class="kw">match </span><span class="kw-2">*</span>low_active.borrow() {
-<a href=#485 id=485 data-nosnippet>485</a>            <span class="prelude-val">Some</span>(low_bps) =&gt; {
-<a href=#486 id=486 data-nosnippet>486</a>                low_adapt.target_bps.store(low_bps, Ordering::Relaxed);
-<a href=#487 id=487 data-nosnippet>487</a>                <span class="comment">// A low-track PLI (new/recovering low subscriber) → force a low IDR.
-<a href=#488 id=488 data-nosnippet>488</a>                </span><span class="kw">if </span>low_keyframe.swap(<span class="bool-val">false</span>, Ordering::Relaxed) {
-<a href=#489 id=489 data-nosnippet>489</a>                    low_adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#490 id=490 data-nosnippet>490</a>                }
-<a href=#491 id=491 data-nosnippet>491</a>                <span class="comment">// (Re)build the low encoder at LOW geometry, tracking the source codec.
-<a href=#492 id=492 data-nosnippet>492</a>                </span><span class="kw">let </span>low_want = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
-<a href=#493 id=493 data-nosnippet>493</a>                <span class="kw">if </span>low_encoder.is_none() || <span class="macro">low_last_target !</span>= <span class="prelude-val">Some</span>(low_want) {
-<a href=#494 id=494 data-nosnippet>494</a>                    low_last_target = <span class="prelude-val">Some</span>(low_want);
-<a href=#495 id=495 data-nosnippet>495</a>                    low_encoder = open_encoder_laddered(
-<a href=#496 id=496 data-nosnippet>496</a>                        low_want,
-<a href=#497 id=497 data-nosnippet>497</a>                        LOW_CAM_DIMS,
-<a href=#498 id=498 data-nosnippet>498</a>                        CAM_FPS,
-<a href=#499 id=499 data-nosnippet>499</a>                        Bitrate::from_bps(low_bps.min(u32::MAX <span class="kw">as </span>u64) <span class="kw">as </span>u32),
-<a href=#500 id=500 data-nosnippet>500</a>                        CAM_KEYFRAME_CADENCE,
-<a href=#501 id=501 data-nosnippet>501</a>                    );
-<a href=#502 id=502 data-nosnippet>502</a>                    <span class="kw">if </span>low_encoder.is_some() {
-<a href=#503 id=503 data-nosnippet>503</a>                        low_adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#504 id=504 data-nosnippet>504</a>                    }
-<a href=#505 id=505 data-nosnippet>505</a>                }
-<a href=#506 id=506 data-nosnippet>506</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(low_enc) = low_encoder.as_mut()
-<a href=#507 id=507 data-nosnippet>507</a>                    &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(low_frame) = low_rung_frame(<span class="kw-2">&amp;</span>frame, low_enc, LOW_CAM_DIMS)
-<a href=#508 id=508 data-nosnippet>508</a>                {
-<a href=#509 id=509 data-nosnippet>509</a>                    encode_and_publish_adaptive(
-<a href=#510 id=510 data-nosnippet>510</a>                        <span class="kw-2">&amp;</span>low_frame,
-<a href=#511 id=511 data-nosnippet>511</a>                        low_enc,
-<a href=#512 id=512 data-nosnippet>512</a>                        <span class="kw-2">&amp;</span>low_adapt,
-<a href=#513 id=513 data-nosnippet>513</a>                        <span class="kw-2">&amp;mut </span>low_applied_bps,
-<a href=#514 id=514 data-nosnippet>514</a>                        <span class="kw-2">&amp;mut </span>low_fps_gate,
-<a href=#515 id=515 data-nosnippet>515</a>                        LOW_CAM_DIMS,
-<a href=#516 id=516 data-nosnippet>516</a>                        |wire| low_vid_tx.try_send(wire).is_ok(),
-<a href=#517 id=517 data-nosnippet>517</a>                        <span class="kw-2">&amp;mut </span>low_frame_seq,
-<a href=#518 id=518 data-nosnippet>518</a>                        sender,
-<a href=#519 id=519 data-nosnippet>519</a>                        TrackKind::CamVideoLow,
-<a href=#520 id=520 data-nosnippet>520</a>                        <span class="kw-2">&amp;</span>stats,
-<a href=#521 id=521 data-nosnippet>521</a>                        <span class="kw-2">&amp;mut </span>low_fail_streak,
-<a href=#522 id=522 data-nosnippet>522</a>                    );
-<a href=#523 id=523 data-nosnippet>523</a>                }
-<a href=#524 id=524 data-nosnippet>524</a>            }
-<a href=#525 id=525 data-nosnippet>525</a>            <span class="comment">// Demand gone — release the low encoder (resumes instantly on re-demand).
-<a href=#526 id=526 data-nosnippet>526</a>            </span><span class="prelude-val">None </span>=&gt; {
-<a href=#527 id=527 data-nosnippet>527</a>                low_encoder = <span class="prelude-val">None</span>;
-<a href=#528 id=528 data-nosnippet>528</a>            }
-<a href=#529 id=529 data-nosnippet>529</a>        }
-<a href=#530 id=530 data-nosnippet>530</a>    }
-<a href=#531 id=531 data-nosnippet>531</a>    <span class="comment">// Teardown (leave / reconnect / stop): the camera pipeline is gone. Mirrors
-<a href=#532 id=532 data-nosnippet>532</a>    // `set_screen_disabled` on the share path, so a torn-down camera never leaves a
-<a href=#533 id=533 data-nosnippet>533</a>    // latched `enabled` behind for the diagnosis to judge.
-<a href=#534 id=534 data-nosnippet>534</a>    </span>stats.set_video_enabled(<span class="bool-val">false</span>);
-<a href=#535 id=535 data-nosnippet>535</a>}
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="comment">// RTC-debug: one raw camera frame pulled from the device.
+<a href=#407 id=407 data-nosnippet>407</a>        </span>stats.video_captured();
+<a href=#408 id=408 data-nosnippet>408</a>
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="comment">// Self-preview keyed "self" (runs even while paused, so the local preview
+<a href=#410 id=410 data-nosnippet>410</a>        // never freezes mid-call). Surface-first: a surface-backed camera frame is
+<a href=#411 id=411 data-nosnippet>411</a>        // rendered zero-copy; a scaled/I420 frame falls back to bytes. The capture
+<a href=#412 id=412 data-nosnippet>412</a>        // geometry gauge is what the self tile sizes its texture from (stable,
+<a href=#413 id=413 data-nosnippet>413</a>        // unlike the BWE-driven encode rung) — kept fresh per frame so a camera
+<a href=#414 id=414 data-nosnippet>414</a>        // hot-swap with a different geometry follows automatically.
+<a href=#415 id=415 data-nosnippet>415</a>        </span>stats.set_video_capture_dims(frame.dims.width(), frame.dims.height());
+<a href=#416 id=416 data-nosnippet>416</a>        push_preview(sink.as_ref(), SELF_KEY, <span class="kw-2">&amp;</span>frame);
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="comment">// AudioOnly: the ladder dropped video under severe congestion. Keep pulling the
+<a href=#419 id=419 data-nosnippet>419</a>        // device (resume is instant) but skip encode + publish entirely.
+<a href=#420 id=420 data-nosnippet>420</a>        </span><span class="kw">if </span>adapt.paused.load(Ordering::Relaxed) {
+<a href=#421 id=421 data-nosnippet>421</a>            <span class="kw">continue</span>;
+<a href=#422 id=422 data-nosnippet>422</a>        }
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="comment">// Subscriber-gated SOURCE encode. While the publish loop's live gate is still
+<a href=#425 id=425 data-nosnippet>425</a>        // dark (nobody subscribed, no control-plane demand) every encoded frame was
+<a href=#426 id=426 data-nosnippet>426</a>        // discarded downstream — a whole H.264/AV1 encode per captured frame for
+<a href=#427 id=427 data-nosnippet>427</a>        // nothing. Skip the encode (and the mid-call rebuild that only serves it);
+<a href=#428 id=428 data-nosnippet>428</a>        // capture, self-preview and the LOW rung below are untouched. Going live arms
+<a href=#429 id=429 data-nosnippet>429</a>        // `force_keyframe`, so the first frame encoded after the transition is an IDR.
+<a href=#430 id=430 data-nosnippet>430</a>        </span><span class="kw">if </span>adapt.source_encode_open() {
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="comment">// Mid-call codec switch (a peer joined/left mid-call) AND/OR mid-call
+<a href=#432 id=432 data-nosnippet>432</a>            // resolution-rung change (the adaptation tick's DWELLED geometry —
+<a href=#433 id=433 data-nosnippet>433</a>            // `adapt.encoder_w/h`, see `hound_media::GeometryDwell` — settled on
+<a href=#434 id=434 data-nosnippet>434</a>            // something different from what's built): rebuild the encoder to match
+<a href=#435 id=435 data-nosnippet>435</a>            // either, at the live bitrate. `0` on the geometry atomics means "no
+<a href=#436 id=436 data-nosnippet>436</a>            // adaptation decision yet" (before the first tick), so fall back to the
+<a href=#437 id=437 data-nosnippet>437</a>            // current `enc_dims` rather than a bogus 0×0 rebuild. Either change forces
+<a href=#438 id=438 data-nosnippet>438</a>            // a fresh IDR — a decoder can't switch codec OR resolution mid-GOP, so
+<a href=#439 id=439 data-nosnippet>439</a>            // every receiver must resync.
+<a href=#440 id=440 data-nosnippet>440</a>            </span><span class="kw">let </span>want_codec = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
+<a href=#441 id=441 data-nosnippet>441</a>            <span class="kw">let </span>(want_w, want_h) = (
+<a href=#442 id=442 data-nosnippet>442</a>                adapt.encoder_w.load(Ordering::Relaxed),
+<a href=#443 id=443 data-nosnippet>443</a>                adapt.encoder_h.load(Ordering::Relaxed),
+<a href=#444 id=444 data-nosnippet>444</a>            );
+<a href=#445 id=445 data-nosnippet>445</a>            <span class="kw">let </span>want_dims = <span class="kw">if </span>want_w &gt; <span class="number">0 </span>&amp;&amp; want_h &gt; <span class="number">0 </span>{
+<a href=#446 id=446 data-nosnippet>446</a>                Dimensions::even_clamped(want_w, want_h)
+<a href=#447 id=447 data-nosnippet>447</a>            } <span class="kw">else </span>{
+<a href=#448 id=448 data-nosnippet>448</a>                enc_dims
+<a href=#449 id=449 data-nosnippet>449</a>            };
+<a href=#450 id=450 data-nosnippet>450</a>            <span class="kw">if </span>encoder.is_some() &amp;&amp; (<span class="macro">want_codec !</span>= last_target || <span class="macro">want_dims !</span>= enc_dims) {
+<a href=#451 id=451 data-nosnippet>451</a>                last_target = want_codec;
+<a href=#452 id=452 data-nosnippet>452</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(e) = open_encoder_laddered(
+<a href=#453 id=453 data-nosnippet>453</a>                    want_codec,
+<a href=#454 id=454 data-nosnippet>454</a>                    want_dims,
+<a href=#455 id=455 data-nosnippet>455</a>                    CAM_FPS,
+<a href=#456 id=456 data-nosnippet>456</a>                    Bitrate::from_bps(applied_bps),
+<a href=#457 id=457 data-nosnippet>457</a>                    CAM_KEYFRAME_CADENCE,
+<a href=#458 id=458 data-nosnippet>458</a>                ) {
+<a href=#459 id=459 data-nosnippet>459</a>                    <span class="macro">tracing::info!</span>(
+<a href=#460 id=460 data-nosnippet>460</a>                        track = <span class="string">"cam"</span>,
+<a href=#461 id=461 data-nosnippet>461</a>                        codec = <span class="question-mark">?</span>want_codec,
+<a href=#462 id=462 data-nosnippet>462</a>                        from = %enc_dims,
+<a href=#463 id=463 data-nosnippet>463</a>                        to = %want_dims,
+<a href=#464 id=464 data-nosnippet>464</a>                        <span class="string">"call: rebuilding encoder mid-call (codec/geometry)"
+<a href=#465 id=465 data-nosnippet>465</a>                    </span>);
+<a href=#466 id=466 data-nosnippet>466</a>                    encoder = <span class="prelude-val">Some</span>(e);
+<a href=#467 id=467 data-nosnippet>467</a>                    enc_dims = want_dims;
+<a href=#468 id=468 data-nosnippet>468</a>                    adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#469 id=469 data-nosnippet>469</a>                } <span class="kw">else </span>{
+<a href=#470 id=470 data-nosnippet>470</a>                    <span class="macro">tracing::warn!</span>(track = <span class="string">"cam"</span>, codec = <span class="question-mark">?</span>want_codec, <span class="string">"call: mid-call encoder rebuild found no usable encoder; keeping current"</span>);
+<a href=#471 id=471 data-nosnippet>471</a>                }
+<a href=#472 id=472 data-nosnippet>472</a>            }
+<a href=#473 id=473 data-nosnippet>473</a>
+<a href=#474 id=474 data-nosnippet>474</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(enc) = encoder.as_mut() {
+<a href=#475 id=475 data-nosnippet>475</a>                encode_and_publish_adaptive(
+<a href=#476 id=476 data-nosnippet>476</a>                    <span class="kw-2">&amp;</span>frame,
+<a href=#477 id=477 data-nosnippet>477</a>                    enc,
+<a href=#478 id=478 data-nosnippet>478</a>                    <span class="kw-2">&amp;</span>adapt,
+<a href=#479 id=479 data-nosnippet>479</a>                    <span class="kw-2">&amp;mut </span>applied_bps,
+<a href=#480 id=480 data-nosnippet>480</a>                    <span class="kw-2">&amp;mut </span>fps_gate,
+<a href=#481 id=481 data-nosnippet>481</a>                    enc_dims,
+<a href=#482 id=482 data-nosnippet>482</a>                    |wire| enc_tx.try_send(wire).is_ok(),
+<a href=#483 id=483 data-nosnippet>483</a>                    <span class="kw-2">&amp;mut </span>frame_seq,
+<a href=#484 id=484 data-nosnippet>484</a>                    sender,
+<a href=#485 id=485 data-nosnippet>485</a>                    TrackKind::CamVideo,
+<a href=#486 id=486 data-nosnippet>486</a>                    <span class="kw-2">&amp;</span>stats,
+<a href=#487 id=487 data-nosnippet>487</a>                    <span class="kw-2">&amp;mut </span>fail_streak,
+<a href=#488 id=488 data-nosnippet>488</a>                );
+<a href=#489 id=489 data-nosnippet>489</a>            }
+<a href=#490 id=490 data-nosnippet>490</a>        }
+<a href=#491 id=491 data-nosnippet>491</a>
+<a href=#492 id=492 data-nosnippet>492</a>        <span class="comment">// LOW simulcast layer: when a constrained / small-tile receiver demands it,
+<a href=#493 id=493 data-nosnippet>493</a>        // downscale this same capture frame and encode + forward it on the cam_l0
+<a href=#494 id=494 data-nosnippet>494</a>        // track. Inert while `low_active` is `None` (dark until SIMULCAST_ACTUATE),
+<a href=#495 id=495 data-nosnippet>495</a>        // so the source path above is byte-identical to a no-simulcast build.
+<a href=#496 id=496 data-nosnippet>496</a>        </span><span class="kw">match </span><span class="kw-2">*</span>low_active.borrow() {
+<a href=#497 id=497 data-nosnippet>497</a>            <span class="prelude-val">Some</span>(low_bps) =&gt; {
+<a href=#498 id=498 data-nosnippet>498</a>                low_adapt.target_bps.store(low_bps, Ordering::Relaxed);
+<a href=#499 id=499 data-nosnippet>499</a>                <span class="comment">// A low-track PLI (new/recovering low subscriber) → force a low IDR.
+<a href=#500 id=500 data-nosnippet>500</a>                </span><span class="kw">if </span>low_keyframe.swap(<span class="bool-val">false</span>, Ordering::Relaxed) {
+<a href=#501 id=501 data-nosnippet>501</a>                    low_adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#502 id=502 data-nosnippet>502</a>                }
+<a href=#503 id=503 data-nosnippet>503</a>                <span class="comment">// What this cap buys, and the geometry it settles on. The dwell is
+<a href=#504 id=504 data-nosnippet>504</a>                // created on activation seeded at the first rung (so the encoder
+<a href=#505 id=505 data-nosnippet>505</a>                // opens there at once) and thereafter debounces every change.
+<a href=#506 id=506 data-nosnippet>506</a>                </span><span class="kw">let </span>want_rung =
+<a href=#507 id=507 data-nosnippet>507</a>                    hound_media::low_rung_for_cap(hound_media::VideoSource::Camera, low_bps);
+<a href=#508 id=508 data-nosnippet>508</a>                <span class="kw">let </span>fit = |h| {
+<a href=#509 id=509 data-nosnippet>509</a>                    <span class="kw">let </span>(w, h) =
+<a href=#510 id=510 data-nosnippet>510</a>                        hound_media::fit_encode_dims((CAM_DIMS.width(), CAM_DIMS.height()), h);
+<a href=#511 id=511 data-nosnippet>511</a>                    Dimensions::even_clamped(w, h)
+<a href=#512 id=512 data-nosnippet>512</a>                };
+<a href=#513 id=513 data-nosnippet>513</a>                <span class="kw">let </span>dwell = low_geometry.get_or_insert_with(|| {
+<a href=#514 id=514 data-nosnippet>514</a>                    hound_media::GeometryDwell::with_committed(
+<a href=#515 id=515 data-nosnippet>515</a>                        (CAM_DIMS.width(), CAM_DIMS.height()),
+<a href=#516 id=516 data-nosnippet>516</a>                        {
+<a href=#517 id=517 data-nosnippet>517</a>                            <span class="kw">let </span>d = fit(want_rung.height);
+<a href=#518 id=518 data-nosnippet>518</a>                            (d.width(), d.height())
+<a href=#519 id=519 data-nosnippet>519</a>                        },
+<a href=#520 id=520 data-nosnippet>520</a>                    )
+<a href=#521 id=521 data-nosnippet>521</a>                });
+<a href=#522 id=522 data-nosnippet>522</a>                <span class="kw">let </span>(settled_w, settled_h) = dwell.observe(
+<a href=#523 id=523 data-nosnippet>523</a>                    <span class="prelude-val">Some</span>(want_rung.height),
+<a href=#524 id=524 data-nosnippet>524</a>                    frame.timestamp_us.micros(),
+<a href=#525 id=525 data-nosnippet>525</a>                    hound_media::GEOMETRY_REBUILD_DWELL_US,
+<a href=#526 id=526 data-nosnippet>526</a>                );
+<a href=#527 id=527 data-nosnippet>527</a>                <span class="kw">let </span>low_dims = Dimensions::even_clamped(settled_w, settled_h);
+<a href=#528 id=528 data-nosnippet>528</a>                <span class="comment">// The rung the settled geometry belongs to: while a change is still
+<a href=#529 id=529 data-nosnippet>529</a>                // dwelling this is the rung the encoder is BUILT at, so its fps gate
+<a href=#530 id=530 data-nosnippet>530</a>                // stays coherent with its geometry.
+<a href=#531 id=531 data-nosnippet>531</a>                </span><span class="kw">let </span>settled_rung = <span class="kw">if </span>low_dims == fit(want_rung.height) {
+<a href=#532 id=532 data-nosnippet>532</a>                    want_rung
+<a href=#533 id=533 data-nosnippet>533</a>                } <span class="kw">else </span>{
+<a href=#534 id=534 data-nosnippet>534</a>                    low_rung.map(|(<span class="kw">_</span>, r)| r).unwrap_or(want_rung)
+<a href=#535 id=535 data-nosnippet>535</a>                };
+<a href=#536 id=536 data-nosnippet>536</a>                low_adapt
+<a href=#537 id=537 data-nosnippet>537</a>                    .target_fps
+<a href=#538 id=538 data-nosnippet>538</a>                    .store(settled_rung.fps, Ordering::Relaxed);
+<a href=#539 id=539 data-nosnippet>539</a>
+<a href=#540 id=540 data-nosnippet>540</a>                <span class="comment">// (Re)build the low encoder on a codec switch OR a settled rung
+<a href=#541 id=541 data-nosnippet>541</a>                // change. Either forces a fresh IDR: no decoder can follow a codec
+<a href=#542 id=542 data-nosnippet>542</a>                // or a resolution change mid-GOP.
+<a href=#543 id=543 data-nosnippet>543</a>                </span><span class="kw">let </span>low_want = codec_from_rank(adapt.target_codec.load(Ordering::Relaxed));
+<a href=#544 id=544 data-nosnippet>544</a>                <span class="kw">let </span>built = low_rung;
+<a href=#545 id=545 data-nosnippet>545</a>                <span class="kw">if </span>low_encoder.is_none()
+<a href=#546 id=546 data-nosnippet>546</a>                    || <span class="macro">low_last_target !</span>= <span class="prelude-val">Some</span>(low_want)
+<a href=#547 id=547 data-nosnippet>547</a>                    || <span class="macro">built !</span>= <span class="prelude-val">Some</span>((low_dims, settled_rung))
+<a href=#548 id=548 data-nosnippet>548</a>                {
+<a href=#549 id=549 data-nosnippet>549</a>                    low_last_target = <span class="prelude-val">Some</span>(low_want);
+<a href=#550 id=550 data-nosnippet>550</a>                    low_encoder = open_encoder_laddered(
+<a href=#551 id=551 data-nosnippet>551</a>                        low_want,
+<a href=#552 id=552 data-nosnippet>552</a>                        low_dims,
+<a href=#553 id=553 data-nosnippet>553</a>                        Fps::new(settled_rung.fps),
+<a href=#554 id=554 data-nosnippet>554</a>                        Bitrate::from_bps(low_bps.min(u32::MAX <span class="kw">as </span>u64) <span class="kw">as </span>u32),
+<a href=#555 id=555 data-nosnippet>555</a>                        CAM_KEYFRAME_CADENCE,
+<a href=#556 id=556 data-nosnippet>556</a>                    );
+<a href=#557 id=557 data-nosnippet>557</a>                    <span class="kw">if </span>low_encoder.is_some() {
+<a href=#558 id=558 data-nosnippet>558</a>                        <span class="kw">if </span>built.is_some_and(|(d, <span class="kw">_</span>)| <span class="macro">d !</span>= low_dims) {
+<a href=#559 id=559 data-nosnippet>559</a>                            <span class="macro">tracing::info!</span>(
+<a href=#560 id=560 data-nosnippet>560</a>                                track = <span class="string">"cam_l0"</span>,
+<a href=#561 id=561 data-nosnippet>561</a>                                cap_bps = low_bps,
+<a href=#562 id=562 data-nosnippet>562</a>                                height = settled_rung.height,
+<a href=#563 id=563 data-nosnippet>563</a>                                fps = settled_rung.fps,
+<a href=#564 id=564 data-nosnippet>564</a>                                <span class="string">"simulcast[send]: low rung re-priced — rebuilding the low encoder"
+<a href=#565 id=565 data-nosnippet>565</a>                            </span>);
+<a href=#566 id=566 data-nosnippet>566</a>                        }
+<a href=#567 id=567 data-nosnippet>567</a>                        low_rung = <span class="prelude-val">Some</span>((low_dims, settled_rung));
+<a href=#568 id=568 data-nosnippet>568</a>                        low_adapt.force_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#569 id=569 data-nosnippet>569</a>                        <span class="comment">// Re-baseline the per-encoder state a rebuild invalidates.
+<a href=#570 id=570 data-nosnippet>570</a>                        // `low_applied_bps` tracks what was pushed into the encoder
+<a href=#571 id=571 data-nosnippet>571</a>                        // that just went away: a codec ladder rung may scale the
+<a href=#572 id=572 data-nosnippet>572</a>                        // target it actually applies (AV1/HEVC take a fraction of the
+<a href=#573 id=573 data-nosnippet>573</a>                        // H.264 rate), so leaving it latched would make the first
+<a href=#574 id=574 data-nosnippet>574</a>                        // `set_bitrate` a no-op and strand the new encoder at its
+<a href=#575 id=575 data-nosnippet>575</a>                        // construction rate. The fps gate is re-armed for the same
+<a href=#576 id=576 data-nosnippet>576</a>                        // reason — its cadence belongs to the rung that just ended,
+<a href=#577 id=577 data-nosnippet>577</a>                        // and a stale one would swallow the first frames of the new
+<a href=#578 id=578 data-nosnippet>578</a>                        // rung, including the IDR just forced.
+<a href=#579 id=579 data-nosnippet>579</a>                        </span>low_applied_bps = <span class="number">0</span>;
+<a href=#580 id=580 data-nosnippet>580</a>                        low_fps_gate = hound_media::FrameRateGate::new();
+<a href=#581 id=581 data-nosnippet>581</a>                    }
+<a href=#582 id=582 data-nosnippet>582</a>                }
+<a href=#583 id=583 data-nosnippet>583</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(low_enc) = low_encoder.as_mut()
+<a href=#584 id=584 data-nosnippet>584</a>                    &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(low_frame) = low_rung_frame(<span class="kw-2">&amp;</span>frame, low_enc, low_dims)
+<a href=#585 id=585 data-nosnippet>585</a>                {
+<a href=#586 id=586 data-nosnippet>586</a>                    encode_and_publish_adaptive(
+<a href=#587 id=587 data-nosnippet>587</a>                        <span class="kw-2">&amp;</span>low_frame,
+<a href=#588 id=588 data-nosnippet>588</a>                        low_enc,
+<a href=#589 id=589 data-nosnippet>589</a>                        <span class="kw-2">&amp;</span>low_adapt,
+<a href=#590 id=590 data-nosnippet>590</a>                        <span class="kw-2">&amp;mut </span>low_applied_bps,
+<a href=#591 id=591 data-nosnippet>591</a>                        <span class="kw-2">&amp;mut </span>low_fps_gate,
+<a href=#592 id=592 data-nosnippet>592</a>                        low_dims,
+<a href=#593 id=593 data-nosnippet>593</a>                        |wire| low_vid_tx.try_send(wire).is_ok(),
+<a href=#594 id=594 data-nosnippet>594</a>                        <span class="kw-2">&amp;mut </span>low_frame_seq,
+<a href=#595 id=595 data-nosnippet>595</a>                        sender,
+<a href=#596 id=596 data-nosnippet>596</a>                        TrackKind::CamVideoLow,
+<a href=#597 id=597 data-nosnippet>597</a>                        <span class="kw-2">&amp;</span>stats,
+<a href=#598 id=598 data-nosnippet>598</a>                        <span class="kw-2">&amp;mut </span>low_fail_streak,
+<a href=#599 id=599 data-nosnippet>599</a>                    );
+<a href=#600 id=600 data-nosnippet>600</a>                }
+<a href=#601 id=601 data-nosnippet>601</a>            }
+<a href=#602 id=602 data-nosnippet>602</a>            <span class="comment">// Demand gone — release the low encoder (resumes instantly on re-demand).
+<a href=#603 id=603 data-nosnippet>603</a>            // The dwell goes with it: the next activation re-seeds at whatever rung
+<a href=#604 id=604 data-nosnippet>604</a>            // the fresh cap buys rather than inheriting a stale committed geometry.
+<a href=#605 id=605 data-nosnippet>605</a>            </span><span class="prelude-val">None </span>=&gt; {
+<a href=#606 id=606 data-nosnippet>606</a>                low_encoder = <span class="prelude-val">None</span>;
+<a href=#607 id=607 data-nosnippet>607</a>                low_geometry = <span class="prelude-val">None</span>;
+<a href=#608 id=608 data-nosnippet>608</a>                low_rung = <span class="prelude-val">None</span>;
+<a href=#609 id=609 data-nosnippet>609</a>            }
+<a href=#610 id=610 data-nosnippet>610</a>        }
+<a href=#611 id=611 data-nosnippet>611</a>    }
+<a href=#612 id=612 data-nosnippet>612</a>    <span class="comment">// Teardown (leave / reconnect / stop): the camera pipeline is gone. Mirrors
+<a href=#613 id=613 data-nosnippet>613</a>    // `set_screen_disabled` on the share path, so a torn-down camera never leaves a
+<a href=#614 id=614 data-nosnippet>614</a>    // latched `enabled` behind for the diagnosis to judge.
+<a href=#615 id=615 data-nosnippet>615</a>    </span>stats.set_video_enabled(<span class="bool-val">false</span>);
+<a href=#616 id=616 data-nosnippet>616</a>}
 </code></pre></div></section></main></body></html>

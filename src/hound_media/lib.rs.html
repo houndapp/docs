@@ -63,7 +63,7 @@
 <a href=#63 id=63 data-nosnippet>63</a>
 <a href=#64 id=64 data-nosnippet>64</a><span class="kw">pub use </span>adapt::{
 <a href=#65 id=65 data-nosnippet>65</a>    AdaptConfig, AdaptDecision, AdaptSignals, GEOMETRY_REBUILD_DWELL_US, GeometryDwell,
-<a href=#66 id=66 data-nosnippet>66</a>    VideoAdaptation,
+<a href=#66 id=66 data-nosnippet>66</a>    VideoAdaptation, fit_encode_area, fit_encode_dims,
 <a href=#67 id=67 data-nosnippet>67</a>};
 <a href=#68 id=68 data-nosnippet>68</a><span class="kw">pub use </span>bwe_delay::{DelayBasedBwe, TrendlineEstimator, Usage};
 <a href=#69 id=69 data-nosnippet>69</a><span class="kw">pub use </span>clock::CaptureClock;
@@ -79,8 +79,8 @@
 <a href=#79 id=79 data-nosnippet>79</a><span class="kw">pub use </span>keyframe::{KeyframeConfig, KeyframeRequester, KeyframeThrottle, KeyframeThrottleConfig};
 <a href=#80 id=80 data-nosnippet>80</a><span class="kw">pub use </span>latency::LatencyHistogram;
 <a href=#81 id=81 data-nosnippet>81</a><span class="kw">pub use </span>layer::{
-<a href=#82 id=82 data-nosnippet>82</a>    SpatialLayer, TemporalLayer, VideoSource, most_constrained, tile_quality_request, track_kind,
-<a href=#83 id=83 data-nosnippet>83</a>    track_name,
+<a href=#82 id=82 data-nosnippet>82</a>    LOW_RUNG, SCREEN_LOW_RUNG, SpatialLayer, THUMB_RUNG, TemporalLayer, VideoRung, VideoSource,
+<a href=#83 id=83 data-nosnippet>83</a>    low_rung_for_cap, most_constrained, rung_bps, tile_quality_request, track_kind, track_name,
 <a href=#84 id=84 data-nosnippet>84</a>};
 <a href=#85 id=85 data-nosnippet>85</a><span class="kw">pub use </span>packet::{Codec, HEADER_LEN, PROTOCOL_VERSION, PacketError, PacketHeader, TrackKind};
 <a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub use </span>recovery::{NackConfig, NackGenerator, RetransmitBuffer};
