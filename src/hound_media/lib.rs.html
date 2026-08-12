@@ -78,31 +78,32 @@
 <a href=#78 id=78 data-nosnippet>78</a><span class="kw">pub use </span>allocate::{
 <a href=#79 id=79 data-nosnippet>79</a>    BudgetConfig, BudgetObservation, MIN_VIDEO_BUDGET_BPS, TileRequest, TrackDelivery,
 <a href=#80 id=80 data-nosnippet>80</a>    VIDEO_BUDGET_START_BPS, VIDEO_BUDGET_START_CAP_BPS, VideoBudget, allocate_video,
-<a href=#81 id=81 data-nosnippet>81</a>    demand_ceiling_bps, downlink_deficient, floor_cost_bps, request_bps,
-<a href=#82 id=82 data-nosnippet>82</a>};
-<a href=#83 id=83 data-nosnippet>83</a><span class="kw">pub use </span>bwe_delay::{DelayBasedBwe, TrendlineEstimator, Usage};
-<a href=#84 id=84 data-nosnippet>84</a><span class="kw">pub use </span>clock::CaptureClock;
-<a href=#85 id=85 data-nosnippet>85</a><span class="kw">pub use </span>congestion::{
-<a href=#86 id=86 data-nosnippet>86</a>    DegradePriority, LayerPlan, MaxResolution, Quality, QualityLadder, QualityRequest, RateConfig,
-<a href=#87 id=87 data-nosnippet>87</a>    RateController, Rung, ScreenQuality, SimulcastPlanner, plan_layers, screen_rungs,
-<a href=#88 id=88 data-nosnippet>88</a>    screen_rungs_for_source,
-<a href=#89 id=89 data-nosnippet>89</a>};
-<a href=#90 id=90 data-nosnippet>90</a><span class="kw">pub use </span>downlink::{DownlinkConfig, DownlinkDemand, FrameSeqWindow};
-<a href=#91 id=91 data-nosnippet>91</a><span class="kw">pub use </span>fragment::{Frame, Packetizer, Reassembler};
-<a href=#92 id=92 data-nosnippet>92</a><span class="kw">pub use </span>framerate::FrameRateGate;
-<a href=#93 id=93 data-nosnippet>93</a><span class="kw">pub use </span>jitter::{AdaptiveJitter, JitterEstimator, PlayoutBuffer, Timestamped};
-<a href=#94 id=94 data-nosnippet>94</a><span class="kw">pub use </span>keyframe::{KeyframeConfig, KeyframeRequester, KeyframeThrottle, KeyframeThrottleConfig};
-<a href=#95 id=95 data-nosnippet>95</a><span class="kw">pub use </span>latency::LatencyHistogram;
-<a href=#96 id=96 data-nosnippet>96</a><span class="kw">pub use </span>layer::{
-<a href=#97 id=97 data-nosnippet>97</a>    CAM_SOURCE_BPS, LOW_RUNG, SCREEN_LOW_RUNG, SCREEN_SOURCE_BPS, SPEAKER_DEMOTE_MIN_PEERS,
-<a href=#98 id=98 data-nosnippet>98</a>    SpatialLayer, THUMB_RUNG, TemporalLayer, VideoRung, VideoSource, low_rung_for_cap,
-<a href=#99 id=99 data-nosnippet>99</a>    most_constrained, rung_bps, source_bps, speaker_adjusted, tile_quality_request, track_kind,
-<a href=#100 id=100 data-nosnippet>100</a>    track_name,
-<a href=#101 id=101 data-nosnippet>101</a>};
-<a href=#102 id=102 data-nosnippet>102</a><span class="kw">pub use </span>packet::{Codec, HEADER_LEN, PROTOCOL_VERSION, PacketError, PacketHeader, TrackKind};
-<a href=#103 id=103 data-nosnippet>103</a><span class="kw">pub use </span>recovery::{NackConfig, NackGenerator, RetransmitBuffer};
-<a href=#104 id=104 data-nosnippet>104</a><span class="kw">pub use </span>send_budget::{MIN_VIDEO_BPS, SendBudget, allocate_send_budget};
-<a href=#105 id=105 data-nosnippet>105</a><span class="kw">pub use </span>speaking::{
-<a href=#106 id=106 data-nosnippet>106</a>    SpeakerRanking, SpeakerTier, SpeakerTiers, subband_from_level <span class="kw">as </span>speaking_subband,
-<a href=#107 id=107 data-nosnippet>107</a>};
+<a href=#81 id=81 data-nosnippet>81</a>    below_source_cap, demand_ceiling_bps, downlink_deficient, floor_cost_bps, request_bps,
+<a href=#82 id=82 data-nosnippet>82</a>    served_order,
+<a href=#83 id=83 data-nosnippet>83</a>};
+<a href=#84 id=84 data-nosnippet>84</a><span class="kw">pub use </span>bwe_delay::{DelayBasedBwe, TrendlineEstimator, Usage};
+<a href=#85 id=85 data-nosnippet>85</a><span class="kw">pub use </span>clock::CaptureClock;
+<a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub use </span>congestion::{
+<a href=#87 id=87 data-nosnippet>87</a>    DegradePriority, LayerPlan, MaxResolution, Quality, QualityLadder, QualityRequest, RateConfig,
+<a href=#88 id=88 data-nosnippet>88</a>    RateController, Rung, ScreenQuality, SimulcastPlanner, plan_layers, screen_rungs,
+<a href=#89 id=89 data-nosnippet>89</a>    screen_rungs_for_source,
+<a href=#90 id=90 data-nosnippet>90</a>};
+<a href=#91 id=91 data-nosnippet>91</a><span class="kw">pub use </span>downlink::{DownlinkConfig, DownlinkDemand, FrameSeqWindow};
+<a href=#92 id=92 data-nosnippet>92</a><span class="kw">pub use </span>fragment::{Frame, Packetizer, Reassembler};
+<a href=#93 id=93 data-nosnippet>93</a><span class="kw">pub use </span>framerate::FrameRateGate;
+<a href=#94 id=94 data-nosnippet>94</a><span class="kw">pub use </span>jitter::{AdaptiveJitter, JitterEstimator, PlayoutBuffer, Timestamped};
+<a href=#95 id=95 data-nosnippet>95</a><span class="kw">pub use </span>keyframe::{KeyframeConfig, KeyframeRequester, KeyframeThrottle, KeyframeThrottleConfig};
+<a href=#96 id=96 data-nosnippet>96</a><span class="kw">pub use </span>latency::LatencyHistogram;
+<a href=#97 id=97 data-nosnippet>97</a><span class="kw">pub use </span>layer::{
+<a href=#98 id=98 data-nosnippet>98</a>    CAM_SOURCE_BPS, LOW_RUNG, SCREEN_LOW_RUNG, SCREEN_SOURCE_BPS, SPEAKER_DEMOTE_MIN_PEERS,
+<a href=#99 id=99 data-nosnippet>99</a>    SpatialLayer, THUMB_RUNG, TemporalLayer, VideoRung, VideoSource, low_rung_for_cap,
+<a href=#100 id=100 data-nosnippet>100</a>    most_constrained, rung_bps, source_bps, speaker_adjusted, tile_quality_request, track_kind,
+<a href=#101 id=101 data-nosnippet>101</a>    track_name,
+<a href=#102 id=102 data-nosnippet>102</a>};
+<a href=#103 id=103 data-nosnippet>103</a><span class="kw">pub use </span>packet::{Codec, HEADER_LEN, PROTOCOL_VERSION, PacketError, PacketHeader, TrackKind};
+<a href=#104 id=104 data-nosnippet>104</a><span class="kw">pub use </span>recovery::{NackConfig, NackGenerator, RetransmitBuffer};
+<a href=#105 id=105 data-nosnippet>105</a><span class="kw">pub use </span>send_budget::{MIN_VIDEO_BPS, SendBudget, allocate_send_budget};
+<a href=#106 id=106 data-nosnippet>106</a><span class="kw">pub use </span>speaking::{
+<a href=#107 id=107 data-nosnippet>107</a>    SpeakerRanking, SpeakerTier, SpeakerTiers, subband_from_level <span class="kw">as </span>speaking_subband,
+<a href=#108 id=108 data-nosnippet>108</a>};
 </code></pre></div></section></main></body></html>
