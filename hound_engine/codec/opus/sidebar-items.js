@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_BITRATE","MAX_PACKET_BYTES"],"enum":["OpusProfile"],"fn":["opus_err"],"struct":["OpusDecoder","OpusEncoder"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_BITRATE","DTX_MAX_BYTES","MAX_PACKET_BYTES"],"enum":["OpusProfile"],"fn":["opus_err"],"struct":["OpusDecoder","OpusEncoder"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["AUDIO_REORDER_HOLD"],"fn":["audio_pipeline","reorder_insert"]};
+window.SIDEBAR_ITEMS = {"constant":["AUDIO_REORDER_HOLD"],"fn":["audio_pipeline","release_next","reorder_insert"],"struct":["HeldFrame"]};

@@ -2,307 +2,704 @@
 <a href=#2 id=2 data-nosnippet>2</a>//! genuine gaps) → per-peer jitter buffer on the mix bus, plus level metering.
 <a href=#3 id=3 data-nosnippet>3</a>//! The encoded-frame reorder hold undoes the cross-stream reordering a
 <a href=#4 id=4 data-nosnippet>4</a>//! screenshare induces on the shared connection BEFORE the stateful decoder;
-<a href=#5 id=5 data-nosnippet>5</a>//! release is purely count-based — the moq group read is not cancel-safe
-<a href=#6 id=6 data-nosnippet>6</a>//! mid-object, so no recv timeout is ever raced against it. For the same reason
-<a href=#7 id=7 data-nosnippet>7</a>//! a wedged track can't be detected here: the pipeline publishes an arrival
-<a href=#8 id=8 data-nosnippet>8</a>//! counter instead, and the subscribe loop's stall watchdog kills it out of band.
-<a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#5 id=5 data-nosnippet>5</a>//! release is arrival-driven — count-based in the steady state, and drained
+<a href=#6 id=6 data-nosnippet>6</a>//! outright once the sender goes DTX (see [`release_next`]) — because the moq
+<a href=#7 id=7 data-nosnippet>7</a>//! group read is not cancel-safe mid-object, so no recv timeout is ever raced
+<a href=#8 id=8 data-nosnippet>8</a>//! against it. For the same reason
+<a href=#9 id=9 data-nosnippet>9</a>//! a wedged track can't be detected here: the pipeline publishes an arrival
+<a href=#10 id=10 data-nosnippet>10</a>//! counter instead, and the subscribe loop's stall watchdog kills it out of band.
 <a href=#11 id=11 data-nosnippet>11</a>
-<a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// Frames held in the encoded-audio reorder buffer to undo network reordering before
-<a href=#13 id=13 data-nosnippet>13</a>/// the (stateful) Opus decode. `recv_group` delivers frames in ARRIVAL order; on the
-<a href=#14 id=14 data-nosnippet>14</a>/// shared connection a screenshare reorders the tiny per-frame audio streams, so a
-<a href=#15 id=15 data-nosnippet>15</a>/// frame can arrive after a later one. Decoding in arrival order forces dropping the
-<a href=#16 id=16 data-nosnippet>16</a>/// late frame and concealing it with PLC — reordered becomes lost, and on a busy
-<a href=#17 id=17 data-nosnippet>17</a>/// connection that is continuous distortion. Holding a few frames and releasing the oldest by
-<a href=#18 id=18 data-nosnippet>18</a>/// timestamp restores a clean in-order stream into the decoder; genuine loss still
-<a href=#19 id=19 data-nosnippet>19</a>/// surfaces as a real gap. 3 frames (~60 ms) absorbs the multi-frame reordering the
-<a href=#20 id=20 data-nosnippet>20</a>/// screenshare induces; the added latency is recovered by the PCM jitter buffer
-<a href=#21 id=21 data-nosnippet>21</a>/// shrinking once arrival is smooth. NOT done via a recv timeout — the moq group read
-<a href=#22 id=22 data-nosnippet>22</a>/// is not cancel-safe mid-object — so release is purely count-based.
-<a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">const </span>AUDIO_REORDER_HOLD: usize = <span class="number">3</span>;
-<a href=#24 id=24 data-nosnippet>24</a>
-<a href=#25 id=25 data-nosnippet>25</a><span class="doccomment">/// Insert `frame` into `buf` kept sorted ascending by timestamp, dropping an exact
-<a href=#26 id=26 data-nosnippet>26</a>/// duplicate-timestamp frame (a retransmit of something already buffered). Returns
-<a href=#27 id=27 data-nosnippet>27</a>/// false if dropped. Pure + unit-tested — the reorder correctness hinges on this.
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">fn </span>reorder_insert(buf: <span class="kw-2">&amp;mut </span>Vec&lt;WireFrame&gt;, frame: WireFrame) -&gt; bool {
-<a href=#29 id=29 data-nosnippet>29</a>    <span class="kw">match </span>buf.binary_search_by_key(<span class="kw-2">&amp;</span>frame.timestamp_us, |f| f.timestamp_us) {
-<a href=#30 id=30 data-nosnippet>30</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="bool-val">false</span>,
-<a href=#31 id=31 data-nosnippet>31</a>        <span class="prelude-val">Err</span>(i) =&gt; {
-<a href=#32 id=32 data-nosnippet>32</a>            buf.insert(i, frame);
-<a href=#33 id=33 data-nosnippet>33</a>            <span class="bool-val">true
-<a href=#34 id=34 data-nosnippet>34</a>        </span>}
-<a href=#35 id=35 data-nosnippet>35</a>    }
-<a href=#36 id=36 data-nosnippet>36</a>}
-<a href=#37 id=37 data-nosnippet>37</a>
-<a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// Audio decode pipeline: pull frames, **reorder by timestamp**, Opus-decode (PLC on
-<a href=#39 id=39 data-nosnippet>39</a>/// genuine gaps via the decoder's `None`), push into the per-peer jitter buffer on the
-<a href=#40 id=40 data-nosnippet>40</a>/// mix bus, and meter levels.
-<a href=#41 id=41 data-nosnippet>41</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#42 id=42 data-nosnippet>42</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>audio_pipeline(
-<a href=#43 id=43 data-nosnippet>43</a>    <span class="kw-2">mut </span>subscriber: MoqTrackSubscriber,
-<a href=#44 id=44 data-nosnippet>44</a>    peer: PeerId,
-<a href=#45 id=45 data-nosnippet>45</a>    source: Source,
-<a href=#46 id=46 data-nosnippet>46</a>    playout_bus: Arc&lt;PlayoutBus&gt;,
-<a href=#47 id=47 data-nosnippet>47</a>    levels: watch::Sender&lt;LevelsView&gt;,
-<a href=#48 id=48 data-nosnippet>48</a>    clock: CaptureClock,
-<a href=#49 id=49 data-nosnippet>49</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#50 id=50 data-nosnippet>50</a>    peer_stats: Arc&lt;<span class="kw">crate</span>::stats::PeerStats&gt;,
-<a href=#51 id=51 data-nosnippet>51</a>    gain: Arc&lt;std::sync::atomic::AtomicU32&gt;,
-<a href=#52 id=52 data-nosnippet>52</a>    delivered: Arc&lt;AtomicBool&gt;,
-<a href=#53 id=53 data-nosnippet>53</a>    <span class="comment">// Monotone count of frames pulled off the wire, sampled by the subscribe loop's
-<a href=#54 id=54 data-nosnippet>54</a>    // stall watchdog. Bumped on ARRIVAL (not on decode) so a stream whose frames fail
-<a href=#55 id=55 data-nosnippet>55</a>    // to decode still reads as live — the watchdog only asks "is the relay still
-<a href=#56 id=56 data-nosnippet>56</a>    // delivering?", which is the one thing the unbounded pull can wedge on.
-<a href=#57 id=57 data-nosnippet>57</a>    </span>arrivals: Arc&lt;AtomicU64&gt;,
-<a href=#58 id=58 data-nosnippet>58</a>) {
-<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">use </span>hound_engine::api::level_from_rms;
-<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">use </span>hound_engine::types::OpusPacket;
-<a href=#61 id=61 data-nosnippet>61</a>
-<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>decoder) = OpusDecoder::new() <span class="kw">else </span>{
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="kw">return</span>;
-<a href=#64 id=64 data-nosnippet>64</a>    };
-<a href=#65 id=65 data-nosnippet>65</a>    <span class="comment">// The mix bus mixes all slots regardless of label; the label only attributes
-<a href=#66 id=66 data-nosnippet>66</a>    // starve-stats, so name screen app-audio honestly.
-<a href=#67 id=67 data-nosnippet>67</a>    </span><span class="kw">let </span>is_screen = source == Source::Screen;
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">let </span>akind = <span class="kw">if </span>is_screen {
-<a href=#69 id=69 data-nosnippet>69</a>        InboundAudioKind::Screen
-<a href=#70 id=70 data-nosnippet>70</a>    } <span class="kw">else </span>{
-<a href=#71 id=71 data-nosnippet>71</a>        InboundAudioKind::Mic
-<a href=#72 id=72 data-nosnippet>72</a>    };
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="comment">// Tag the producer with the peer id so a recorded underflow glitch names the peer.
-<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">let </span>producer =
-<a href=#75 id=75 data-nosnippet>75</a>        playout_bus.register_tagged(<span class="kw">if </span>is_screen { <span class="string">"screen_audio" </span>} <span class="kw">else </span>{ <span class="string">"mic" </span>}, peer.<span class="number">0</span>);
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span><span class="kw-2">mut </span>decoded: u64 = <span class="number">0</span>;
-<a href=#77 id=77 data-nosnippet>77</a>    <span class="comment">// Loss/reorder detection from the sender's capture timestamps. `prev_ts` advances
-<a href=#78 id=78 data-nosnippet>78</a>    // only on in-order frames; `frame_us` (the Opus frame duration) is learned from the
-<a href=#79 id=79 data-nosnippet>79</a>    // first decoded frame so the gap math doesn't assume 20 ms. The engine decodes at
-<a href=#80 id=80 data-nosnippet>80</a>    // 48 kHz mono, so duration = samples · 1e6 / 48000.
-<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">const </span>ENGINE_RATE_HZ: i64 = <span class="number">48_000</span>;
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">let </span><span class="kw-2">mut </span>prev_ts: <span class="prelude-ty">Option</span>&lt;i64&gt; = <span class="prelude-val">None</span>;
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let </span><span class="kw-2">mut </span>frame_us: i64 = <span class="number">20_000</span>; <span class="comment">// sane default until the first frame refines it
-<a href=#84 id=84 data-nosnippet>84</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>learned_frame_us = <span class="bool-val">false</span>;
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="comment">// Cadence diagnostics — a retained debug tool. Distinguishes the THREE causes of an
-<a href=#86 id=86 data-nosnippet>86</a>    // active-stream gap that the smoothed jitter number hides: brief network loss
-<a href=#87 id=87 data-nosnippet>87</a>    // (small ts gaps → PLC), sender DTX / capture discontinuity (large ts gaps → NOT
-<a href=#88 id=88 data-nosnippet>88</a>    // loss, must not be PLC-fabricated), and sender↔receiver clock skew (ts-elapsed vs
-<a href=#89 id=89 data-nosnippet>89</a>    // local-elapsed divergence → buffer slowly drains). Logged once per window.
-<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>diag = CadenceDiag::default();
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="comment">// Encoded-frame reorder buffer (sorted by ts). We pull from the network into it and
-<a href=#92 id=92 data-nosnippet>92</a>    // release the oldest only once HOLD frames are buffered, so network reordering is
-<a href=#93 id=93 data-nosnippet>93</a>    // undone BEFORE the stateful decode (see AUDIO_REORDER_HOLD).
-<a href=#94 id=94 data-nosnippet>94</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>reorder: Vec&lt;WireFrame&gt; = Vec::with_capacity(AUDIO_REORDER_HOLD + <span class="number">2</span>);
-<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">let </span><span class="kw-2">mut </span>ended = <span class="bool-val">false</span>;
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="comment">// Acquire the next frame to PROCESS, in TIMESTAMP order. Refill from the network
-<a href=#98 id=98 data-nosnippet>98</a>        // until we hold more than HOLD frames (then the oldest is safe to release), or
-<a href=#99 id=99 data-nosnippet>99</a>        // the track ends (drain whatever remains, oldest-first). `next_frame` is never
-<a href=#100 id=100 data-nosnippet>100</a>        // cancelled — only fully-received frames enter the buffer.
-<a href=#101 id=101 data-nosnippet>101</a>        </span><span class="kw">let </span>frame = <span class="kw">loop </span>{
-<a href=#102 id=102 data-nosnippet>102</a>            <span class="kw">if </span>reorder.len() &gt; AUDIO_REORDER_HOLD {
-<a href=#103 id=103 data-nosnippet>103</a>                <span class="kw">break </span><span class="prelude-val">Some</span>(reorder.remove(<span class="number">0</span>));
-<a href=#104 id=104 data-nosnippet>104</a>            }
-<a href=#105 id=105 data-nosnippet>105</a>            <span class="kw">if </span>ended {
-<a href=#106 id=106 data-nosnippet>106</a>                <span class="comment">// Track ended/errored: drain remaining buffered frames oldest-first.
-<a href=#107 id=107 data-nosnippet>107</a>                </span><span class="kw">break </span>(!reorder.is_empty()).then(|| reorder.remove(<span class="number">0</span>));
-<a href=#108 id=108 data-nosnippet>108</a>            }
-<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">let </span>now = clock.now();
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="kw">match </span>subscriber.next_frame(now).<span class="kw">await </span>{
-<a href=#111 id=111 data-nosnippet>111</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(f)) =&gt; {
-<a href=#112 id=112 data-nosnippet>112</a>                    arrivals.fetch_add(<span class="number">1</span>, Ordering::Relaxed);
-<a href=#113 id=113 data-nosnippet>113</a>                    <span class="comment">// RTC-debug: one inbound Opus frame received (counted on arrival).
-<a href=#114 id=114 data-nosnippet>114</a>                    </span>peer_stats.audio_received(akind, f.data.len());
-<a href=#115 id=115 data-nosnippet>115</a>                    reorder_insert(<span class="kw-2">&amp;mut </span>reorder, f);
-<a href=#116 id=116 data-nosnippet>116</a>                }
-<a href=#117 id=117 data-nosnippet>117</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) | <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; ended = <span class="bool-val">true</span>,
-<a href=#118 id=118 data-nosnippet>118</a>            }
-<a href=#119 id=119 data-nosnippet>119</a>        };
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(frame) = frame <span class="kw">else </span>{ <span class="kw">break </span>};
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">let </span>ts = frame.timestamp_us;
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="comment">// Local time at processing (after any reorder hold) — for the cadence skew calc.
-<a href=#123 id=123 data-nosnippet>123</a>        </span><span class="kw">let </span>now = clock.now();
-<a href=#124 id=124 data-nosnippet>124</a>
-<a href=#125 id=125 data-nosnippet>125</a>        <span class="comment">// Frames now arrive in timestamp order, so a non-advancing timestamp is a true
-<a href=#126 id=126 data-nosnippet>126</a>        // duplicate/straggler the reorder buffer couldn't place (rare), not routine
-<a href=#127 id=127 data-nosnippet>127</a>        // network reordering — skip it to keep the stateful decoder coherent.
-<a href=#128 id=128 data-nosnippet>128</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(pt) = prev_ts {
-<a href=#129 id=129 data-nosnippet>129</a>            <span class="kw">let </span>gap = ts - pt;
-<a href=#130 id=130 data-nosnippet>130</a>            <span class="kw">if </span>gap &lt;= <span class="number">0 </span>{
-<a href=#131 id=131 data-nosnippet>131</a>                peer_stats.record_audio_loss(akind, <span class="number">0</span>, <span class="bool-val">true</span>);
-<a href=#132 id=132 data-nosnippet>132</a>                <span class="kw">continue</span>;
-<a href=#133 id=133 data-nosnippet>133</a>            }
-<a href=#134 id=134 data-nosnippet>134</a>            diag.note_gap(gap);
-<a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">let </span>missing = frames_missing(gap, frame_us);
-<a href=#136 id=136 data-nosnippet>136</a>            <span class="comment">// PLC conceals BRIEF loss only. A larger gap is the sender being silent
-<a href=#137 id=137 data-nosnippet>137</a>            // (Opus DTX sends no frames during silence) or a capture discontinuity —
-<a href=#138 id=138 data-nosnippet>138</a>            // NOT packet loss. Fabricating one extrapolated PLC frame per 20 ms of
-<a href=#139 id=139 data-nosnippet>139</a>            // gap would mislabel silence as loss (a silent peer produces more
-<a href=#140 id=140 data-nosnippet>140</a>            // concealment than real audio), waste CPU, and — worst — splice garbage
-<a href=#141 id=141 data-nosnippet>141</a>            // PLC into an ACTIVE stream where it leapfrogs/drops the real frame
-<a href=#142 id=142 data-nosnippet>142</a>            // behind it. Cap it: conceal up to MAX_PLC_FRAMES, then resync silently.
-<a href=#143 id=143 data-nosnippet>143</a>            </span><span class="kw">if </span>missing &gt; <span class="number">0 </span>&amp;&amp; missing &lt;= MAX_PLC_FRAMES {
-<a href=#144 id=144 data-nosnippet>144</a>                <span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..=missing {
-<a href=#145 id=145 data-nosnippet>145</a>                    <span class="kw">let </span>plc_ts = pt + frame_us * i;
-<a href=#146 id=146 data-nosnippet>146</a>                    <span class="kw">if let </span><span class="prelude-val">Ok</span>(plc) = decoder.decode(<span class="prelude-val">None</span>, TimestampUs::from_micros(plc_ts)) {
-<a href=#147 id=147 data-nosnippet>147</a>                        <span class="kw">let _ </span>= producer.push(clock.now(), plc_ts, <span class="kw-2">&amp;</span>plc.samples);
-<a href=#148 id=148 data-nosnippet>148</a>                    }
-<a href=#149 id=149 data-nosnippet>149</a>                }
-<a href=#150 id=150 data-nosnippet>150</a>                peer_stats.record_audio_loss(akind, missing <span class="kw">as </span>u64, <span class="bool-val">false</span>);
-<a href=#151 id=151 data-nosnippet>151</a>                diag.plc += missing <span class="kw">as </span>u64;
-<a href=#152 id=152 data-nosnippet>152</a>            } <span class="kw">else if </span>missing &gt; MAX_PLC_FRAMES {
-<a href=#153 id=153 data-nosnippet>153</a>                <span class="comment">// DTX / discontinuity: play silence across the gap (correct — there was
-<a href=#154 id=154 data-nosnippet>154</a>                // no audio). Resync to the new frame (prev_ts advances after decode).
-<a href=#155 id=155 data-nosnippet>155</a>                </span>diag.big_gaps += <span class="number">1</span>;
-<a href=#156 id=156 data-nosnippet>156</a>            }
-<a href=#157 id=157 data-nosnippet>157</a>        }
-<a href=#158 id=158 data-nosnippet>158</a>
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">let </span>packet = OpusPacket {
-<a href=#160 id=160 data-nosnippet>160</a>            data: frame.data,
-<a href=#161 id=161 data-nosnippet>161</a>            timestamp_us: TimestampUs::from_micros(ts),
-<a href=#162 id=162 data-nosnippet>162</a>        };
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>pcm) = decoder.decode(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>packet), TimestampUs::from_micros(ts)) <span class="kw">else </span>{
-<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">continue</span>;
-<a href=#165 id=165 data-nosnippet>165</a>        };
-<a href=#166 id=166 data-nosnippet>166</a>        delivered.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#167 id=167 data-nosnippet>167</a>        prev_ts = <span class="prelude-val">Some</span>(ts);
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">if </span>!learned_frame_us &amp;&amp; !pcm.samples.is_empty() {
-<a href=#169 id=169 data-nosnippet>169</a>            frame_us = (pcm.samples.len() <span class="kw">as </span>i64 * <span class="number">1_000_000 </span>/ ENGINE_RATE_HZ).max(<span class="number">1</span>);
-<a href=#170 id=170 data-nosnippet>170</a>            learned_frame_us = <span class="bool-val">true</span>;
-<a href=#171 id=171 data-nosnippet>171</a>        }
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="comment">// Per-stream playback gain (the tile volume/mute control), applied before the
-<a href=#173 id=173 data-nosnippet>173</a>        // level meter and the mix push so both reflect what is actually played (a
-<a href=#174 id=174 data-nosnippet>174</a>        // muted stream's meter reads 0 and its speaking ring stays off). Unity skips
-<a href=#175 id=175 data-nosnippet>175</a>        // the pass entirely (the common case costs one atomic load).
-<a href=#176 id=176 data-nosnippet>176</a>        </span><span class="kw">let </span>g = f32::from_bits(gain.load(Ordering::Relaxed));
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">if </span><span class="macro">g !</span>= <span class="number">1.0 </span>{
-<a href=#178 id=178 data-nosnippet>178</a>            apply_gain(<span class="kw-2">&amp;mut </span>pcm.samples, g);
-<a href=#179 id=179 data-nosnippet>179</a>        }
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="comment">// Both mic + screen audio record their decoded level for the panel; only the
-<a href=#181 id=181 data-nosnippet>181</a>        // mic drives the per-peer level meter / speaking ring (both key on peer id).
-<a href=#182 id=182 data-nosnippet>182</a>        </span><span class="kw">let </span>level = level_from_rms(pcm.rms());
-<a href=#183 id=183 data-nosnippet>183</a>        peer_stats.set_audio_level(akind, level);
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">if </span>!is_screen {
-<a href=#185 id=185 data-nosnippet>185</a>            levels.send_modify(|l| {
-<a href=#186 id=186 data-nosnippet>186</a>                l.peers.insert(peer.<span class="number">0</span>, level);
-<a href=#187 id=187 data-nosnippet>187</a>            });
-<a href=#188 id=188 data-nosnippet>188</a>        }
-<a href=#189 id=189 data-nosnippet>189</a>        <span class="comment">// The mix bus pulls on its own RT clock; we only FILL the jitter buffer.
-<a href=#190 id=190 data-nosnippet>190</a>        // Surface the post-push jitter-buffer health to the panel/report: depth
-<a href=#191 id=191 data-nosnippet>191</a>        // (cur vs recommended), late/overflow drops, and this slot's underflow total.
-<a href=#192 id=192 data-nosnippet>192</a>        // A depth that climbs while silent = buffered-but-never-released (a playout
-<a href=#193 id=193 data-nosnippet>193</a>        // stall); recommended ≫ target = the buffer is too shallow for the link.
-<a href=#194 id=194 data-nosnippet>194</a>        </span><span class="kw">let </span>status = producer.push(clock.now(), ts, <span class="kw-2">&amp;</span>pcm.samples);
-<a href=#195 id=195 data-nosnippet>195</a>        peer_stats.set_audio_playout_depth(akind, status.buffered_frames);
-<a href=#196 id=196 data-nosnippet>196</a>        peer_stats.set_audio_jitter(akind, status.jitter_us.max(<span class="number">0</span>) <span class="kw">as </span>u32);
-<a href=#197 id=197 data-nosnippet>197</a>        peer_stats.set_audio_jitterbuf(
-<a href=#198 id=198 data-nosnippet>198</a>            akind,
-<a href=#199 id=199 data-nosnippet>199</a>            status.target_delay_us.max(<span class="number">0</span>) <span class="kw">as </span>u32,
-<a href=#200 id=200 data-nosnippet>200</a>            status.recommended_delay_us.max(<span class="number">0</span>) <span class="kw">as </span>u32,
-<a href=#201 id=201 data-nosnippet>201</a>            status.late_drops,
-<a href=#202 id=202 data-nosnippet>202</a>            status.overflow_drops,
-<a href=#203 id=203 data-nosnippet>203</a>            status.underflow_total,
-<a href=#204 id=204 data-nosnippet>204</a>        );
-<a href=#205 id=205 data-nosnippet>205</a>        decoded += <span class="number">1</span>;
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="comment">// Feed the cadence diagnostic and emit a window summary periodically. This is
-<a href=#207 id=207 data-nosnippet>207</a>        // the tool for attributing an active-stream gap: high `plc` = brief loss;
-<a href=#208 id=208 data-nosnippet>208</a>        // high `big_gaps`/`max_gap_ms` = sender DTX or a capture stall (a sender-side
-<a href=#209 id=209 data-nosnippet>209</a>        // problem, not network); large |skew_ppm| = clock drift slowly draining the
-<a href=#210 id=210 data-nosnippet>210</a>        // buffer (needs resampling/retiming, not a deeper buffer).
-<a href=#211 id=211 data-nosnippet>211</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>((real, plc, big_gaps, max_gap_ms, skew_ppm)) = diag.observe(ts, now) {
-<a href=#212 id=212 data-nosnippet>212</a>            <span class="macro">tracing::info!</span>(
-<a href=#213 id=213 data-nosnippet>213</a>                <span class="question-mark">?</span>source,
-<a href=#214 id=214 data-nosnippet>214</a>                peer = peer.<span class="number">0</span>,
-<a href=#215 id=215 data-nosnippet>215</a>                real,
-<a href=#216 id=216 data-nosnippet>216</a>                plc,
-<a href=#217 id=217 data-nosnippet>217</a>                big_gaps,
-<a href=#218 id=218 data-nosnippet>218</a>                max_gap_ms,
-<a href=#219 id=219 data-nosnippet>219</a>                skew_ppm,
-<a href=#220 id=220 data-nosnippet>220</a>                jitterbuf_ms = status.target_delay_us / <span class="number">1000</span>,
-<a href=#221 id=221 data-nosnippet>221</a>                underflow_total = status.underflow_total,
-<a href=#222 id=222 data-nosnippet>222</a>                <span class="string">"audio: cadence window"
-<a href=#223 id=223 data-nosnippet>223</a>            </span>);
-<a href=#224 id=224 data-nosnippet>224</a>        }
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">if </span>decoded == <span class="number">1 </span>|| decoded.is_multiple_of(<span class="number">500</span>) {
-<a href=#226 id=226 data-nosnippet>226</a>            <span class="macro">tracing::info!</span>(
-<a href=#227 id=227 data-nosnippet>227</a>                <span class="question-mark">?</span>source,
-<a href=#228 id=228 data-nosnippet>228</a>                peer = peer.<span class="number">0</span>,
-<a href=#229 id=229 data-nosnippet>229</a>                decoded,
-<a href=#230 id=230 data-nosnippet>230</a>                <span class="string">"audio: decoded+mixed frames"
-<a href=#231 id=231 data-nosnippet>231</a>            </span>);
-<a href=#232 id=232 data-nosnippet>232</a>        }
-<a href=#233 id=233 data-nosnippet>233</a>    }
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">if </span>!is_screen {
-<a href=#235 id=235 data-nosnippet>235</a>        levels.send_modify(|l| {
-<a href=#236 id=236 data-nosnippet>236</a>            l.peers.remove(<span class="kw-2">&amp;</span>peer.<span class="number">0</span>);
-<a href=#237 id=237 data-nosnippet>237</a>        });
-<a href=#238 id=238 data-nosnippet>238</a>    }
-<a href=#239 id=239 data-nosnippet>239</a>    <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>source, peer = peer.<span class="number">0</span>, decoded, <span class="string">"audio: pipeline ended"</span>);
-<a href=#240 id=240 data-nosnippet>240</a>}
-<a href=#241 id=241 data-nosnippet>241</a>
-<a href=#242 id=242 data-nosnippet>242</a><span class="attr">#[cfg(test)]
-<a href=#243 id=243 data-nosnippet>243</a></span><span class="kw">mod </span>tests {
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#245 id=245 data-nosnippet>245</a>
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="comment">// ─── Encoded-audio reorder buffer ───────────────────────────────────────────
-<a href=#247 id=247 data-nosnippet>247</a>
-<a href=#248 id=248 data-nosnippet>248</a>    </span><span class="kw">fn </span>afr(ts: i64) -&gt; WireFrame {
-<a href=#249 id=249 data-nosnippet>249</a>        WireFrame {
-<a href=#250 id=250 data-nosnippet>250</a>            sender: <span class="number">0</span>,
-<a href=#251 id=251 data-nosnippet>251</a>            track: TrackKind::CamAudio,
-<a href=#252 id=252 data-nosnippet>252</a>            codec: WireCodec::Opus,
-<a href=#253 id=253 data-nosnippet>253</a>            keyframe: <span class="bool-val">true</span>,
-<a href=#254 id=254 data-nosnippet>254</a>            frame_seq: <span class="number">0</span>,
-<a href=#255 id=255 data-nosnippet>255</a>            timestamp_us: ts,
-<a href=#256 id=256 data-nosnippet>256</a>            data: <span class="macro">vec!</span>[ts <span class="kw">as </span>u8],
+<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#13 id=13 data-nosnippet>13</a>
+<a href=#14 id=14 data-nosnippet>14</a><span class="doccomment">/// Frames held in the encoded-audio reorder buffer to undo network reordering before
+<a href=#15 id=15 data-nosnippet>15</a>/// the (stateful) Opus decode. `recv_group` delivers frames in ARRIVAL order; on the
+<a href=#16 id=16 data-nosnippet>16</a>/// shared connection a screenshare reorders the tiny per-frame audio streams, so a
+<a href=#17 id=17 data-nosnippet>17</a>/// frame can arrive after a later one. Decoding in arrival order forces dropping the
+<a href=#18 id=18 data-nosnippet>18</a>/// late frame and concealing it with PLC — reordered becomes lost, and on a busy
+<a href=#19 id=19 data-nosnippet>19</a>/// connection that is continuous distortion. Holding a few frames and releasing the oldest by
+<a href=#20 id=20 data-nosnippet>20</a>/// timestamp restores a clean in-order stream into the decoder; genuine loss still
+<a href=#21 id=21 data-nosnippet>21</a>/// surfaces as a real gap. 3 frames (~60 ms) absorbs the multi-frame reordering the
+<a href=#22 id=22 data-nosnippet>22</a>/// screenshare induces; the added latency is recovered by the PCM jitter buffer
+<a href=#23 id=23 data-nosnippet>23</a>/// shrinking once arrival is smooth. NOT done via a recv timeout — the moq group read
+<a href=#24 id=24 data-nosnippet>24</a>/// is not cancel-safe mid-object — so release is arrival-driven throughout; see
+<a href=#25 id=25 data-nosnippet>25</a>/// [`release_next`] for the count rule and the DTX drain that suspends it.
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="kw">const </span>AUDIO_REORDER_HOLD: usize = <span class="number">3</span>;
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a><span class="doccomment">/// A pulled frame plus **when it came off the wire**.
+<a href=#29 id=29 data-nosnippet>29</a>///
+<a href=#30 id=30 data-nosnippet>30</a>/// The arrival instant has to be captured at the pull and carried through the hold,
+<a href=#31 id=31 data-nosnippet>31</a>/// because the hold is count-based: how long a frame waits in it is a function of when
+<a href=#32 id=32 data-nosnippet>32</a>/// the NEXT frames arrive, not of the network. Two consumers need the honest number
+<a href=#33 id=33 data-nosnippet>33</a>/// and would otherwise silently measure the hold instead of the link — the jitter
+<a href=#34 id=34 data-nosnippet>34</a>/// estimator (differential over `arrivalΔ − tsΔ`; see [`BusProducer::push_at`]) and,
+<a href=#35 id=35 data-nosnippet>35</a>/// through it, the recommended playout depth.
+<a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">struct </span>HeldFrame {
+<a href=#37 id=37 data-nosnippet>37</a>    <span class="doccomment">/// Local time (on the shared [`CaptureClock`]) the pull completed.
+<a href=#38 id=38 data-nosnippet>38</a>    </span>arrival_us: i64,
+<a href=#39 id=39 data-nosnippet>39</a>    frame: WireFrame,
+<a href=#40 id=40 data-nosnippet>40</a>}
+<a href=#41 id=41 data-nosnippet>41</a>
+<a href=#42 id=42 data-nosnippet>42</a><span class="doccomment">/// Insert `frame` into `buf` kept sorted ascending by timestamp, dropping an exact
+<a href=#43 id=43 data-nosnippet>43</a>/// duplicate-timestamp frame (a retransmit of something already buffered). Returns
+<a href=#44 id=44 data-nosnippet>44</a>/// false if dropped. Pure + unit-tested — the reorder correctness hinges on this.
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">fn </span>reorder_insert(buf: <span class="kw-2">&amp;mut </span>Vec&lt;HeldFrame&gt;, held: HeldFrame) -&gt; bool {
+<a href=#46 id=46 data-nosnippet>46</a>    <span class="kw">match </span>buf.binary_search_by_key(<span class="kw-2">&amp;</span>held.frame.timestamp_us, |f| f.frame.timestamp_us) {
+<a href=#47 id=47 data-nosnippet>47</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="bool-val">false</span>,
+<a href=#48 id=48 data-nosnippet>48</a>        <span class="prelude-val">Err</span>(i) =&gt; {
+<a href=#49 id=49 data-nosnippet>49</a>            buf.insert(i, held);
+<a href=#50 id=50 data-nosnippet>50</a>            <span class="bool-val">true
+<a href=#51 id=51 data-nosnippet>51</a>        </span>}
+<a href=#52 id=52 data-nosnippet>52</a>    }
+<a href=#53 id=53 data-nosnippet>53</a>}
+<a href=#54 id=54 data-nosnippet>54</a>
+<a href=#55 id=55 data-nosnippet>55</a><span class="doccomment">/// The hold's release decision — the whole of it, so the pull loop below is only
+<a href=#56 id=56 data-nosnippet>56</a>/// network I/O and the policy can be driven by tests against the real jitter machinery.
+<a href=#57 id=57 data-nosnippet>57</a>/// Returns the frame to process now, or `None` meaning "pull more".
+<a href=#58 id=58 data-nosnippet>58</a>///
+<a href=#59 id=59 data-nosnippet>59</a>/// Three rules, in order:
+<a href=#60 id=60 data-nosnippet>60</a>///
+<a href=#61 id=61 data-nosnippet>61</a>/// 1. **The suppression drain.** `drain` is set when a DTX-sized frame arrives, which is
+<a href=#62 id=62 data-nosnippet>62</a>///    the sender telling us it has stopped transmitting: the next frame is a keepalive
+<a href=#63 id=63 data-nosnippet>63</a>///    interval (~500 ms) away, so there is nothing left to reorder against and every
+<a href=#64 id=64 data-nosnippet>64</a>///    frame still held is waiting on a network event that will not come for half a
+<a href=#65 id=65 data-nosnippet>65</a>///    second. Empty the hold, then clear the flag and resume normally.
+<a href=#66 id=66 data-nosnippet>66</a>///
+<a href=#67 id=67 data-nosnippet>67</a>///    Holding through suppression is not merely late, it corrupts the receive-side
+<a href=#68 id=68 data-nosnippet>68</a>///    estimates. The hold releases by COUNT, so each keepalive would be handed on one
+<a href=#69 id=69 data-nosnippet>69</a>///    arrival later — ~1.5 s behind the wire — and every push would then land past its
+<a href=#70 id=70 data-nosnippet>70</a>///    scheduled playout (a run of overdue arrivals → shallow re-anchors), while the
+<a href=#71 id=71 data-nosnippet>71</a>///    500 ms release cadence would read as transit deviation and pin the recommended
+<a href=#72 id=72 data-nosnippet>72</a>///    depth at its cap for the whole peak window.
+<a href=#73 id=73 data-nosnippet>73</a>///
+<a href=#74 id=74 data-nosnippet>74</a>///    What the drain gives up is reorder protection for the frames it releases early.
+<a href=#75 id=75 data-nosnippet>75</a>///    That is the right trade and a small one: the frames in question are the tail of
+<a href=#76 id=76 data-nosnippet>76</a>///    the confirmation window and the keepalives themselves — silence — and past the
+<a href=#77 id=77 data-nosnippet>77</a>///    first keepalive the stream is 500 ms/frame, which no reordering reaches across.
+<a href=#78 id=78 data-nosnippet>78</a>///    Speech is never drained early, because a coded frame never arms the flag.
+<a href=#79 id=79 data-nosnippet>79</a>/// 2. **Steady state.** Release the oldest once more than [`AUDIO_REORDER_HOLD`] are
+<a href=#80 id=80 data-nosnippet>80</a>///    buffered, so network reordering is undone before the stateful decode.
+<a href=#81 id=81 data-nosnippet>81</a>/// 3. **End of track.** Drain whatever remains, oldest-first.
+<a href=#82 id=82 data-nosnippet>82</a>///
+<a href=#83 id=83 data-nosnippet>83</a>/// All three are arrival-driven, never timed: the moq group read is not cancel-safe
+<a href=#84 id=84 data-nosnippet>84</a>/// mid-object, so nothing may be raced against `next_frame`.
+<a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">fn </span>release_next(buf: <span class="kw-2">&amp;mut </span>Vec&lt;HeldFrame&gt;, drain: <span class="kw-2">&amp;mut </span>bool, ended: bool) -&gt; <span class="prelude-ty">Option</span>&lt;HeldFrame&gt; {
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">if </span><span class="kw-2">*</span>drain {
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">if </span>!buf.is_empty() {
+<a href=#88 id=88 data-nosnippet>88</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(buf.remove(<span class="number">0</span>));
+<a href=#89 id=89 data-nosnippet>89</a>        }
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw-2">*</span>drain = <span class="bool-val">false</span>;
+<a href=#91 id=91 data-nosnippet>91</a>    }
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">if </span>buf.len() &gt; AUDIO_REORDER_HOLD || (ended &amp;&amp; !buf.is_empty()) {
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(buf.remove(<span class="number">0</span>));
+<a href=#94 id=94 data-nosnippet>94</a>    }
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="prelude-val">None
+<a href=#96 id=96 data-nosnippet>96</a></span>}
+<a href=#97 id=97 data-nosnippet>97</a>
+<a href=#98 id=98 data-nosnippet>98</a><span class="doccomment">/// Audio decode pipeline: pull frames, **reorder by timestamp**, Opus-decode (PLC on
+<a href=#99 id=99 data-nosnippet>99</a>/// genuine gaps via the decoder's `None`), push into the per-peer jitter buffer on the
+<a href=#100 id=100 data-nosnippet>100</a>/// mix bus, and meter levels.
+<a href=#101 id=101 data-nosnippet>101</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#102 id=102 data-nosnippet>102</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>audio_pipeline(
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw-2">mut </span>subscriber: MoqTrackSubscriber,
+<a href=#104 id=104 data-nosnippet>104</a>    peer: PeerId,
+<a href=#105 id=105 data-nosnippet>105</a>    source: Source,
+<a href=#106 id=106 data-nosnippet>106</a>    playout_bus: Arc&lt;PlayoutBus&gt;,
+<a href=#107 id=107 data-nosnippet>107</a>    levels: watch::Sender&lt;LevelsView&gt;,
+<a href=#108 id=108 data-nosnippet>108</a>    clock: CaptureClock,
+<a href=#109 id=109 data-nosnippet>109</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#110 id=110 data-nosnippet>110</a>    peer_stats: Arc&lt;<span class="kw">crate</span>::stats::PeerStats&gt;,
+<a href=#111 id=111 data-nosnippet>111</a>    gain: Arc&lt;std::sync::atomic::AtomicU32&gt;,
+<a href=#112 id=112 data-nosnippet>112</a>    delivered: Arc&lt;AtomicBool&gt;,
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="comment">// Monotone count of frames pulled off the wire, sampled by the subscribe loop's
+<a href=#114 id=114 data-nosnippet>114</a>    // stall watchdog. Bumped on ARRIVAL (not on decode) so a stream whose frames fail
+<a href=#115 id=115 data-nosnippet>115</a>    // to decode still reads as live — the watchdog only asks "is the relay still
+<a href=#116 id=116 data-nosnippet>116</a>    // delivering?", which is the one thing the unbounded pull can wedge on.
+<a href=#117 id=117 data-nosnippet>117</a>    </span>arrivals: Arc&lt;AtomicU64&gt;,
+<a href=#118 id=118 data-nosnippet>118</a>) {
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">use </span>hound_engine::types::OpusPacket;
+<a href=#120 id=120 data-nosnippet>120</a>
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>decoder) = OpusDecoder::new() <span class="kw">else </span>{
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">return</span>;
+<a href=#123 id=123 data-nosnippet>123</a>    };
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="comment">// The mix bus mixes all slots regardless of label; the label only attributes
+<a href=#125 id=125 data-nosnippet>125</a>    // starve-stats, so name screen app-audio honestly.
+<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="kw">let </span>is_screen = source == Source::Screen;
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">let </span>akind = <span class="kw">if </span>is_screen {
+<a href=#128 id=128 data-nosnippet>128</a>        InboundAudioKind::Screen
+<a href=#129 id=129 data-nosnippet>129</a>    } <span class="kw">else </span>{
+<a href=#130 id=130 data-nosnippet>130</a>        InboundAudioKind::Mic
+<a href=#131 id=131 data-nosnippet>131</a>    };
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="comment">// Tag the producer with the peer id so a recorded underflow glitch names the peer.
+<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">let </span>producer =
+<a href=#134 id=134 data-nosnippet>134</a>        playout_bus.register_tagged(<span class="kw">if </span>is_screen { <span class="string">"screen_audio" </span>} <span class="kw">else </span>{ <span class="string">"mic" </span>}, peer.<span class="number">0</span>);
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">let </span><span class="kw-2">mut </span>decoded: u64 = <span class="number">0</span>;
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="comment">// Loss/reorder detection from the sender's capture timestamps. `prev_ts` advances
+<a href=#137 id=137 data-nosnippet>137</a>    // only on in-order frames; `frame_us` (the Opus frame duration) is learned from the
+<a href=#138 id=138 data-nosnippet>138</a>    // first decoded frame so the gap math doesn't assume 20 ms. The engine decodes at
+<a href=#139 id=139 data-nosnippet>139</a>    // 48 kHz mono, so duration = samples · 1e6 / 48000.
+<a href=#140 id=140 data-nosnippet>140</a>    </span><span class="kw">const </span>ENGINE_RATE_HZ: i64 = <span class="number">48_000</span>;
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">let </span><span class="kw-2">mut </span>prev_ts: <span class="prelude-ty">Option</span>&lt;i64&gt; = <span class="prelude-val">None</span>;
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">let </span><span class="kw-2">mut </span>frame_us: i64 = <span class="number">20_000</span>; <span class="comment">// sane default until the first frame refines it
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>learned_frame_us = <span class="bool-val">false</span>;
+<a href=#144 id=144 data-nosnippet>144</a>    <span class="comment">// Cadence diagnostics — a retained debug tool. Distinguishes the THREE causes of an
+<a href=#145 id=145 data-nosnippet>145</a>    // active-stream gap that the smoothed jitter number hides: brief network loss
+<a href=#146 id=146 data-nosnippet>146</a>    // (small ts gaps → PLC), sender DTX / capture discontinuity (large ts gaps → NOT
+<a href=#147 id=147 data-nosnippet>147</a>    // loss, must not be PLC-fabricated), and sender↔receiver clock skew (ts-elapsed vs
+<a href=#148 id=148 data-nosnippet>148</a>    // local-elapsed divergence → buffer slowly drains). Logged once per window.
+<a href=#149 id=149 data-nosnippet>149</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>diag = CadenceDiag::default();
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="comment">// Encoded-frame reorder buffer (sorted by ts): we pull from the network into it so
+<a href=#151 id=151 data-nosnippet>151</a>    // reordering is undone BEFORE the stateful decode, and `release_next` owns when a
+<a href=#152 id=152 data-nosnippet>152</a>    // frame comes back out — including the DTX drain `drain_hold` arms.
+<a href=#153 id=153 data-nosnippet>153</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>reorder: Vec&lt;HeldFrame&gt; = Vec::with_capacity(AUDIO_REORDER_HOLD + <span class="number">2</span>);
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">let </span><span class="kw-2">mut </span>ended = <span class="bool-val">false</span>;
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span><span class="kw-2">mut </span>drain_hold = <span class="bool-val">false</span>;
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="comment">// Acquire the next frame to PROCESS, in TIMESTAMP order, refilling from the
+<a href=#158 id=158 data-nosnippet>158</a>        // network until the hold will give one up. `next_frame` is never cancelled —
+<a href=#159 id=159 data-nosnippet>159</a>        // only fully-received frames enter the buffer.
+<a href=#160 id=160 data-nosnippet>160</a>        </span><span class="kw">let </span>held = <span class="kw">loop </span>{
+<a href=#161 id=161 data-nosnippet>161</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(f) = release_next(<span class="kw-2">&amp;mut </span>reorder, <span class="kw-2">&amp;mut </span>drain_hold, ended) {
+<a href=#162 id=162 data-nosnippet>162</a>                <span class="kw">break </span><span class="prelude-val">Some</span>(f);
+<a href=#163 id=163 data-nosnippet>163</a>            }
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">if </span>ended {
+<a href=#165 id=165 data-nosnippet>165</a>                <span class="kw">break </span><span class="prelude-val">None</span>; <span class="comment">// track over and the hold is dry
+<a href=#166 id=166 data-nosnippet>166</a>            </span>}
+<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">let </span>now = clock.now();
+<a href=#168 id=168 data-nosnippet>168</a>            <span class="kw">match </span>subscriber.next_frame(now).<span class="kw">await </span>{
+<a href=#169 id=169 data-nosnippet>169</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(f)) =&gt; {
+<a href=#170 id=170 data-nosnippet>170</a>                    arrivals.fetch_add(<span class="number">1</span>, Ordering::Relaxed);
+<a href=#171 id=171 data-nosnippet>171</a>                    <span class="comment">// RTC-debug: one inbound Opus frame received (counted on arrival).
+<a href=#172 id=172 data-nosnippet>172</a>                    </span>peer_stats.audio_received(akind, f.data.len());
+<a href=#173 id=173 data-nosnippet>173</a>                    drain_hold |= f.data.len() &lt;= DTX_MAX_BYTES;
+<a href=#174 id=174 data-nosnippet>174</a>                    <span class="comment">// Stamped AFTER the await completes: this is the wire instant, and
+<a href=#175 id=175 data-nosnippet>175</a>                    // the only place it can still be observed.
+<a href=#176 id=176 data-nosnippet>176</a>                    </span><span class="kw">let </span>arrival_us = clock.now();
+<a href=#177 id=177 data-nosnippet>177</a>                    reorder_insert(
+<a href=#178 id=178 data-nosnippet>178</a>                        <span class="kw-2">&amp;mut </span>reorder,
+<a href=#179 id=179 data-nosnippet>179</a>                        HeldFrame {
+<a href=#180 id=180 data-nosnippet>180</a>                            arrival_us,
+<a href=#181 id=181 data-nosnippet>181</a>                            frame: f,
+<a href=#182 id=182 data-nosnippet>182</a>                        },
+<a href=#183 id=183 data-nosnippet>183</a>                    );
+<a href=#184 id=184 data-nosnippet>184</a>                }
+<a href=#185 id=185 data-nosnippet>185</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) | <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; ended = <span class="bool-val">true</span>,
+<a href=#186 id=186 data-nosnippet>186</a>            }
+<a href=#187 id=187 data-nosnippet>187</a>        };
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(HeldFrame { arrival_us, frame }) = held <span class="kw">else </span>{
+<a href=#189 id=189 data-nosnippet>189</a>            <span class="kw">break</span>;
+<a href=#190 id=190 data-nosnippet>190</a>        };
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>ts = frame.timestamp_us;
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="comment">// Local time at processing (after any reorder hold) — for the cadence skew calc.
+<a href=#193 id=193 data-nosnippet>193</a>        </span><span class="kw">let </span>now = clock.now();
+<a href=#194 id=194 data-nosnippet>194</a>
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="comment">// Frames now arrive in timestamp order, so a non-advancing timestamp is a true
+<a href=#196 id=196 data-nosnippet>196</a>        // duplicate/straggler the reorder buffer couldn't place (rare), not routine
+<a href=#197 id=197 data-nosnippet>197</a>        // network reordering — skip it to keep the stateful decoder coherent.
+<a href=#198 id=198 data-nosnippet>198</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(pt) = prev_ts {
+<a href=#199 id=199 data-nosnippet>199</a>            <span class="kw">let </span>gap = ts - pt;
+<a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">if </span>gap &lt;= <span class="number">0 </span>{
+<a href=#201 id=201 data-nosnippet>201</a>                peer_stats.record_audio_loss(akind, <span class="number">0</span>, <span class="bool-val">true</span>);
+<a href=#202 id=202 data-nosnippet>202</a>                <span class="kw">continue</span>;
+<a href=#203 id=203 data-nosnippet>203</a>            }
+<a href=#204 id=204 data-nosnippet>204</a>            diag.note_gap(gap);
+<a href=#205 id=205 data-nosnippet>205</a>            <span class="comment">// PLC conceals BRIEF loss only — see [`classify_audio_gap`], which draws
+<a href=#206 id=206 data-nosnippet>206</a>            // the line. A larger gap is the sender not transmitting (Opus DTX plus the
+<a href=#207 id=207 data-nosnippet>207</a>            // publisher's silence suppression: nothing but a keepalive every ~500 ms)
+<a href=#208 id=208 data-nosnippet>208</a>            // or a capture discontinuity — NOT packet loss. Fabricating one
+<a href=#209 id=209 data-nosnippet>209</a>            // extrapolated PLC frame per 20 ms of gap would mislabel silence as loss (a
+<a href=#210 id=210 data-nosnippet>210</a>            // silent peer would produce more concealment than real audio), waste CPU,
+<a href=#211 id=211 data-nosnippet>211</a>            // and — worst — splice garbage PLC into an ACTIVE stream where it
+<a href=#212 id=212 data-nosnippet>212</a>            // leapfrogs/drops the real frame behind it.
+<a href=#213 id=213 data-nosnippet>213</a>            </span><span class="kw">match </span>classify_audio_gap(gap, frame_us) {
+<a href=#214 id=214 data-nosnippet>214</a>                AudioGap::Continuous =&gt; {}
+<a href=#215 id=215 data-nosnippet>215</a>                AudioGap::Conceal(missing) =&gt; {
+<a href=#216 id=216 data-nosnippet>216</a>                    <span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..=missing {
+<a href=#217 id=217 data-nosnippet>217</a>                        <span class="kw">let </span>plc_ts = pt + frame_us * i;
+<a href=#218 id=218 data-nosnippet>218</a>                        <span class="kw">if let </span><span class="prelude-val">Ok</span>(plc) = decoder.decode(<span class="prelude-val">None</span>, TimestampUs::from_micros(plc_ts)) {
+<a href=#219 id=219 data-nosnippet>219</a>                            <span class="kw">let _ </span>= producer.push(clock.now(), plc_ts, <span class="kw-2">&amp;</span>plc.samples);
+<a href=#220 id=220 data-nosnippet>220</a>                        }
+<a href=#221 id=221 data-nosnippet>221</a>                    }
+<a href=#222 id=222 data-nosnippet>222</a>                    peer_stats.record_audio_loss(akind, missing <span class="kw">as </span>u64, <span class="bool-val">false</span>);
+<a href=#223 id=223 data-nosnippet>223</a>                    diag.plc += missing <span class="kw">as </span>u64;
+<a href=#224 id=224 data-nosnippet>224</a>                }
+<a href=#225 id=225 data-nosnippet>225</a>                AudioGap::Silence =&gt; {
+<a href=#226 id=226 data-nosnippet>226</a>                    <span class="comment">// Silence across the gap (correct — there was no audio), no loss
+<a href=#227 id=227 data-nosnippet>227</a>                    // recorded, and the peer's meter goes dark at once rather than
+<a href=#228 id=228 data-nosnippet>228</a>                    // holding its last speaking level until the next frame decodes.
+<a href=#229 id=229 data-nosnippet>229</a>                    // Resync to the new frame (prev_ts advances after decode).
+<a href=#230 id=230 data-nosnippet>230</a>                    </span>diag.big_gaps += <span class="number">1</span>;
+<a href=#231 id=231 data-nosnippet>231</a>                    <span class="kw">if </span>!is_screen {
+<a href=#232 id=232 data-nosnippet>232</a>                        levels.send_modify(|l| {
+<a href=#233 id=233 data-nosnippet>233</a>                            l.peers.insert(peer.<span class="number">0</span>, <span class="number">0.0</span>);
+<a href=#234 id=234 data-nosnippet>234</a>                        });
+<a href=#235 id=235 data-nosnippet>235</a>                    }
+<a href=#236 id=236 data-nosnippet>236</a>                    peer_stats.set_audio_level(akind, <span class="number">0.0</span>);
+<a href=#237 id=237 data-nosnippet>237</a>                }
+<a href=#238 id=238 data-nosnippet>238</a>            }
+<a href=#239 id=239 data-nosnippet>239</a>        }
+<a href=#240 id=240 data-nosnippet>240</a>
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="comment">// Kept past the move into `packet`: the payload SIZE is the sender's own
+<a href=#242 id=242 data-nosnippet>242</a>        // speech/no-speech verdict, and the level meter reads it (see
+<a href=#243 id=243 data-nosnippet>243</a>        // [`reported_audio_level`]).
+<a href=#244 id=244 data-nosnippet>244</a>        </span><span class="kw">let </span>encoded_len = frame.data.len();
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span>packet = OpusPacket {
+<a href=#246 id=246 data-nosnippet>246</a>            data: frame.data,
+<a href=#247 id=247 data-nosnippet>247</a>            timestamp_us: TimestampUs::from_micros(ts),
+<a href=#248 id=248 data-nosnippet>248</a>        };
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>pcm) = decoder.decode(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>packet), TimestampUs::from_micros(ts)) <span class="kw">else </span>{
+<a href=#250 id=250 data-nosnippet>250</a>            <span class="kw">continue</span>;
+<a href=#251 id=251 data-nosnippet>251</a>        };
+<a href=#252 id=252 data-nosnippet>252</a>        delivered.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#253 id=253 data-nosnippet>253</a>        prev_ts = <span class="prelude-val">Some</span>(ts);
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">if </span>!learned_frame_us &amp;&amp; !pcm.samples.is_empty() {
+<a href=#255 id=255 data-nosnippet>255</a>            frame_us = (pcm.samples.len() <span class="kw">as </span>i64 * <span class="number">1_000_000 </span>/ ENGINE_RATE_HZ).max(<span class="number">1</span>);
+<a href=#256 id=256 data-nosnippet>256</a>            learned_frame_us = <span class="bool-val">true</span>;
 <a href=#257 id=257 data-nosnippet>257</a>        }
-<a href=#258 id=258 data-nosnippet>258</a>    }
-<a href=#259 id=259 data-nosnippet>259</a>
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="attr">#[test]
-<a href=#261 id=261 data-nosnippet>261</a>    </span><span class="kw">fn </span>reorder_insert_sorts_by_timestamp() {
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="comment">// Frames arriving out of order are placed in ascending-timestamp order, so the
-<a href=#263 id=263 data-nosnippet>263</a>        // stateful decoder downstream sees a clean monotonic stream.
-<a href=#264 id=264 data-nosnippet>264</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
-<a href=#265 id=265 data-nosnippet>265</a>        <span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">40_000</span>)));
-<a href=#266 id=266 data-nosnippet>266</a>        <span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">20_000</span>))); <span class="comment">// arrives late
-<a href=#267 id=267 data-nosnippet>267</a>        </span><span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">60_000</span>)));
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">0</span>))); <span class="comment">// arrives very late
-<a href=#269 id=269 data-nosnippet>269</a>        </span><span class="kw">let </span>order: Vec&lt;i64&gt; = buf.iter().map(|f| f.timestamp_us).collect();
-<a href=#270 id=270 data-nosnippet>270</a>        <span class="macro">assert_eq!</span>(order, <span class="macro">vec!</span>[<span class="number">0</span>, <span class="number">20_000</span>, <span class="number">40_000</span>, <span class="number">60_000</span>], <span class="string">"sorted by ts"</span>);
-<a href=#271 id=271 data-nosnippet>271</a>    }
-<a href=#272 id=272 data-nosnippet>272</a>
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="attr">#[test]
-<a href=#274 id=274 data-nosnippet>274</a>    </span><span class="kw">fn </span>reorder_insert_drops_exact_duplicate_ts() {
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">20_000</span>)));
-<a href=#277 id=277 data-nosnippet>277</a>        <span class="macro">assert!</span>(
-<a href=#278 id=278 data-nosnippet>278</a>            !reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">20_000</span>)),
-<a href=#279 id=279 data-nosnippet>279</a>            <span class="string">"duplicate ts dropped"
-<a href=#280 id=280 data-nosnippet>280</a>        </span>);
-<a href=#281 id=281 data-nosnippet>281</a>        <span class="macro">assert_eq!</span>(buf.len(), <span class="number">1</span>);
-<a href=#282 id=282 data-nosnippet>282</a>    }
-<a href=#283 id=283 data-nosnippet>283</a>
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="attr">#[test]
-<a href=#285 id=285 data-nosnippet>285</a>    </span><span class="kw">fn </span>reorder_release_yields_monotonic_stream() {
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="comment">// Simulate the HOLD release policy over a reordered arrival sequence and assert
-<a href=#287 id=287 data-nosnippet>287</a>        // the released (oldest-first) timestamps are monotonic — no frame is ever
-<a href=#288 id=288 data-nosnippet>288</a>        // released out of order, which is what keeps the decoder coherent.
-<a href=#289 id=289 data-nosnippet>289</a>        </span><span class="kw">let </span>arrivals = [<span class="number">0i64</span>, <span class="number">40_000</span>, <span class="number">20_000</span>, <span class="number">80_000</span>, <span class="number">60_000</span>, <span class="number">100_000</span>];
-<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf: Vec&lt;WireFrame&gt; = Vec::new();
-<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">let </span><span class="kw-2">mut </span>released = Vec::new();
-<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>ts <span class="kw">in </span><span class="kw-2">&amp;</span>arrivals {
-<a href=#293 id=293 data-nosnippet>293</a>            reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(ts));
-<a href=#294 id=294 data-nosnippet>294</a>            <span class="kw">while </span>buf.len() &gt; AUDIO_REORDER_HOLD {
-<a href=#295 id=295 data-nosnippet>295</a>                released.push(buf.remove(<span class="number">0</span>).timestamp_us);
-<a href=#296 id=296 data-nosnippet>296</a>            }
-<a href=#297 id=297 data-nosnippet>297</a>        }
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">while </span>!buf.is_empty() {
-<a href=#299 id=299 data-nosnippet>299</a>            released.push(buf.remove(<span class="number">0</span>).timestamp_us);
-<a href=#300 id=300 data-nosnippet>300</a>        }
-<a href=#301 id=301 data-nosnippet>301</a>        <span class="macro">assert!</span>(
-<a href=#302 id=302 data-nosnippet>302</a>            released.windows(<span class="number">2</span>).all(|w| w[<span class="number">0</span>] &lt; w[<span class="number">1</span>]),
-<a href=#303 id=303 data-nosnippet>303</a>            <span class="string">"released stream must be strictly increasing: {released:?}"
-<a href=#304 id=304 data-nosnippet>304</a>        </span>);
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="macro">assert_eq!</span>(released.len(), arrivals.len(), <span class="string">"every frame released once"</span>);
-<a href=#306 id=306 data-nosnippet>306</a>    }
-<a href=#307 id=307 data-nosnippet>307</a>}
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="comment">// Per-stream playback gain (the tile volume/mute control), applied before the
+<a href=#259 id=259 data-nosnippet>259</a>        // level meter and the mix push so both reflect what is actually played (a
+<a href=#260 id=260 data-nosnippet>260</a>        // muted stream's meter reads 0 and its speaking ring stays off). Unity skips
+<a href=#261 id=261 data-nosnippet>261</a>        // the pass entirely (the common case costs one atomic load).
+<a href=#262 id=262 data-nosnippet>262</a>        </span><span class="kw">let </span>g = f32::from_bits(gain.load(Ordering::Relaxed));
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">if </span><span class="macro">g !</span>= <span class="number">1.0 </span>{
+<a href=#264 id=264 data-nosnippet>264</a>            apply_gain(<span class="kw-2">&amp;mut </span>pcm.samples, g);
+<a href=#265 id=265 data-nosnippet>265</a>        }
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="comment">// Both mic + screen audio record their decoded level for the panel; only the
+<a href=#267 id=267 data-nosnippet>267</a>        // mic drives the per-peer level meter / speaking ring (both key on peer id).
+<a href=#268 id=268 data-nosnippet>268</a>        </span><span class="kw">let </span>level = reported_audio_level(encoded_len, pcm.rms());
+<a href=#269 id=269 data-nosnippet>269</a>        peer_stats.set_audio_level(akind, level);
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="kw">if </span>!is_screen {
+<a href=#271 id=271 data-nosnippet>271</a>            levels.send_modify(|l| {
+<a href=#272 id=272 data-nosnippet>272</a>                l.peers.insert(peer.<span class="number">0</span>, level);
+<a href=#273 id=273 data-nosnippet>273</a>            });
+<a href=#274 id=274 data-nosnippet>274</a>        }
+<a href=#275 id=275 data-nosnippet>275</a>        <span class="comment">// The mix bus pulls on its own RT clock; we only FILL the jitter buffer.
+<a href=#276 id=276 data-nosnippet>276</a>        // Surface the post-push jitter-buffer health to the panel/report: depth
+<a href=#277 id=277 data-nosnippet>277</a>        // (cur vs recommended), late/overflow drops, and this slot's underflow total.
+<a href=#278 id=278 data-nosnippet>278</a>        // A depth that climbs while silent = buffered-but-never-released (a playout
+<a href=#279 id=279 data-nosnippet>279</a>        // stall); recommended ≫ target = the buffer is too shallow for the link.
+<a href=#280 id=280 data-nosnippet>280</a>        // `arrival_us` (the wire instant, carried through the hold) feeds the jitter
+<a href=#281 id=281 data-nosnippet>281</a>        // estimator; `clock.now()` is when the frame actually became available for
+<a href=#282 id=282 data-nosnippet>282</a>        // playout. Conflating them makes the reorder hold's own release cadence read as
+<a href=#283 id=283 data-nosnippet>283</a>        // link jitter — see [`BusProducer::push_at`].
+<a href=#284 id=284 data-nosnippet>284</a>        </span><span class="kw">let </span>status = producer.push_at(arrival_us, clock.now(), ts, <span class="kw-2">&amp;</span>pcm.samples);
+<a href=#285 id=285 data-nosnippet>285</a>        peer_stats.set_audio_playout_depth(akind, status.buffered_frames);
+<a href=#286 id=286 data-nosnippet>286</a>        peer_stats.set_audio_jitter(akind, status.jitter_us.max(<span class="number">0</span>) <span class="kw">as </span>u32);
+<a href=#287 id=287 data-nosnippet>287</a>        peer_stats.set_audio_jitterbuf(
+<a href=#288 id=288 data-nosnippet>288</a>            akind,
+<a href=#289 id=289 data-nosnippet>289</a>            status.target_delay_us.max(<span class="number">0</span>) <span class="kw">as </span>u32,
+<a href=#290 id=290 data-nosnippet>290</a>            status.recommended_delay_us.max(<span class="number">0</span>) <span class="kw">as </span>u32,
+<a href=#291 id=291 data-nosnippet>291</a>            status.late_drops,
+<a href=#292 id=292 data-nosnippet>292</a>            status.overflow_drops,
+<a href=#293 id=293 data-nosnippet>293</a>            status.underflow_total,
+<a href=#294 id=294 data-nosnippet>294</a>        );
+<a href=#295 id=295 data-nosnippet>295</a>        decoded += <span class="number">1</span>;
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="comment">// Feed the cadence diagnostic and emit a window summary periodically. This is
+<a href=#297 id=297 data-nosnippet>297</a>        // the tool for attributing an active-stream gap: high `plc` = brief loss;
+<a href=#298 id=298 data-nosnippet>298</a>        // high `big_gaps`/`max_gap_ms` = sender DTX or a capture stall (a sender-side
+<a href=#299 id=299 data-nosnippet>299</a>        // problem, not network); large |skew_ppm| = clock drift slowly draining the
+<a href=#300 id=300 data-nosnippet>300</a>        // buffer (needs resampling/retiming, not a deeper buffer).
+<a href=#301 id=301 data-nosnippet>301</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>((real, plc, big_gaps, max_gap_ms, skew_ppm)) = diag.observe(ts, now) {
+<a href=#302 id=302 data-nosnippet>302</a>            <span class="macro">tracing::info!</span>(
+<a href=#303 id=303 data-nosnippet>303</a>                <span class="question-mark">?</span>source,
+<a href=#304 id=304 data-nosnippet>304</a>                peer = peer.<span class="number">0</span>,
+<a href=#305 id=305 data-nosnippet>305</a>                real,
+<a href=#306 id=306 data-nosnippet>306</a>                plc,
+<a href=#307 id=307 data-nosnippet>307</a>                big_gaps,
+<a href=#308 id=308 data-nosnippet>308</a>                max_gap_ms,
+<a href=#309 id=309 data-nosnippet>309</a>                skew_ppm,
+<a href=#310 id=310 data-nosnippet>310</a>                jitterbuf_ms = status.target_delay_us / <span class="number">1000</span>,
+<a href=#311 id=311 data-nosnippet>311</a>                underflow_total = status.underflow_total,
+<a href=#312 id=312 data-nosnippet>312</a>                <span class="string">"audio: cadence window"
+<a href=#313 id=313 data-nosnippet>313</a>            </span>);
+<a href=#314 id=314 data-nosnippet>314</a>        }
+<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">if </span>decoded == <span class="number">1 </span>|| decoded.is_multiple_of(<span class="number">500</span>) {
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="macro">tracing::info!</span>(
+<a href=#317 id=317 data-nosnippet>317</a>                <span class="question-mark">?</span>source,
+<a href=#318 id=318 data-nosnippet>318</a>                peer = peer.<span class="number">0</span>,
+<a href=#319 id=319 data-nosnippet>319</a>                decoded,
+<a href=#320 id=320 data-nosnippet>320</a>                <span class="string">"audio: decoded+mixed frames"
+<a href=#321 id=321 data-nosnippet>321</a>            </span>);
+<a href=#322 id=322 data-nosnippet>322</a>        }
+<a href=#323 id=323 data-nosnippet>323</a>    }
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">if </span>!is_screen {
+<a href=#325 id=325 data-nosnippet>325</a>        levels.send_modify(|l| {
+<a href=#326 id=326 data-nosnippet>326</a>            l.peers.remove(<span class="kw-2">&amp;</span>peer.<span class="number">0</span>);
+<a href=#327 id=327 data-nosnippet>327</a>        });
+<a href=#328 id=328 data-nosnippet>328</a>    }
+<a href=#329 id=329 data-nosnippet>329</a>    <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>source, peer = peer.<span class="number">0</span>, decoded, <span class="string">"audio: pipeline ended"</span>);
+<a href=#330 id=330 data-nosnippet>330</a>}
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a><span class="attr">#[cfg(test)]
+<a href=#333 id=333 data-nosnippet>333</a></span><span class="kw">mod </span>tests {
+<a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">use </span>hound_media::{AdaptiveJitter, PlayoutBuffer, Timestamped};
+<a href=#335 id=335 data-nosnippet>335</a>
+<a href=#336 id=336 data-nosnippet>336</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#337 id=337 data-nosnippet>337</a>
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="comment">// ─── Encoded-audio reorder buffer ───────────────────────────────────────────
+<a href=#339 id=339 data-nosnippet>339</a>
+<a href=#340 id=340 data-nosnippet>340</a>    </span><span class="doccomment">/// One 20 ms frame at the engine's rate — what `frame_us` is learned as.
+<a href=#341 id=341 data-nosnippet>341</a>    </span><span class="kw">const </span>FRAME_US: i64 = <span class="number">20_000</span>;
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="doccomment">/// A coded-speech payload size, and a DTX one. The gap between them is the
+<a href=#343 id=343 data-nosnippet>343</a>    /// sender's own speech/no-speech verdict, and the drain rule reads it.
+<a href=#344 id=344 data-nosnippet>344</a>    </span><span class="kw">const </span>VOICED_BYTES: usize = <span class="number">62</span>;
+<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">const </span>DTX_BYTES: usize = <span class="number">2</span>;
+<a href=#346 id=346 data-nosnippet>346</a>
+<a href=#347 id=347 data-nosnippet>347</a>    <span class="doccomment">/// A CODED frame at `ts` (arrival = ts, i.e. a zero-latency link).
+<a href=#348 id=348 data-nosnippet>348</a>    </span><span class="kw">fn </span>afr(ts: i64) -&gt; HeldFrame {
+<a href=#349 id=349 data-nosnippet>349</a>        held(ts, ts, VOICED_BYTES)
+<a href=#350 id=350 data-nosnippet>350</a>    }
+<a href=#351 id=351 data-nosnippet>351</a>
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">fn </span>held(ts: i64, arrival_us: i64, bytes: usize) -&gt; HeldFrame {
+<a href=#353 id=353 data-nosnippet>353</a>        HeldFrame {
+<a href=#354 id=354 data-nosnippet>354</a>            arrival_us,
+<a href=#355 id=355 data-nosnippet>355</a>            frame: WireFrame {
+<a href=#356 id=356 data-nosnippet>356</a>                sender: <span class="number">0</span>,
+<a href=#357 id=357 data-nosnippet>357</a>                track: TrackKind::CamAudio,
+<a href=#358 id=358 data-nosnippet>358</a>                codec: WireCodec::Opus,
+<a href=#359 id=359 data-nosnippet>359</a>                keyframe: <span class="bool-val">true</span>,
+<a href=#360 id=360 data-nosnippet>360</a>                frame_seq: <span class="number">0</span>,
+<a href=#361 id=361 data-nosnippet>361</a>                timestamp_us: ts,
+<a href=#362 id=362 data-nosnippet>362</a>                data: <span class="macro">vec!</span>[ts <span class="kw">as </span>u8; bytes],
+<a href=#363 id=363 data-nosnippet>363</a>            },
+<a href=#364 id=364 data-nosnippet>364</a>        }
+<a href=#365 id=365 data-nosnippet>365</a>    }
+<a href=#366 id=366 data-nosnippet>366</a>
+<a href=#367 id=367 data-nosnippet>367</a>    <span class="doccomment">/// Release everything the hold will currently give up, appending timestamps to
+<a href=#368 id=368 data-nosnippet>368</a>    /// `out`. The real [`release_next`], looped — never a restatement of its rules.
+<a href=#369 id=369 data-nosnippet>369</a>    </span><span class="kw">fn </span>drain_available(
+<a href=#370 id=370 data-nosnippet>370</a>        buf: <span class="kw-2">&amp;mut </span>Vec&lt;HeldFrame&gt;,
+<a href=#371 id=371 data-nosnippet>371</a>        drain: <span class="kw-2">&amp;mut </span>bool,
+<a href=#372 id=372 data-nosnippet>372</a>        ended: bool,
+<a href=#373 id=373 data-nosnippet>373</a>        out: <span class="kw-2">&amp;mut </span>Vec&lt;i64&gt;,
+<a href=#374 id=374 data-nosnippet>374</a>    ) {
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(h) = release_next(buf, drain, ended) {
+<a href=#376 id=376 data-nosnippet>376</a>            out.push(h.frame.timestamp_us);
+<a href=#377 id=377 data-nosnippet>377</a>        }
+<a href=#378 id=378 data-nosnippet>378</a>    }
+<a href=#379 id=379 data-nosnippet>379</a>
+<a href=#380 id=380 data-nosnippet>380</a>    <span class="attr">#[test]
+<a href=#381 id=381 data-nosnippet>381</a>    </span><span class="kw">fn </span>reorder_insert_sorts_by_timestamp() {
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="comment">// Frames arriving out of order are placed in ascending-timestamp order, so the
+<a href=#383 id=383 data-nosnippet>383</a>        // stateful decoder downstream sees a clean monotonic stream.
+<a href=#384 id=384 data-nosnippet>384</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">40_000</span>)));
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">20_000</span>))); <span class="comment">// arrives late
+<a href=#387 id=387 data-nosnippet>387</a>        </span><span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">60_000</span>)));
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">0</span>))); <span class="comment">// arrives very late
+<a href=#389 id=389 data-nosnippet>389</a>        </span><span class="kw">let </span>order: Vec&lt;i64&gt; = buf.iter().map(|f| f.frame.timestamp_us).collect();
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="macro">assert_eq!</span>(order, <span class="macro">vec!</span>[<span class="number">0</span>, <span class="number">20_000</span>, <span class="number">40_000</span>, <span class="number">60_000</span>], <span class="string">"sorted by ts"</span>);
+<a href=#391 id=391 data-nosnippet>391</a>    }
+<a href=#392 id=392 data-nosnippet>392</a>
+<a href=#393 id=393 data-nosnippet>393</a>    <span class="attr">#[test]
+<a href=#394 id=394 data-nosnippet>394</a>    </span><span class="kw">fn </span>reorder_insert_drops_exact_duplicate_ts() {
+<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="macro">assert!</span>(reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">20_000</span>)));
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="macro">assert!</span>(
+<a href=#398 id=398 data-nosnippet>398</a>            !reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(<span class="number">20_000</span>)),
+<a href=#399 id=399 data-nosnippet>399</a>            <span class="string">"duplicate ts dropped"
+<a href=#400 id=400 data-nosnippet>400</a>        </span>);
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="macro">assert_eq!</span>(buf.len(), <span class="number">1</span>);
+<a href=#402 id=402 data-nosnippet>402</a>    }
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="attr">#[test]
+<a href=#405 id=405 data-nosnippet>405</a>    </span><span class="kw">fn </span>reorder_release_yields_monotonic_stream() {
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="comment">// Simulate the HOLD release policy over a reordered arrival sequence and assert
+<a href=#407 id=407 data-nosnippet>407</a>        // the released (oldest-first) timestamps are monotonic — no frame is ever
+<a href=#408 id=408 data-nosnippet>408</a>        // released out of order, which is what keeps the decoder coherent.
+<a href=#409 id=409 data-nosnippet>409</a>        </span><span class="kw">let </span>arrivals = [<span class="number">0i64</span>, <span class="number">40_000</span>, <span class="number">20_000</span>, <span class="number">80_000</span>, <span class="number">60_000</span>, <span class="number">100_000</span>];
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>buf, <span class="kw-2">mut </span>drain, <span class="kw-2">mut </span>released) = (Vec::new(), <span class="bool-val">false</span>, Vec::new());
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>ts <span class="kw">in </span><span class="kw-2">&amp;</span>arrivals {
+<a href=#412 id=412 data-nosnippet>412</a>            reorder_insert(<span class="kw-2">&amp;mut </span>buf, afr(ts));
+<a href=#413 id=413 data-nosnippet>413</a>            drain_available(<span class="kw-2">&amp;mut </span>buf, <span class="kw-2">&amp;mut </span>drain, <span class="bool-val">false</span>, <span class="kw-2">&amp;mut </span>released);
+<a href=#414 id=414 data-nosnippet>414</a>        }
+<a href=#415 id=415 data-nosnippet>415</a>        drain_available(<span class="kw-2">&amp;mut </span>buf, <span class="kw-2">&amp;mut </span>drain, <span class="bool-val">true</span>, <span class="kw-2">&amp;mut </span>released);
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="macro">assert!</span>(
+<a href=#417 id=417 data-nosnippet>417</a>            released.windows(<span class="number">2</span>).all(|w| w[<span class="number">0</span>] &lt; w[<span class="number">1</span>]),
+<a href=#418 id=418 data-nosnippet>418</a>            <span class="string">"released stream must be strictly increasing: {released:?}"
+<a href=#419 id=419 data-nosnippet>419</a>        </span>);
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="macro">assert_eq!</span>(released.len(), arrivals.len(), <span class="string">"every frame released once"</span>);
+<a href=#421 id=421 data-nosnippet>421</a>    }
+<a href=#422 id=422 data-nosnippet>422</a>
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="comment">// ─── Receiving from a SUPPRESSING publisher ─────────────────────────────────
+<a href=#424 id=424 data-nosnippet>424</a>
+<a href=#425 id=425 data-nosnippet>425</a>    </span><span class="doccomment">/// The arrival timeline of a publisher that talks, goes quiet (suppressed, one
+<a href=#426 id=426 data-nosnippet>426</a>    /// keepalive per `KEEPALIVE_INTERVAL`) for `quiet` frames' worth of wall time, then
+<a href=#427 id=427 data-nosnippet>427</a>    /// talks again. Capture timestamps throughout — the publisher never invents any.
+<a href=#428 id=428 data-nosnippet>428</a>    </span><span class="kw">fn </span>suppressed_timeline(quiet_frames: i64) -&gt; Vec&lt;i64&gt; {
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">let </span>keepalive_us = KEEPALIVE_INTERVAL.as_micros() <span class="kw">as </span>i64;
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">let </span><span class="kw-2">mut </span>ts: Vec&lt;i64&gt; = (<span class="number">0</span>..<span class="number">50</span>).map(|i| i * FRAME_US).collect(); <span class="comment">// 1 s of speech
+<a href=#431 id=431 data-nosnippet>431</a>        </span><span class="kw">let </span>quiet_start = <span class="number">50 </span>* FRAME_US;
+<a href=#432 id=432 data-nosnippet>432</a>        <span class="comment">// The confirmation window still publishes every frame, then keepalives.
+<a href=#433 id=433 data-nosnippet>433</a>        </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..SUPPRESS_AFTER <span class="kw">as </span>i64 {
+<a href=#434 id=434 data-nosnippet>434</a>            ts.push(quiet_start + i * FRAME_US);
+<a href=#435 id=435 data-nosnippet>435</a>        }
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="kw">let </span><span class="kw-2">mut </span>t = quiet_start + SUPPRESS_AFTER <span class="kw">as </span>i64 * FRAME_US;
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">let </span>resume_at = quiet_start + quiet_frames * FRAME_US;
+<a href=#438 id=438 data-nosnippet>438</a>        <span class="kw">while </span>t + keepalive_us &lt; resume_at {
+<a href=#439 id=439 data-nosnippet>439</a>            t += keepalive_us;
+<a href=#440 id=440 data-nosnippet>440</a>            <span class="comment">// A keepalive is a REAL captured frame, so its stamp lands on the frame grid.
+<a href=#441 id=441 data-nosnippet>441</a>            </span>ts.push(t - t % FRAME_US);
+<a href=#442 id=442 data-nosnippet>442</a>        }
+<a href=#443 id=443 data-nosnippet>443</a>        ts.extend((<span class="number">0</span>..<span class="number">50</span>).map(|i| resume_at + i * FRAME_US)); <span class="comment">// 1 s of speech again
+<a href=#444 id=444 data-nosnippet>444</a>        </span>ts
+<a href=#445 id=445 data-nosnippet>445</a>    }
+<a href=#446 id=446 data-nosnippet>446</a>
+<a href=#447 id=447 data-nosnippet>447</a>    <span class="doccomment">/// A multi-second suppression gap must classify as SILENCE end to end: not one
+<a href=#448 id=448 data-nosnippet>448</a>    /// concealed frame, not one frame counted lost. The failure this pins is the
+<a href=#449 id=449 data-nosnippet>449</a>    /// receiver reading a quiet peer as a lossy one — which would put every silent
+<a href=#450 id=450 data-nosnippet>450</a>    /// participant in the audio report's `network-loss` rule and make PLC (fabricated
+<a href=#451 id=451 data-nosnippet>451</a>    /// audio) the dominant thing a silent call decodes.
+<a href=#452 id=452 data-nosnippet>452</a>    </span><span class="attr">#[test]
+<a href=#453 id=453 data-nosnippet>453</a>    </span><span class="kw">fn </span>a_suppression_gap_classifies_as_silence_with_no_loss_or_plc() {
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="kw">let </span>ts = suppressed_timeline(<span class="number">500</span>); <span class="comment">// 10 s quiet
+<a href=#455 id=455 data-nosnippet>455</a>        </span><span class="kw">let </span>(<span class="kw-2">mut </span>concealed, <span class="kw-2">mut </span>silences, <span class="kw-2">mut </span>continuous) = (<span class="number">0i64</span>, <span class="number">0u32</span>, <span class="number">0u32</span>);
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">for </span>w <span class="kw">in </span>ts.windows(<span class="number">2</span>) {
+<a href=#457 id=457 data-nosnippet>457</a>            <span class="kw">match </span>classify_audio_gap(w[<span class="number">1</span>] - w[<span class="number">0</span>], FRAME_US) {
+<a href=#458 id=458 data-nosnippet>458</a>                AudioGap::Continuous =&gt; continuous += <span class="number">1</span>,
+<a href=#459 id=459 data-nosnippet>459</a>                AudioGap::Conceal(n) =&gt; concealed += n,
+<a href=#460 id=460 data-nosnippet>460</a>                AudioGap::Silence =&gt; silences += <span class="number">1</span>,
+<a href=#461 id=461 data-nosnippet>461</a>            }
+<a href=#462 id=462 data-nosnippet>462</a>        }
+<a href=#463 id=463 data-nosnippet>463</a>        <span class="macro">assert_eq!</span>(
+<a href=#464 id=464 data-nosnippet>464</a>            concealed, <span class="number">0</span>,
+<a href=#465 id=465 data-nosnippet>465</a>            <span class="string">"a suppressed publisher must never make the receiver conceal or count loss"
+<a href=#466 id=466 data-nosnippet>466</a>        </span>);
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="macro">assert!</span>(
+<a href=#468 id=468 data-nosnippet>468</a>            silences &gt;= <span class="number">19</span>,
+<a href=#469 id=469 data-nosnippet>469</a>            <span class="string">"each keepalive gap is a silence classification; got {silences}"
+<a href=#470 id=470 data-nosnippet>470</a>        </span>);
+<a href=#471 id=471 data-nosnippet>471</a>        <span class="macro">assert!</span>(
+<a href=#472 id=472 data-nosnippet>472</a>            continuous &gt; <span class="number">90</span>,
+<a href=#473 id=473 data-nosnippet>473</a>            <span class="string">"the speech either side stays ordinary cadence; got {continuous}"
+<a href=#474 id=474 data-nosnippet>474</a>        </span>);
+<a href=#475 id=475 data-nosnippet>475</a>    }
+<a href=#476 id=476 data-nosnippet>476</a>
+<a href=#477 id=477 data-nosnippet>477</a>    <span class="comment">// ─── The receive seam, driven against the REAL jitter machinery ─────────────
+<a href=#478 id=478 data-nosnippet>478</a>    //
+<a href=#479 id=479 data-nosnippet>479</a>    // These are the tests that catch the class the e2e scenario cannot see: the
+<a href=#480 id=480 data-nosnippet>480</a>    // scenario's resume budget is dominated by ~2 s of 1 Hz stats quantization, so a
+<a href=#481 id=481 data-nosnippet>481</a>    // 600 ms playout regression hides completely inside it. Here the seam is exact.
+<a href=#482 id=482 data-nosnippet>482</a>
+<a href=#483 id=483 data-nosnippet>483</a>    </span><span class="doccomment">/// A frame on its way into the mix bus. `PlayoutBuffer` only ever reads
+<a href=#484 id=484 data-nosnippet>484</a>    /// `timestamp_us()`, so this is the whole item.
+<a href=#485 id=485 data-nosnippet>485</a>    </span><span class="attr">#[derive(Debug)]
+<a href=#486 id=486 data-nosnippet>486</a>    </span><span class="kw">struct </span>Pcm(i64);
+<a href=#487 id=487 data-nosnippet>487</a>    <span class="kw">impl </span>Timestamped <span class="kw">for </span>Pcm {
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="kw">fn </span>timestamp_us(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; i64 {
+<a href=#489 id=489 data-nosnippet>489</a>            <span class="self">self</span>.<span class="number">0
+<a href=#490 id=490 data-nosnippet>490</a>        </span>}
+<a href=#491 id=491 data-nosnippet>491</a>    }
+<a href=#492 id=492 data-nosnippet>492</a>
+<a href=#493 id=493 data-nosnippet>493</a>    <span class="doccomment">/// The receive seam: the real hold ([`reorder_insert`] + [`release_next`]) feeding
+<a href=#494 id=494 data-nosnippet>494</a>    /// the real [`AdaptiveJitter`] + [`PlayoutBuffer`] the mix bus runs, wired the way
+<a href=#495 id=495 data-nosnippet>495</a>    /// `BusProducer::push_at` wires them — the estimator on the WIRE arrival, the
+<a href=#496 id=496 data-nosnippet>496</a>    /// buffer on the post-hold instant.
+<a href=#497 id=497 data-nosnippet>497</a>    </span><span class="kw">struct </span>Seam {
+<a href=#498 id=498 data-nosnippet>498</a>        buf: Vec&lt;HeldFrame&gt;,
+<a href=#499 id=499 data-nosnippet>499</a>        drain: bool,
+<a href=#500 id=500 data-nosnippet>500</a>        playout: PlayoutBuffer&lt;Pcm&gt;,
+<a href=#501 id=501 data-nosnippet>501</a>        adapt: AdaptiveJitter,
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="doccomment">/// Post-hold release instants, so a test can measure the added latency.
+<a href=#503 id=503 data-nosnippet>503</a>        </span>released_at: Vec&lt;(i64, i64)&gt;,
+<a href=#504 id=504 data-nosnippet>504</a>    }
+<a href=#505 id=505 data-nosnippet>505</a>
+<a href=#506 id=506 data-nosnippet>506</a>    <span class="kw">impl </span>Seam {
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#508 id=508 data-nosnippet>508</a>            <span class="self">Self </span>{
+<a href=#509 id=509 data-nosnippet>509</a>                buf: Vec::new(),
+<a href=#510 id=510 data-nosnippet>510</a>                drain: <span class="bool-val">false</span>,
+<a href=#511 id=511 data-nosnippet>511</a>                playout: PlayoutBuffer::new(PLAYOUT_TARGET_US),
+<a href=#512 id=512 data-nosnippet>512</a>                adapt: AdaptiveJitter::with_floor(PLAYOUT_TARGET_US),
+<a href=#513 id=513 data-nosnippet>513</a>                released_at: Vec::new(),
+<a href=#514 id=514 data-nosnippet>514</a>            }
+<a href=#515 id=515 data-nosnippet>515</a>        }
+<a href=#516 id=516 data-nosnippet>516</a>
+<a href=#517 id=517 data-nosnippet>517</a>        <span class="doccomment">/// One frame off the wire at `arrival_us`, then everything the hold gives up as
+<a href=#518 id=518 data-nosnippet>518</a>        /// a result — pushed at `arrival_us` too, since the hold does not block.
+<a href=#519 id=519 data-nosnippet>519</a>        </span><span class="kw">fn </span>arrive(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ts: i64, arrival_us: i64, bytes: usize) {
+<a href=#520 id=520 data-nosnippet>520</a>            <span class="self">self</span>.drain |= bytes &lt;= DTX_MAX_BYTES;
+<a href=#521 id=521 data-nosnippet>521</a>            reorder_insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>.buf, held(ts, arrival_us, bytes));
+<a href=#522 id=522 data-nosnippet>522</a>            <span class="kw">while let </span><span class="prelude-val">Some</span>(h) = release_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>.buf, <span class="kw-2">&amp;mut </span><span class="self">self</span>.drain, <span class="bool-val">false</span>) {
+<a href=#523 id=523 data-nosnippet>523</a>                <span class="comment">// Exactly `BusProducer::push_at(h.arrival_us, now, ts, …)`.
+<a href=#524 id=524 data-nosnippet>524</a>                </span><span class="self">self</span>.adapt
+<a href=#525 id=525 data-nosnippet>525</a>                    .on_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>.playout, h.arrival_us, h.frame.timestamp_us);
+<a href=#526 id=526 data-nosnippet>526</a>                <span class="self">self</span>.playout.push(arrival_us, Pcm(h.frame.timestamp_us));
+<a href=#527 id=527 data-nosnippet>527</a>                <span class="self">self</span>.released_at.push((h.frame.timestamp_us, arrival_us));
+<a href=#528 id=528 data-nosnippet>528</a>                <span class="kw">let _ </span>= <span class="self">self</span>.playout.pop_due(arrival_us);
+<a href=#529 id=529 data-nosnippet>529</a>            }
+<a href=#530 id=530 data-nosnippet>530</a>        }
+<a href=#531 id=531 data-nosnippet>531</a>    }
+<a href=#532 id=532 data-nosnippet>532</a>
+<a href=#533 id=533 data-nosnippet>533</a>    <span class="doccomment">/// A one-way link delay, so arrivals are not trivially equal to timestamps.
+<a href=#534 id=534 data-nosnippet>534</a>    </span><span class="kw">const </span>TRANSIT_US: i64 = <span class="number">5_000</span>;
+<a href=#535 id=535 data-nosnippet>535</a>
+<a href=#536 id=536 data-nosnippet>536</a>    <span class="doccomment">/// **10 s of suppression must leave the playout depth exactly where speech left
+<a href=#537 id=537 data-nosnippet>537</a>    /// it.** THE F1 regression, pinned against the real estimator.
+<a href=#538 id=538 data-nosnippet>538</a>    ///
+<a href=#539 id=539 data-nosnippet>539</a>    /// Before the drain + wire-arrival stamping, this measured:
+<a href=#540 id=540 data-nosnippet>540</a>    /// `recommended_delay_us` = 450 000 (the `MAX_ADAPTIVE_DEPTH_US` cap, held for the
+<a href=#541 id=541 data-nosnippet>541</a>    /// full 90 s peak window) and a run of shallow re-anchors — because each keepalive
+<a href=#542 id=542 data-nosnippet>542</a>    /// was released one arrival late by the count-based hold, so a 20 ms timestamp step
+<a href=#543 id=543 data-nosnippet>543</a>    /// was reported against a 500 ms release step. A peer who had merely been quiet came
+<a href=#544 id=544 data-nosnippet>544</a>    /// back with ~0.6 s of latency stapled to their first word.
+<a href=#545 id=545 data-nosnippet>545</a>    </span><span class="attr">#[test]
+<a href=#546 id=546 data-nosnippet>546</a>    </span><span class="kw">fn </span>a_suppressed_window_leaves_the_playout_depth_at_the_floor() {
+<a href=#547 id=547 data-nosnippet>547</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = Seam::new();
+<a href=#548 id=548 data-nosnippet>548</a>        <span class="comment">// 1 s of speech.
+<a href=#549 id=549 data-nosnippet>549</a>        </span><span class="kw">for </span>k <span class="kw">in </span><span class="number">0</span>..<span class="number">50i64 </span>{
+<a href=#550 id=550 data-nosnippet>550</a>            <span class="kw">let </span>ts = k * FRAME_US;
+<a href=#551 id=551 data-nosnippet>551</a>            s.arrive(ts, ts + TRANSIT_US, VOICED_BYTES);
+<a href=#552 id=552 data-nosnippet>552</a>        }
+<a href=#553 id=553 data-nosnippet>553</a>        <span class="kw">let </span>speaking = s.adapt.recommended_delay_us();
+<a href=#554 id=554 data-nosnippet>554</a>        <span class="macro">assert_eq!</span>(
+<a href=#555 id=555 data-nosnippet>555</a>            speaking, PLAYOUT_TARGET_US,
+<a href=#556 id=556 data-nosnippet>556</a>            <span class="string">"precondition: a clean link idles at the floor"
+<a href=#557 id=557 data-nosnippet>557</a>        </span>);
+<a href=#558 id=558 data-nosnippet>558</a>        <span class="kw">let </span>base_resyncs = s.playout.shallow_resyncs();
+<a href=#559 id=559 data-nosnippet>559</a>
+<a href=#560 id=560 data-nosnippet>560</a>        <span class="comment">// 10 s suppressed: the three frames genuinely in the hold when quiet begins,
+<a href=#561 id=561 data-nosnippet>561</a>        // then one keepalive every 500 ms.
+<a href=#562 id=562 data-nosnippet>562</a>        </span><span class="kw">let </span>keepalive_us = KEEPALIVE_INTERVAL.as_micros() <span class="kw">as </span>i64;
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="kw">let </span>quiet_start = <span class="number">50 </span>* FRAME_US;
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw">let </span><span class="kw-2">mut </span>t = quiet_start;
+<a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">while </span>t &lt; quiet_start + <span class="number">10 </span>* <span class="number">1_000_000 </span>- keepalive_us {
+<a href=#566 id=566 data-nosnippet>566</a>            t += keepalive_us;
+<a href=#567 id=567 data-nosnippet>567</a>            <span class="kw">let </span>ts = t - t % FRAME_US;
+<a href=#568 id=568 data-nosnippet>568</a>            s.arrive(ts, t + TRANSIT_US, DTX_BYTES);
+<a href=#569 id=569 data-nosnippet>569</a>        }
+<a href=#570 id=570 data-nosnippet>570</a>
+<a href=#571 id=571 data-nosnippet>571</a>        <span class="macro">assert_eq!</span>(
+<a href=#572 id=572 data-nosnippet>572</a>            s.adapt.recommended_delay_us(),
+<a href=#573 id=573 data-nosnippet>573</a>            speaking,
+<a href=#574 id=574 data-nosnippet>574</a>            <span class="string">"10 s of keepalives must leave the recommended depth exactly where the live \
+<a href=#575 id=575 data-nosnippet>575</a>             stream left it (jitter {} µs)"</span>,
+<a href=#576 id=576 data-nosnippet>576</a>            s.adapt.jitter_us()
+<a href=#577 id=577 data-nosnippet>577</a>        );
+<a href=#578 id=578 data-nosnippet>578</a>        <span class="macro">assert_eq!</span>(
+<a href=#579 id=579 data-nosnippet>579</a>            s.playout.shallow_resyncs(),
+<a href=#580 id=580 data-nosnippet>580</a>            base_resyncs,
+<a href=#581 id=581 data-nosnippet>581</a>            <span class="string">"a suppression gap must not erode the anchor: the arrivals are on time, \
+<a href=#582 id=582 data-nosnippet>582</a>             they are simply far apart"
+<a href=#583 id=583 data-nosnippet>583</a>        </span>);
+<a href=#584 id=584 data-nosnippet>584</a>        <span class="macro">assert_eq!</span>(s.playout.late_drops(), <span class="number">0</span>, <span class="string">"no keepalive is a straggler"</span>);
+<a href=#585 id=585 data-nosnippet>585</a>    }
+<a href=#586 id=586 data-nosnippet>586</a>
+<a href=#587 id=587 data-nosnippet>587</a>    <span class="doccomment">/// **Silence ONSET must not spike the peak either.** When the sender goes quiet the
+<a href=#588 id=588 data-nosnippet>588</a>    /// hold is genuinely carrying [`AUDIO_REORDER_HOLD`] real frames; the drain rule
+<a href=#589 id=589 data-nosnippet>589</a>    /// releases all of them on the first keepalive's arrival. That is the moment three
+<a href=#590 id=590 data-nosnippet>590</a>    /// frames are handed over at once, and if the estimator saw the release instant
+<a href=#591 id=591 data-nosnippet>591</a>    /// rather than each frame's own arrival it would book a ~500 ms deviation right
+<a href=#592 id=592 data-nosnippet>592</a>    /// there — enough on its own to pin the recommendation at the cap for 90 s.
+<a href=#593 id=593 data-nosnippet>593</a>    </span><span class="attr">#[test]
+<a href=#594 id=594 data-nosnippet>594</a>    </span><span class="kw">fn </span>the_frames_stranded_in_the_hold_at_silence_onset_do_not_spike_the_peak() {
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = Seam::new();
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="kw">for </span>k <span class="kw">in </span><span class="number">0</span>..<span class="number">50i64 </span>{
+<a href=#597 id=597 data-nosnippet>597</a>            <span class="kw">let </span>ts = k * FRAME_US;
+<a href=#598 id=598 data-nosnippet>598</a>            s.arrive(ts, ts + TRANSIT_US, VOICED_BYTES);
+<a href=#599 id=599 data-nosnippet>599</a>        }
+<a href=#600 id=600 data-nosnippet>600</a>        <span class="kw">let </span>held_before = s.buf.len();
+<a href=#601 id=601 data-nosnippet>601</a>        <span class="macro">assert_eq!</span>(
+<a href=#602 id=602 data-nosnippet>602</a>            held_before, AUDIO_REORDER_HOLD,
+<a href=#603 id=603 data-nosnippet>603</a>            <span class="string">"precondition: the hold is full of real frames when the room goes quiet"
+<a href=#604 id=604 data-nosnippet>604</a>        </span>);
+<a href=#605 id=605 data-nosnippet>605</a>        <span class="kw">let </span>peak_before = s.adapt.recommended_delay_us();
+<a href=#606 id=606 data-nosnippet>606</a>
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="comment">// The first keepalive, 500 ms later. It drains the stranded frames with it.
+<a href=#608 id=608 data-nosnippet>608</a>        </span><span class="kw">let </span>quiet_start = <span class="number">50 </span>* FRAME_US;
+<a href=#609 id=609 data-nosnippet>609</a>        <span class="kw">let </span>t = quiet_start + KEEPALIVE_INTERVAL.as_micros() <span class="kw">as </span>i64;
+<a href=#610 id=610 data-nosnippet>610</a>        s.arrive(t - t % FRAME_US, t + TRANSIT_US, DTX_BYTES);
+<a href=#611 id=611 data-nosnippet>611</a>        <span class="macro">assert!</span>(
+<a href=#612 id=612 data-nosnippet>612</a>            s.buf.is_empty(),
+<a href=#613 id=613 data-nosnippet>613</a>            <span class="string">"the drain rule empties the hold, it does not top it up"
+<a href=#614 id=614 data-nosnippet>614</a>        </span>);
+<a href=#615 id=615 data-nosnippet>615</a>        <span class="macro">assert_eq!</span>(
+<a href=#616 id=616 data-nosnippet>616</a>            s.adapt.recommended_delay_us(),
+<a href=#617 id=617 data-nosnippet>617</a>            peak_before,
+<a href=#618 id=618 data-nosnippet>618</a>            <span class="string">"onset must cost the estimate nothing (peak {} µs)"</span>,
+<a href=#619 id=619 data-nosnippet>619</a>            s.adapt.peak_us()
+<a href=#620 id=620 data-nosnippet>620</a>        );
+<a href=#621 id=621 data-nosnippet>621</a>    }
+<a href=#622 id=622 data-nosnippet>622</a>
+<a href=#623 id=623 data-nosnippet>623</a>    <span class="doccomment">/// **The first word back plays on the normal schedule.** The resume latency, in
+<a href=#624 id=624 data-nosnippet>624</a>    /// microseconds rather than the e2e budget's seconds.
+<a href=#625 id=625 data-nosnippet>625</a>    ///
+<a href=#626 id=626 data-nosnippet>626</a>    /// Measured post-fix: the first voiced frame is released from the hold 60 ms after
+<a href=#627 id=627 data-nosnippet>627</a>    /// it arrives (three subsequent arrivals — the ordinary live-stream cost of
+<a href=#628 id=628 data-nosnippet>628</a>    /// [`AUDIO_REORDER_HOLD`], paid by every frame of every stream) and comes due one
+<a href=#629 id=629 data-nosnippet>629</a>    /// [`PLAYOUT_TARGET_US`] later. Pre-fix the same measurement was ~610 ms: the depth
+<a href=#630 id=630 data-nosnippet>630</a>    /// had been dragged to the 450 ms cap by the suppression gaps.
+<a href=#631 id=631 data-nosnippet>631</a>    </span><span class="attr">#[test]
+<a href=#632 id=632 data-nosnippet>632</a>    </span><span class="kw">fn </span>the_first_voiced_frame_after_ten_quiet_seconds_plays_on_the_normal_schedule() {
+<a href=#633 id=633 data-nosnippet>633</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = Seam::new();
+<a href=#634 id=634 data-nosnippet>634</a>        <span class="kw">for </span>k <span class="kw">in </span><span class="number">0</span>..<span class="number">50i64 </span>{
+<a href=#635 id=635 data-nosnippet>635</a>            <span class="kw">let </span>ts = k * FRAME_US;
+<a href=#636 id=636 data-nosnippet>636</a>            s.arrive(ts, ts + TRANSIT_US, VOICED_BYTES);
+<a href=#637 id=637 data-nosnippet>637</a>        }
+<a href=#638 id=638 data-nosnippet>638</a>        <span class="kw">let </span>keepalive_us = KEEPALIVE_INTERVAL.as_micros() <span class="kw">as </span>i64;
+<a href=#639 id=639 data-nosnippet>639</a>        <span class="kw">let </span>quiet_start = <span class="number">50 </span>* FRAME_US;
+<a href=#640 id=640 data-nosnippet>640</a>        <span class="kw">let </span><span class="kw-2">mut </span>t = quiet_start;
+<a href=#641 id=641 data-nosnippet>641</a>        <span class="kw">while </span>t &lt; quiet_start + <span class="number">10 </span>* <span class="number">1_000_000 </span>- keepalive_us {
+<a href=#642 id=642 data-nosnippet>642</a>            t += keepalive_us;
+<a href=#643 id=643 data-nosnippet>643</a>            <span class="kw">let </span>ts = t - t % FRAME_US;
+<a href=#644 id=644 data-nosnippet>644</a>            s.arrive(ts, t + TRANSIT_US, DTX_BYTES);
+<a href=#645 id=645 data-nosnippet>645</a>        }
+<a href=#646 id=646 data-nosnippet>646</a>
+<a href=#647 id=647 data-nosnippet>647</a>        <span class="comment">// Speech resumes: a live 20 ms stream again.
+<a href=#648 id=648 data-nosnippet>648</a>        </span><span class="kw">let </span>resume_ts = quiet_start + <span class="number">10 </span>* <span class="number">1_000_000</span>;
+<a href=#649 id=649 data-nosnippet>649</a>        <span class="kw">let </span>resume_arrival = resume_ts + TRANSIT_US;
+<a href=#650 id=650 data-nosnippet>650</a>        s.released_at.clear();
+<a href=#651 id=651 data-nosnippet>651</a>        <span class="kw">for </span>k <span class="kw">in </span><span class="number">0</span>..<span class="number">10i64 </span>{
+<a href=#652 id=652 data-nosnippet>652</a>            <span class="kw">let </span>ts = resume_ts + k * FRAME_US;
+<a href=#653 id=653 data-nosnippet>653</a>            s.arrive(ts, ts + TRANSIT_US, VOICED_BYTES);
+<a href=#654 id=654 data-nosnippet>654</a>        }
+<a href=#655 id=655 data-nosnippet>655</a>        <span class="kw">let </span>(<span class="kw">_</span>, released_at) = <span class="kw-2">*</span>s
+<a href=#656 id=656 data-nosnippet>656</a>            .released_at
+<a href=#657 id=657 data-nosnippet>657</a>            .iter()
+<a href=#658 id=658 data-nosnippet>658</a>            .find(|(ts, <span class="kw">_</span>)| <span class="kw-2">*</span>ts == resume_ts)
+<a href=#659 id=659 data-nosnippet>659</a>            .expect(<span class="string">"the first voiced frame is released"</span>);
+<a href=#660 id=660 data-nosnippet>660</a>        <span class="kw">let </span>hold_cost = released_at - resume_arrival;
+<a href=#661 id=661 data-nosnippet>661</a>        <span class="macro">assert_eq!</span>(
+<a href=#662 id=662 data-nosnippet>662</a>            hold_cost,
+<a href=#663 id=663 data-nosnippet>663</a>            AUDIO_REORDER_HOLD <span class="kw">as </span>i64 * FRAME_US,
+<a href=#664 id=664 data-nosnippet>664</a>            <span class="string">"the first voiced frame waits the ordinary hold ({} ms), not longer"</span>,
+<a href=#665 id=665 data-nosnippet>665</a>            AUDIO_REORDER_HOLD <span class="kw">as </span>i64 * FRAME_US / <span class="number">1000
+<a href=#666 id=666 data-nosnippet>666</a>        </span>);
+<a href=#667 id=667 data-nosnippet>667</a>        <span class="macro">assert_eq!</span>(
+<a href=#668 id=668 data-nosnippet>668</a>            s.playout.target_delay_us(),
+<a href=#669 id=669 data-nosnippet>669</a>            PLAYOUT_TARGET_US,
+<a href=#670 id=670 data-nosnippet>670</a>            <span class="string">"and it plays at the normal 80 ms depth — pre-fix the suppression gaps had \
+<a href=#671 id=671 data-nosnippet>671</a>             dragged this to the 450 ms adaptive cap (recommended {} µs, peak {} µs)"</span>,
+<a href=#672 id=672 data-nosnippet>672</a>            s.adapt.recommended_delay_us(),
+<a href=#673 id=673 data-nosnippet>673</a>            s.adapt.peak_us()
+<a href=#674 id=674 data-nosnippet>674</a>        );
+<a href=#675 id=675 data-nosnippet>675</a>        <span class="macro">assert_eq!</span>(
+<a href=#676 id=676 data-nosnippet>676</a>            s.playout.late_drops(),
+<a href=#677 id=677 data-nosnippet>677</a>            <span class="number">0</span>,
+<a href=#678 id=678 data-nosnippet>678</a>            <span class="string">"nothing was thrown away across the resume"
+<a href=#679 id=679 data-nosnippet>679</a>        </span>);
+<a href=#680 id=680 data-nosnippet>680</a>    }
+<a href=#681 id=681 data-nosnippet>681</a>
+<a href=#682 id=682 data-nosnippet>682</a>    <span class="doccomment">/// A suppressing publisher does not advance `frame_seq` for a frame it never sent,
+<a href=#683 id=683 data-nosnippet>683</a>    /// so its stream has SEQ HOLES. No audio consumer may read one as loss: the reorder
+<a href=#684 id=684 data-nosnippet>684</a>    /// buffer sorts by timestamp, the gap math is timestamp-driven, and the stall
+<a href=#685 id=685 data-nosnippet>685</a>    /// watchdog counts arrivals — video's `DownlinkDemand` (the one thing that does fold
+<a href=#686 id=686 data-nosnippet>686</a>    /// `frame_seq`) has no audio counterpart. This pins that the ordering is unaffected.
+<a href=#687 id=687 data-nosnippet>687</a>    </span><span class="attr">#[test]
+<a href=#688 id=688 data-nosnippet>688</a>    </span><span class="kw">fn </span>the_audio_path_reads_nothing_from_frame_seq() {
+<a href=#689 id=689 data-nosnippet>689</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>buf, <span class="kw-2">mut </span>drain, <span class="kw-2">mut </span>released) = (Vec::new(), <span class="bool-val">false</span>, Vec::new());
+<a href=#690 id=690 data-nosnippet>690</a>        <span class="comment">// Timestamps advance on the 20 ms grid; seq jumps as suppression withholds.
+<a href=#691 id=691 data-nosnippet>691</a>        </span><span class="kw">for </span>(i, seq) <span class="kw">in </span>[<span class="number">0u32</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">40</span>, <span class="number">41</span>, <span class="number">900</span>, <span class="number">901</span>, <span class="number">902</span>].into_iter().enumerate() {
+<a href=#692 id=692 data-nosnippet>692</a>            <span class="kw">let </span><span class="kw-2">mut </span>f = afr(i <span class="kw">as </span>i64 * FRAME_US);
+<a href=#693 id=693 data-nosnippet>693</a>            f.frame.frame_seq = seq;
+<a href=#694 id=694 data-nosnippet>694</a>            reorder_insert(<span class="kw-2">&amp;mut </span>buf, f);
+<a href=#695 id=695 data-nosnippet>695</a>            drain_available(<span class="kw-2">&amp;mut </span>buf, <span class="kw-2">&amp;mut </span>drain, <span class="bool-val">false</span>, <span class="kw-2">&amp;mut </span>released);
+<a href=#696 id=696 data-nosnippet>696</a>        }
+<a href=#697 id=697 data-nosnippet>697</a>        drain_available(<span class="kw-2">&amp;mut </span>buf, <span class="kw-2">&amp;mut </span>drain, <span class="bool-val">true</span>, <span class="kw-2">&amp;mut </span>released);
+<a href=#698 id=698 data-nosnippet>698</a>        <span class="macro">assert_eq!</span>(
+<a href=#699 id=699 data-nosnippet>699</a>            released,
+<a href=#700 id=700 data-nosnippet>700</a>            (<span class="number">0</span>..<span class="number">8</span>).map(|i| i * FRAME_US).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+<a href=#701 id=701 data-nosnippet>701</a>            <span class="string">"release order follows timestamps alone; seq holes are invisible here"
+<a href=#702 id=702 data-nosnippet>702</a>        </span>);
+<a href=#703 id=703 data-nosnippet>703</a>    }
+<a href=#704 id=704 data-nosnippet>704</a>}
 </code></pre></div></section></main></body></html>

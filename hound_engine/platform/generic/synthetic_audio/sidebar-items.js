@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ENV_FLOOR","F0_HZ","FORMANT_HZ","FRAME_INTERVAL","NOISE_GAIN","SYLLABLE_HZ","VOICED_PEAK"],"fn":["dither","sample_at"],"struct":["SyntheticAudioInput"]};
+window.SIDEBAR_ITEMS = {"constant":["ENV_FLOOR","F0_HZ","FORMANT_HZ","FRAME_INTERVAL","NOISE_GAIN","SYLLABLE_HZ","VOICED_PEAK"],"fn":["dither","sample_at"],"struct":["SyntheticAudioInput","SyntheticSilence"]};
