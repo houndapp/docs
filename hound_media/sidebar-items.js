@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["adapt","bwe_delay","clock","congestion","downlink","fragment","framerate","jitter","keyframe","latency","layer","packet","recovery","send_budget","sim","speaking"]};
+window.SIDEBAR_ITEMS = {"mod":["adapt","allocate","bwe_delay","clock","congestion","downlink","fragment","framerate","jitter","keyframe","latency","layer","packet","recovery","send_budget","sim","speaking"]};
