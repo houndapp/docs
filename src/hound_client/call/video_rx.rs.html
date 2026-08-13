@@ -94,865 +94,864 @@
 <a href=#94 id=94 data-nosnippet>94</a>) {
 <a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">use </span>hound_transport::VideoPull;
 <a href=#96 id=96 data-nosnippet>96</a>
-<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">let </span>key = <span class="kw">match </span>source {
-<a href=#98 id=98 data-nosnippet>98</a>        Source::Screen =&gt; screen_key(peer),
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">_ </span>=&gt; cam_key(peer),
-<a href=#100 id=100 data-nosnippet>100</a>    };
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="comment">// Camera vs screen feed SEPARATE inbound-video stat buckets (so a peer sharing
-<a href=#102 id=102 data-nosnippet>102</a>    // both does not report a summed fps/bitrate).
-<a href=#103 id=103 data-nosnippet>103</a>    </span><span class="kw">let </span>vkind = inbound_video_kind(source);
-<a href=#104 id=104 data-nosnippet>104</a>    <span class="comment">// RTC-debug: mark this stream's decode pipeline LIVE for as long as this future
-<a href=#105 id=105 data-nosnippet>105</a>    // exists. A guard (not a pair of calls) because the subscribe loop stops a
-<a href=#106 id=106 data-nosnippet>106</a>    // pipeline by aborting the task — tokio drops the future, which runs this Drop,
-<a href=#107 id=107 data-nosnippet>107</a>    // where a trailing statement would simply never execute. The video report needs
-<a href=#108 id=108 data-nosnippet>108</a>    // the distinction: subscribed-but-dry is a wedge, unsubscribed-and-dry is a track
-<a href=#109 id=109 data-nosnippet>109</a>    // the peer stopped publishing.
-<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">let </span>_subscribed = SubscribedGauge::arm(peer_stats.clone(), vkind);
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="comment">// Drop-on-full channel from the async pull half to the blocking decode thread.
-<a href=#113 id=113 data-nosnippet>113</a>    </span><span class="kw">let </span>(frame_tx, frame_rx) = std::sync::mpsc::sync_channel::&lt;WireFrame&gt;(<span class="number">8</span>);
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span>decode_stop = stop.clone();
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>decode_stats = peer_stats.clone();
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="comment">// Decode → pull back-channel. The decode thread owns the `!Send` decoder and
-<a href=#117 id=117 data-nosnippet>117</a>    // has no control-plane handle, so a decode failure (stale reference, wedged
-<a href=#118 id=118 data-nosnippet>118</a>    // session) is raised here; the pull half — the only half holding the keyframe
-<a href=#119 id=119 data-nosnippet>119</a>    // gate and the PLI throttle — acts on it. Without this the tile freezes until
-<a href=#120 id=120 data-nosnippet>120</a>    // the sender's next NATURAL IDR (4 s camera, up to 60 s screenshare) because
-<a href=#121 id=121 data-nosnippet>121</a>    // neither pull-side recovery fires: frames keep arriving (no stall) and a
-<a href=#122 id=122 data-nosnippet>122</a>    // fast-failing decode never backs the channel up.
-<a href=#123 id=123 data-nosnippet>123</a>    </span><span class="kw">let </span>resync_needed = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
-<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">let </span>decode_resync = resync_needed.clone();
-<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">let </span>decode_thread = std::thread::Builder::new()
-<a href=#126 id=126 data-nosnippet>126</a>        .name(<span class="macro">format!</span>(<span class="string">"call-video-decode:{}"</span>, peer.<span class="number">0</span>))
-<a href=#127 id=127 data-nosnippet>127</a>        .spawn(<span class="kw">move </span>|| {
-<a href=#128 id=128 data-nosnippet>128</a>            video_decode_loop(
-<a href=#129 id=129 data-nosnippet>129</a>                frame_rx,
-<a href=#130 id=130 data-nosnippet>130</a>                key,
-<a href=#131 id=131 data-nosnippet>131</a>                vkind,
-<a href=#132 id=132 data-nosnippet>132</a>                sink,
-<a href=#133 id=133 data-nosnippet>133</a>                decode_stop,
-<a href=#134 id=134 data-nosnippet>134</a>                decode_stats,
-<a href=#135 id=135 data-nosnippet>135</a>                decode_resync,
-<a href=#136 id=136 data-nosnippet>136</a>            )
-<a href=#137 id=137 data-nosnippet>137</a>        })
-<a href=#138 id=138 data-nosnippet>138</a>        .ok();
-<a href=#139 id=139 data-nosnippet>139</a>
-<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">let </span>started = Instant::now();
-<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">let </span><span class="kw-2">mut </span>pli = PliThrottle::default();
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="comment">// One throttled recovery keyframe request — stall, backpressure drop and
-<a href=#143 id=143 data-nosnippet>143</a>    // decode resync all need exactly this.
-<a href=#144 id=144 data-nosnippet>144</a>    </span><span class="kw">let </span>ask_keyframe = |pli: <span class="kw-2">&amp;mut </span>PliThrottle| {
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">if </span>pli.fire(Instant::now()) {
-<a href=#146 id=146 data-nosnippet>146</a>            <span class="kw">let _ </span>= control_outbound.send(ClientMessage::RequestKeyframe {
-<a href=#147 id=147 data-nosnippet>147</a>                track: hound_control::TrackId(track_id),
-<a href=#148 id=148 data-nosnippet>148</a>            });
-<a href=#149 id=149 data-nosnippet>149</a>            peer_stats.video_keyframe_requested(vkind);
-<a href=#150 id=150 data-nosnippet>150</a>        }
-<a href=#151 id=151 data-nosnippet>151</a>    };
-<a href=#152 id=152 data-nosnippet>152</a>    <span class="comment">// The bandwidth half of demand-driven simulcast: folds each arriving frame's
-<a href=#153 id=153 data-nosnippet>153</a>    // wire `frame_seq` into a windowed delivery ratio against `source_bps`, with
-<a href=#154 id=154 data-nosnippet>154</a>    // the source/4 · source/2 hysteresis (see `hound_media::downlink`'s docs). A
-<a href=#155 id=155 data-nosnippet>155</a>    // fresh instance per pipeline — the reset-on-restart contract falls out of
-<a href=#156 id=156 data-nosnippet>156</a>    // that for free, matching the fresh `downlink_cell` this pipeline was given.
-<a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>downlink_demand =
-<a href=#158 id=158 data-nosnippet>158</a>        hound_media::DownlinkDemand::new(hound_media::DownlinkConfig::default());
-<a href=#159 id=159 data-nosnippet>159</a>
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">let </span><span class="kw-2">mut </span>awaiting_keyframe = <span class="bool-val">true</span>;
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="comment">// A decode-triggered resync is outstanding (distinct from the pre-first-keyframe
-<a href=#162 id=162 data-nosnippet>162</a>    // wait, which the subscribe-time nag owns): keep re-asking while deltas arrive.
-<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>resync_pending = <span class="bool-val">false</span>;
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span>frame = <span class="kw">match </span>subscriber.next_frame_stalled(VIDEO_STALL).<span class="kw">await </span>{
-<a href=#166 id=166 data-nosnippet>166</a>            <span class="prelude-val">Ok</span>(VideoPull::Frame(f)) =&gt; f,
-<a href=#167 id=167 data-nosnippet>167</a>            <span class="prelude-val">Ok</span>(VideoPull::Stalled) =&gt; {
-<a href=#168 id=168 data-nosnippet>168</a>                <span class="comment">// A total downlink stall is exactly when this receiver most needs the
-<a href=#169 id=169 data-nosnippet>169</a>                // low layer, and `observe_frame` can only decide from an arrival — so
-<a href=#170 id=170 data-nosnippet>170</a>                // drive the decider from the stall tick too (same window boundary, so
-<a href=#171 id=171 data-nosnippet>171</a>                // it can neither shorten a window nor double-evaluate one).
-<a href=#172 id=172 data-nosnippet>172</a>                </span><span class="kw">let </span>now_us = started.elapsed().as_micros().min(i64::MAX <span class="kw">as </span>u128) <span class="kw">as </span>i64;
-<a href=#173 id=173 data-nosnippet>173</a>                downlink_cell.store(downlink_demand.on_tick(now_us, source_bps));
-<a href=#174 id=174 data-nosnippet>174</a>                <span class="kw">if </span>!got_keyframe.load(Ordering::Relaxed)
-<a href=#175 id=175 data-nosnippet>175</a>                    &amp;&amp; started.elapsed() &gt;= FIRST_KEYFRAME_DEADLINE
-<a href=#176 id=176 data-nosnippet>176</a>                {
-<a href=#177 id=177 data-nosnippet>177</a>                    <span class="macro">tracing::warn!</span>(
-<a href=#178 id=178 data-nosnippet>178</a>                        peer = peer.<span class="number">0</span>,
-<a href=#179 id=179 data-nosnippet>179</a>                        track = track_id,
-<a href=#180 id=180 data-nosnippet>180</a>                        <span class="string">"video: no keyframe within the deadline — ending pipeline for a fresh subscribe"
-<a href=#181 id=181 data-nosnippet>181</a>                    </span>);
-<a href=#182 id=182 data-nosnippet>182</a>                    <span class="kw">break</span>;
-<a href=#183 id=183 data-nosnippet>183</a>                }
-<a href=#184 id=184 data-nosnippet>184</a>                <span class="comment">// Whatever the abandoned group still owed is gone — re-latch the
-<a href=#185 id=185 data-nosnippet>185</a>                // gate and ask the producer to roll a fresh, decodable group.
-<a href=#186 id=186 data-nosnippet>186</a>                </span>awaiting_keyframe = <span class="bool-val">true</span>;
-<a href=#187 id=187 data-nosnippet>187</a>                ask_keyframe(<span class="kw-2">&amp;mut </span>pli);
-<a href=#188 id=188 data-nosnippet>188</a>                <span class="kw">continue</span>;
-<a href=#189 id=189 data-nosnippet>189</a>            }
-<a href=#190 id=190 data-nosnippet>190</a>            <span class="prelude-val">Ok</span>(VideoPull::End) | <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">break</span>,
-<a href=#191 id=191 data-nosnippet>191</a>        };
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="comment">// RTC-debug: one inbound encoded AU received for this peer's camera/screen video.
-<a href=#193 id=193 data-nosnippet>193</a>        </span>peer_stats.video_received(vkind, frame.data.len());
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="comment">// Downlink demand: fold this arrival's wire `frame_seq` into the windowed
-<a href=#195 id=195 data-nosnippet>195</a>        // delivery-ratio decider, independent of the keyframe gate below — a frame
-<a href=#196 id=196 data-nosnippet>196</a>        // that arrives but gets dropped pre-decode (awaiting a keyframe) still
-<a href=#197 id=197 data-nosnippet>197</a>        // reached us over the wire, so it is NOT downlink loss. `now_us` mirrors
-<a href=#198 id=198 data-nosnippet>198</a>        // the elapsed-since-`started` convention the decode-throughput log below
-<a href=#199 id=199 data-nosnippet>199</a>        // already uses for this same pipeline.
-<a href=#200 id=200 data-nosnippet>200</a>        </span><span class="kw">let </span>now_us = started.elapsed().as_micros().min(i64::MAX <span class="kw">as </span>u128) <span class="kw">as </span>i64;
-<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">let </span>req = downlink_demand.observe_frame(frame.frame_seq, now_us, source_bps);
-<a href=#202 id=202 data-nosnippet>202</a>        downlink_cell.store(req);
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="comment">// RTC-debug: the same `frame_seq` continuity the decider folds is the only
-<a href=#204 id=204 data-nosnippet>204</a>        // receiver-side loss signal this path has — surface its running total.
-<a href=#205 id=205 data-nosnippet>205</a>        </span>peer_stats.set_video_frames_lost(vkind, downlink_demand.lost_estimate());
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="comment">// Decode failed on the other half: its reference is gone (or its session is
-<a href=#207 id=207 data-nosnippet>207</a>        // wedged), so every further delta is undecodable. Re-latch the gate — cheap
-<a href=#208 id=208 data-nosnippet>208</a>        // delta skips instead of feeding a decoder that can't use them — and ask for
-<a href=#209 id=209 data-nosnippet>209</a>        // a fresh reference.
-<a href=#210 id=210 data-nosnippet>210</a>        </span><span class="kw">if </span>resync_needed.swap(<span class="bool-val">false</span>, Ordering::Relaxed) {
-<a href=#211 id=211 data-nosnippet>211</a>            awaiting_keyframe = <span class="bool-val">true</span>;
-<a href=#212 id=212 data-nosnippet>212</a>            resync_pending = <span class="bool-val">true</span>;
-<a href=#213 id=213 data-nosnippet>213</a>            ask_keyframe(<span class="kw-2">&amp;mut </span>pli);
-<a href=#214 id=214 data-nosnippet>214</a>        }
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="comment">// Keyframe gate: drop deltas until the first keyframe so the decode thread
-<a href=#216 id=216 data-nosnippet>216</a>        // never decodes against a missing reference. Passing the gate also stops
-<a href=#217 id=217 data-nosnippet>217</a>        // the awaiting-keyframe re-request nag (see `start_pipeline`).
-<a href=#218 id=218 data-nosnippet>218</a>        </span><span class="kw">if </span>awaiting_keyframe {
-<a href=#219 id=219 data-nosnippet>219</a>            <span class="kw">if </span>!frame.keyframe {
-<a href=#220 id=220 data-nosnippet>220</a>                <span class="comment">// Keep nagging while a resync is outstanding: a single request can
-<a href=#221 id=221 data-nosnippet>221</a>                // land inside the producer's own keyframe throttle and be coalesced
-<a href=#222 id=222 data-nosnippet>222</a>                // away, and nothing else re-fires once the stream is flowing.
-<a href=#223 id=223 data-nosnippet>223</a>                </span><span class="kw">if </span>resync_pending {
-<a href=#224 id=224 data-nosnippet>224</a>                    ask_keyframe(<span class="kw-2">&amp;mut </span>pli);
-<a href=#225 id=225 data-nosnippet>225</a>                }
-<a href=#226 id=226 data-nosnippet>226</a>                <span class="kw">continue</span>;
-<a href=#227 id=227 data-nosnippet>227</a>            }
-<a href=#228 id=228 data-nosnippet>228</a>            awaiting_keyframe = <span class="bool-val">false</span>;
-<a href=#229 id=229 data-nosnippet>229</a>            resync_pending = <span class="bool-val">false</span>;
-<a href=#230 id=230 data-nosnippet>230</a>            got_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#231 id=231 data-nosnippet>231</a>        }
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="comment">// Backpressure → drop. A dropped frame breaks decode continuity for the
-<a href=#233 id=233 data-nosnippet>233</a>        // rest of its GOP, so re-latch the gate (cheap delta skips instead of
-<a href=#234 id=234 data-nosnippet>234</a>        // corrupt decodes) and request a keyframe to resync.
-<a href=#235 id=235 data-nosnippet>235</a>        </span><span class="kw">if </span>frame_tx.try_send(frame).is_err() {
-<a href=#236 id=236 data-nosnippet>236</a>            <span class="comment">// If the decode thread is gone, end the pull.
-<a href=#237 id=237 data-nosnippet>237</a>            </span><span class="kw">if </span>decode_thread.as_ref().is_none_or(|h| h.is_finished()) {
-<a href=#238 id=238 data-nosnippet>238</a>                <span class="kw">break</span>;
-<a href=#239 id=239 data-nosnippet>239</a>            }
-<a href=#240 id=240 data-nosnippet>240</a>            awaiting_keyframe = <span class="bool-val">true</span>;
-<a href=#241 id=241 data-nosnippet>241</a>            ask_keyframe(<span class="kw-2">&amp;mut </span>pli);
-<a href=#242 id=242 data-nosnippet>242</a>        }
-<a href=#243 id=243 data-nosnippet>243</a>    }
-<a href=#244 id=244 data-nosnippet>244</a>    drop(frame_tx); <span class="comment">// ends the decode loop
-<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(h) = decode_thread {
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let _ </span>= h.join();
-<a href=#247 id=247 data-nosnippet>247</a>    }
-<a href=#248 id=248 data-nosnippet>248</a>}
-<a href=#249 id=249 data-nosnippet>249</a>
-<a href=#250 id=250 data-nosnippet>250</a><span class="doccomment">/// How long the decode loop withholds retrying platform-decoder construction for a
-<a href=#251 id=251 data-nosnippet>251</a>/// codec that just failed to build. Without this, the per-packet wire codec byte is
-<a href=#252 id=252 data-nosnippet>252</a>/// **sender-controlled** — a peer sending AV1 to a box with no AV1 decode makes every
-<a href=#253 id=253 data-nosnippet>253</a>/// single frame re-attempt `Engine::new().video_decoder(..)` (a VideoToolbox/VAAPI
-<a href=#254 id=254 data-nosnippet>254</a>/// session setup) and `warn!`, forever. That is a remotely triggerable retry storm
-<a href=#255 id=255 data-nosnippet>255</a>/// (CPU burn + log spam) for the lifetime of the subscription.
-<a href=#256 id=256 data-nosnippet>256</a></span><span class="kw">const </span>RETRY_AFTER: Duration = Duration::from_secs(<span class="number">5</span>);
-<a href=#257 id=257 data-nosnippet>257</a>
-<a href=#258 id=258 data-nosnippet>258</a><span class="doccomment">/// Whether a just-recorded decoder-construction failure should be logged. Only the
-<a href=#259 id=259 data-nosnippet>259</a>/// FIRST failure of a streak is worth a `warn!`; every suppressed retry inside
-<a href=#260 id=260 data-nosnippet>260</a>/// [`RETRY_AFTER`] would just repeat it forever.
-<a href=#261 id=261 data-nosnippet>261</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#262 id=262 data-nosnippet>262</a></span><span class="kw">enum </span>RetryLog {
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="doccomment">/// First failure for this codec (or the first after a different codec/success) —
-<a href=#264 id=264 data-nosnippet>264</a>    /// log it.
-<a href=#265 id=265 data-nosnippet>265</a>    </span>WarnFirstFailure,
-<a href=#266 id=266 data-nosnippet>266</a>    <span class="doccomment">/// A retry still inside the window — stay quiet.
-<a href=#267 id=267 data-nosnippet>267</a>    </span>Suppressed,
-<a href=#268 id=268 data-nosnippet>268</a>}
-<a href=#269 id=269 data-nosnippet>269</a>
-<a href=#270 id=270 data-nosnippet>270</a><span class="doccomment">/// Pure decoder-(re)build retry policy (see [`RETRY_AFTER`]). Consulted before every
-<a href=#271 id=271 data-nosnippet>271</a>/// `Engine::new().video_decoder(..)` call for a codec whose current decoder doesn't
-<a href=#272 id=272 data-nosnippet>272</a>/// match. Takes `now` as a parameter so it is unit-testable without a live clock.
-<a href=#273 id=273 data-nosnippet>273</a></span><span class="attr">#[derive(Default)]
-<a href=#274 id=274 data-nosnippet>274</a></span><span class="kw">struct </span>DecoderRetry {
-<a href=#275 id=275 data-nosnippet>275</a>    <span class="doccomment">/// The codec that last failed to construct, and when.
-<a href=#276 id=276 data-nosnippet>276</a>    </span>failed: <span class="prelude-ty">Option</span>&lt;(WireCodec, Instant)&gt;,
-<a href=#277 id=277 data-nosnippet>277</a>}
-<a href=#278 id=278 data-nosnippet>278</a>
-<a href=#279 id=279 data-nosnippet>279</a><span class="kw">impl </span>DecoderRetry {
-<a href=#280 id=280 data-nosnippet>280</a>    <span class="doccomment">/// Should a construction attempt for `codec` be skipped right now? Only true
-<a href=#281 id=281 data-nosnippet>281</a>    /// within [`RETRY_AFTER`] of a failure for the SAME codec — a different incoming
-<a href=#282 id=282 data-nosnippet>282</a>    /// codec byte is unrelated and always gets its own first attempt immediately.
-<a href=#283 id=283 data-nosnippet>283</a>    </span><span class="kw">fn </span>blocked(<span class="kw-2">&amp;</span><span class="self">self</span>, codec: WireCodec, now: Instant) -&gt; bool {
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="macro">matches!</span>(<span class="self">self</span>.failed, <span class="prelude-val">Some</span>((c, at)) <span class="kw">if </span>c == codec &amp;&amp; now.duration_since(at) &lt; RETRY_AFTER)
-<a href=#285 id=285 data-nosnippet>285</a>    }
-<a href=#286 id=286 data-nosnippet>286</a>
-<a href=#287 id=287 data-nosnippet>287</a>    <span class="doccomment">/// Record a construction failure for `codec` at `now`. Returns whether to log it
-<a href=#288 id=288 data-nosnippet>288</a>    /// — [`RetryLog::WarnFirstFailure`] only the first time this codec fails in a row.
-<a href=#289 id=289 data-nosnippet>289</a>    </span><span class="kw">fn </span>on_failure(<span class="kw-2">&amp;mut </span><span class="self">self</span>, codec: WireCodec, now: Instant) -&gt; RetryLog {
-<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">let </span>first = !<span class="macro">matches!</span>(<span class="self">self</span>.failed, <span class="prelude-val">Some</span>((c, <span class="kw">_</span>)) <span class="kw">if </span>c == codec);
-<a href=#291 id=291 data-nosnippet>291</a>        <span class="self">self</span>.failed = <span class="prelude-val">Some</span>((codec, now));
-<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">if </span>first {
-<a href=#293 id=293 data-nosnippet>293</a>            RetryLog::WarnFirstFailure
-<a href=#294 id=294 data-nosnippet>294</a>        } <span class="kw">else </span>{
-<a href=#295 id=295 data-nosnippet>295</a>            RetryLog::Suppressed
-<a href=#296 id=296 data-nosnippet>296</a>        }
-<a href=#297 id=297 data-nosnippet>297</a>    }
-<a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a>    <span class="doccomment">/// Clear the block — call on a successful build.
-<a href=#300 id=300 data-nosnippet>300</a>    </span><span class="kw">fn </span>clear(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#301 id=301 data-nosnippet>301</a>        <span class="self">self</span>.failed = <span class="prelude-val">None</span>;
-<a href=#302 id=302 data-nosnippet>302</a>    }
-<a href=#303 id=303 data-nosnippet>303</a>}
-<a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a><span class="doccomment">/// What the decode loop should do about one `decode` failure — see [`DecodeFailures`].
-<a href=#306 id=306 data-nosnippet>306</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#307 id=307 data-nosnippet>307</a></span><span class="kw">struct </span>DecodeAction {
-<a href=#308 id=308 data-nosnippet>308</a>    <span class="doccomment">/// `warn!` this one: the first of a streak, then at most one per [`RETRY_AFTER`].
-<a href=#309 id=309 data-nosnippet>309</a>    </span>log: bool,
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="doccomment">/// Tear the decoder down so the next frame rebuilds it.
-<a href=#311 id=311 data-nosnippet>311</a>    </span>rebuild: bool,
-<a href=#312 id=312 data-nosnippet>312</a>}
-<a href=#313 id=313 data-nosnippet>313</a>
-<a href=#314 id=314 data-nosnippet>314</a><span class="doccomment">/// Pure consecutive-decode-failure policy. A decode error is NOT a construction
-<a href=#315 id=315 data-nosnippet>315</a>/// error: the usual cause is a missing reference, which the decoders heal from on
-<a href=#316 id=316 data-nosnippet>316</a>/// the next keyframe by themselves (VideoToolbox rebuilds its session on new
-<a href=#317 id=317 data-nosnippet>317</a>/// SPS/PPS, openh264 absorbs in-band parameter sets) — so the loop KEEPS the
-<a href=#318 id=318 data-nosnippet>318</a>/// decoder and only signals the pull half to request one. Tearing down per failure
-<a href=#319 id=319 data-nosnippet>319</a>/// instead re-ran `Engine::new().video_decoder(..)` (a full VAAPI/openh264 setup)
-<a href=#320 id=320 data-nosnippet>320</a>/// and an `info!` at the arrival frame rate — the very storm [`RETRY_AFTER`] exists
-<a href=#321 id=321 data-nosnippet>321</a>/// to bound, reached through the decode door.
-<a href=#322 id=322 data-nosnippet>322</a>///
-<a href=#323 id=323 data-nosnippet>323</a>/// Only a streak that OUTLIVES a full [`RETRY_AFTER`] window is treated as a wedged
-<a href=#324 id=324 data-nosnippet>324</a>/// decoder (a VT session invalidated across sleep keeps identical SPS/PPS, so
-<a href=#325 id=325 data-nosnippet>325</a>/// nothing triggers its own rebuild) and torn down — at most once per window, so a
-<a href=#326 id=326 data-nosnippet>326</a>/// sender-controlled corrupt stream still can't drive a rebuild storm. Takes `now`
-<a href=#327 id=327 data-nosnippet>327</a>/// as a parameter so it is unit-testable without a live clock.
-<a href=#328 id=328 data-nosnippet>328</a></span><span class="attr">#[derive(Default)]
-<a href=#329 id=329 data-nosnippet>329</a></span><span class="kw">struct </span>DecodeFailures {
-<a href=#330 id=330 data-nosnippet>330</a>    <span class="doccomment">/// Start of the current failure streak (`None` between streaks).
-<a href=#331 id=331 data-nosnippet>331</a>    </span>since: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="doccomment">/// Last failure logged, and last teardown — two independent [`RETRY_AFTER`] paces.
-<a href=#333 id=333 data-nosnippet>333</a>    </span>logged: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
-<a href=#334 id=334 data-nosnippet>334</a>    torn_down: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
-<a href=#335 id=335 data-nosnippet>335</a>}
-<a href=#336 id=336 data-nosnippet>336</a>
-<a href=#337 id=337 data-nosnippet>337</a><span class="kw">impl </span>DecodeFailures {
-<a href=#338 id=338 data-nosnippet>338</a>    <span class="doccomment">/// Record a decode failure at `now` and decide what the loop does about it.
-<a href=#339 id=339 data-nosnippet>339</a>    </span><span class="kw">fn </span>on_failure(<span class="kw-2">&amp;mut </span><span class="self">self</span>, now: Instant) -&gt; DecodeAction {
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>started = <span class="kw-2">*</span><span class="self">self</span>.since.get_or_insert(now);
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">let </span>log = <span class="self">self
-<a href=#342 id=342 data-nosnippet>342</a>            </span>.logged
-<a href=#343 id=343 data-nosnippet>343</a>            .is_none_or(|t| now.duration_since(t) &gt;= RETRY_AFTER);
-<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">if </span>log {
-<a href=#345 id=345 data-nosnippet>345</a>            <span class="self">self</span>.logged = <span class="prelude-val">Some</span>(now);
-<a href=#346 id=346 data-nosnippet>346</a>        }
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">let </span>rebuild = now.duration_since(started) &gt;= RETRY_AFTER
-<a href=#348 id=348 data-nosnippet>348</a>            &amp;&amp; <span class="self">self
-<a href=#349 id=349 data-nosnippet>349</a>                </span>.torn_down
-<a href=#350 id=350 data-nosnippet>350</a>                .is_none_or(|t| now.duration_since(t) &gt;= RETRY_AFTER);
-<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">if </span>rebuild {
-<a href=#352 id=352 data-nosnippet>352</a>            <span class="self">self</span>.torn_down = <span class="prelude-val">Some</span>(now);
-<a href=#353 id=353 data-nosnippet>353</a>        }
-<a href=#354 id=354 data-nosnippet>354</a>        DecodeAction { log, rebuild }
-<a href=#355 id=355 data-nosnippet>355</a>    }
-<a href=#356 id=356 data-nosnippet>356</a>
-<a href=#357 id=357 data-nosnippet>357</a>    <span class="doccomment">/// A frame decoded — the streak (if any) is over.
-<a href=#358 id=358 data-nosnippet>358</a>    </span><span class="kw">fn </span>on_success(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw-2">*</span><span class="self">self </span>= <span class="self">Self</span>::default();
-<a href=#360 id=360 data-nosnippet>360</a>    }
-<a href=#361 id=361 data-nosnippet>361</a>}
-<a href=#362 id=362 data-nosnippet>362</a>
-<a href=#363 id=363 data-nosnippet>363</a><span class="comment">// ─── Receive-side video playout (presentation pacing) ──────────────────────────
-<a href=#364 id=364 data-nosnippet>364</a>
-<a href=#365 id=365 data-nosnippet>365</a></span><span class="doccomment">/// How long a decoded frame waits in the playout buffer before it reaches the
-<a href=#366 id=366 data-nosnippet>366</a>/// renderer. Deliberately SHALLOW — between one and two 30 fps frame intervals —
-<a href=#367 id=367 data-nosnippet>367</a>/// because this stage buys *presentation pacing*, not loss recovery: frames arrive
-<a href=#368 id=368 data-nosnippet>368</a>/// and decode in bursts (a group flush, a retransmit tail, a slow software decode),
-<a href=#369 id=369 data-nosnippet>369</a>/// and rendering them the instant they pop out plays a nominally-30 fps tile as
-<a href=#370 id=370 data-nosnippet>370</a>/// judder. Scheduling each frame against the sender's capture clock replays the
-<a href=#371 id=371 data-nosnippet>371</a>/// sender's spacing instead.
-<a href=#372 id=372 data-nosnippet>372</a>///
-<a href=#373 id=373 data-nosnippet>373</a>/// It is NOT lip-sync. Anchoring video against the audio plane's own (adaptive,
-<a href=#374 id=374 data-nosnippet>374</a>/// far deeper) jitter depth is a cross-plane problem this stage deliberately does
-<a href=#375 id=375 data-nosnippet>375</a>/// not attempt — see the module docs.
-<a href=#376 id=376 data-nosnippet>376</a></span><span class="kw">const </span>VIDEO_PLAYOUT_DELAY_US: i64 = <span class="number">40_000</span>;
-<a href=#377 id=377 data-nosnippet>377</a>
-<a href=#378 id=378 data-nosnippet>378</a><span class="doccomment">/// Bound on decoded frames held for playout. A decoded frame can hold a GPU
-<a href=#379 id=379 data-nosnippet>379</a>/// surface lease (a VideoToolbox IOSurface, a D3D11 texture-pool slot), so the
-<a href=#380 id=380 data-nosnippet>380</a>/// depth must stay well inside a decoder's pool: 8 is several times the
-<a href=#381 id=381 data-nosnippet>381</a>/// steady-state occupancy (1–2 frames at the shallow target) and only reachable
-<a href=#382 id=382 data-nosnippet>382</a>/// when the pump is already hundreds of ms behind, where drop-oldest is the right
-<a href=#383 id=383 data-nosnippet>383</a>/// answer for video anyway.
-<a href=#384 id=384 data-nosnippet>384</a></span><span class="kw">const </span>VIDEO_PLAYOUT_MAX_FRAMES: usize = <span class="number">8</span>;
-<a href=#385 id=385 data-nosnippet>385</a>
-<a href=#386 id=386 data-nosnippet>386</a><span class="doccomment">/// Consecutive strictly-advancing wire timestamps that turn playout scheduling on
-<a href=#387 id=387 data-nosnippet>387</a>/// (or, in the other direction, non-advancing ones that latch it off) — see
-<a href=#388 id=388 data-nosnippet>388</a>/// [`PlayoutMode`]. Three frames is ~100 ms of stream: long enough not to judge a
-<a href=#389 id=389 data-nosnippet>389</a>/// sender on one duplicate stamp, short enough that pacing engages immediately.
-<a href=#390 id=390 data-nosnippet>390</a></span><span class="kw">const </span>VIDEO_STAMP_RUN: u32 = <span class="number">3</span>;
-<a href=#391 id=391 data-nosnippet>391</a>
-<a href=#392 id=392 data-nosnippet>392</a><span class="doccomment">/// Whether this sender's wire timestamps can schedule playout at all.
-<a href=#393 id=393 data-nosnippet>393</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-<a href=#394 id=394 data-nosnippet>394</a></span><span class="kw">enum </span>PlayoutMode {
-<a href=#395 id=395 data-nosnippet>395</a>    <span class="doccomment">/// Not enough evidence yet — render on arrival, so a stream is never delayed
-<a href=#396 id=396 data-nosnippet>396</a>    /// by the probe itself.
-<a href=#397 id=397 data-nosnippet>397</a>    </span><span class="attr">#[default]
-<a href=#398 id=398 data-nosnippet>398</a>    </span>Probing,
-<a href=#399 id=399 data-nosnippet>399</a>    <span class="doccomment">/// Timestamps advance: schedule through the playout buffer.
-<a href=#400 id=400 data-nosnippet>400</a>    </span>Buffered,
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="doccomment">/// Latched off. Some encoders stamp every chunk `TimestampUs::ZERO` (the MFT
-<a href=#402 id=402 data-nosnippet>402</a>    /// and rav1e paths do), and a buffer keyed on a constant timestamp drops every
-<a href=#403 id=403 data-nosnippet>403</a>    /// frame after the first as late — a frozen tile. Render on arrival, forever.
-<a href=#404 id=404 data-nosnippet>404</a>    </span>PassThrough,
-<a href=#405 id=405 data-nosnippet>405</a>}
-<a href=#406 id=406 data-nosnippet>406</a>
-<a href=#407 id=407 data-nosnippet>407</a><span class="doccomment">/// Pure wire-timestamp usability policy behind [`PlayoutMode`]: it only ever reads
-<a href=#408 id=408 data-nosnippet>408</a>/// the timestamps a sender puts on the wire, so it is unit-testable without a
-<a href=#409 id=409 data-nosnippet>409</a>/// decoder, a clock, or a sink.
-<a href=#410 id=410 data-nosnippet>410</a></span><span class="attr">#[derive(Debug, Default)]
-<a href=#411 id=411 data-nosnippet>411</a></span><span class="kw">struct </span>PlayoutStamps {
-<a href=#412 id=412 data-nosnippet>412</a>    mode: PlayoutMode,
-<a href=#413 id=413 data-nosnippet>413</a>    last_ts: <span class="prelude-ty">Option</span>&lt;i64&gt;,
-<a href=#414 id=414 data-nosnippet>414</a>    <span class="doccomment">/// Current run of advancing / non-advancing timestamps (each resets the other).
-<a href=#415 id=415 data-nosnippet>415</a>    </span>advancing: u32,
-<a href=#416 id=416 data-nosnippet>416</a>    stale: u32,
-<a href=#417 id=417 data-nosnippet>417</a>}
-<a href=#418 id=418 data-nosnippet>418</a>
-<a href=#419 id=419 data-nosnippet>419</a><span class="kw">impl </span>PlayoutStamps {
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="doccomment">/// Fold one arriving frame's wire timestamp in and report how its decoded
-<a href=#421 id=421 data-nosnippet>421</a>    /// output should be delivered. [`PlayoutMode::PassThrough`] is terminal — a
-<a href=#422 id=422 data-nosnippet>422</a>    /// sender that cannot stamp will not start.
-<a href=#423 id=423 data-nosnippet>423</a>    </span><span class="kw">fn </span>observe(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ts_us: i64) -&gt; PlayoutMode {
-<a href=#424 id=424 data-nosnippet>424</a>        <span class="kw">if </span><span class="self">self</span>.mode == PlayoutMode::PassThrough {
-<a href=#425 id=425 data-nosnippet>425</a>            <span class="kw">return </span><span class="self">self</span>.mode;
-<a href=#426 id=426 data-nosnippet>426</a>        }
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">match </span><span class="self">self</span>.last_ts {
-<a href=#428 id=428 data-nosnippet>428</a>            <span class="prelude-val">Some</span>(last) <span class="kw">if </span>ts_us &gt; last =&gt; {
-<a href=#429 id=429 data-nosnippet>429</a>                <span class="self">self</span>.stale = <span class="number">0</span>;
-<a href=#430 id=430 data-nosnippet>430</a>                <span class="self">self</span>.advancing = <span class="self">self</span>.advancing.saturating_add(<span class="number">1</span>);
-<a href=#431 id=431 data-nosnippet>431</a>                <span class="kw">if </span><span class="self">self</span>.advancing &gt;= VIDEO_STAMP_RUN {
-<a href=#432 id=432 data-nosnippet>432</a>                    <span class="self">self</span>.mode = PlayoutMode::Buffered;
-<a href=#433 id=433 data-nosnippet>433</a>                }
-<a href=#434 id=434 data-nosnippet>434</a>            }
-<a href=#435 id=435 data-nosnippet>435</a>            <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; {
-<a href=#436 id=436 data-nosnippet>436</a>                <span class="self">self</span>.advancing = <span class="number">0</span>;
-<a href=#437 id=437 data-nosnippet>437</a>                <span class="self">self</span>.stale = <span class="self">self</span>.stale.saturating_add(<span class="number">1</span>);
-<a href=#438 id=438 data-nosnippet>438</a>                <span class="kw">if </span><span class="self">self</span>.stale &gt;= VIDEO_STAMP_RUN {
-<a href=#439 id=439 data-nosnippet>439</a>                    <span class="self">self</span>.mode = PlayoutMode::PassThrough;
-<a href=#440 id=440 data-nosnippet>440</a>                }
-<a href=#441 id=441 data-nosnippet>441</a>            }
-<a href=#442 id=442 data-nosnippet>442</a>            <span class="prelude-val">None </span>=&gt; {}
-<a href=#443 id=443 data-nosnippet>443</a>        }
-<a href=#444 id=444 data-nosnippet>444</a>        <span class="comment">// A non-advancing stamp must not move the baseline backwards (a stamp of 0
-<a href=#445 id=445 data-nosnippet>445</a>        // after a real one would otherwise re-arm the advancing run every frame).
-<a href=#446 id=446 data-nosnippet>446</a>        </span><span class="self">self</span>.last_ts = <span class="prelude-val">Some</span>(<span class="self">self</span>.last_ts.map_or(ts_us, |last| last.max(ts_us)));
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="self">self</span>.mode
-<a href=#448 id=448 data-nosnippet>448</a>    }
-<a href=#449 id=449 data-nosnippet>449</a>}
-<a href=#450 id=450 data-nosnippet>450</a>
-<a href=#451 id=451 data-nosnippet>451</a><span class="doccomment">/// A decoded frame waiting for its playout slot. Carries the SENDER's capture-clock
-<a href=#452 id=452 data-nosnippet>452</a>/// timestamp (what the buffer schedules against — the decoders do not thread a
-<a href=#453 id=453 data-nosnippet>453</a>/// timestamp onto their output, and the wire frame is the only place it exists) and
-<a href=#454 id=454 data-nosnippet>454</a>/// the local time it was queued, for the dwell stat. The frame itself is moved in
-<a href=#455 id=455 data-nosnippet>455</a>/// and out, never copied.
-<a href=#456 id=456 data-nosnippet>456</a>///
-<a href=#457 id=457 data-nosnippet>457</a>/// Pairing the decoder's output with the timestamp of the frame just fed assumes
-<a href=#458 id=458 data-nosnippet>458</a>/// one-in-one-out decode (true for every backend here — no B-frames on the wire). A
-<a href=#459 id=459 data-nosnippet>459</a>/// decoder that reordered would shift every stamp by a CONSTANT, which the buffer
-<a href=#460 id=460 data-nosnippet>460</a>/// absorbs in its anchor; only spacing matters to this stage.
-<a href=#461 id=461 data-nosnippet>461</a></span><span class="kw">struct </span>PlayoutVideo {
-<a href=#462 id=462 data-nosnippet>462</a>    ts_us: i64,
-<a href=#463 id=463 data-nosnippet>463</a>    queued_us: i64,
-<a href=#464 id=464 data-nosnippet>464</a>    frame: hound_engine::types::RawFrame,
-<a href=#465 id=465 data-nosnippet>465</a>}
-<a href=#466 id=466 data-nosnippet>466</a>
-<a href=#467 id=467 data-nosnippet>467</a><span class="kw">impl </span>hound_media::Timestamped <span class="kw">for </span>PlayoutVideo {
-<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">fn </span>timestamp_us(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; i64 {
-<a href=#469 id=469 data-nosnippet>469</a>        <span class="self">self</span>.ts_us
-<a href=#470 id=470 data-nosnippet>470</a>    }
-<a href=#471 id=471 data-nosnippet>471</a>}
-<a href=#472 id=472 data-nosnippet>472</a>
-<a href=#473 id=473 data-nosnippet>473</a><span class="doccomment">/// Hand one DECODED frame to the render sink, surface-first (zero-copy GPU handle)
-<a href=#474 id=474 data-nosnippet>474</a>/// with materialized I420 as the universal fallback. Consumes the frame, so the
-<a href=#475 id=475 data-nosnippet>475</a>/// no-surface case MOVES the decoder's conversion buffer instead of copying ~1.4 MB
-<a href=#476 id=476 data-nosnippet>476</a>/// per frame per peer ([`push_preview`] is the borrow-based capture-side twin).
-<a href=#477 id=477 data-nosnippet>477</a></span><span class="kw">fn </span>push_decoded(sink: <span class="kw-2">&amp;</span><span class="kw">dyn </span>VideoSink, key: <span class="kw-2">&amp;</span>str, raw: hound_engine::types::RawFrame) {
-<a href=#478 id=478 data-nosnippet>478</a>    <span class="kw">if </span>RenderSurfaceHandle::for_frame(<span class="kw-2">&amp;</span>raw).is_some_and(|handle| sink.push_surface(key, handle)) {
-<a href=#479 id=479 data-nosnippet>479</a>        <span class="kw">return</span>;
-<a href=#480 id=480 data-nosnippet>480</a>    }
-<a href=#481 id=481 data-nosnippet>481</a>    <span class="kw">let </span>(w, h) = (raw.width(), raw.height());
-<a href=#482 id=482 data-nosnippet>482</a>    <span class="kw">let </span>data = <span class="kw">if </span>raw.surface.is_none() &amp;&amp; raw.format == hound_engine::types::PixelFormat::I420 {
-<a href=#483 id=483 data-nosnippet>483</a>        raw.data
-<a href=#484 id=484 data-nosnippet>484</a>    } <span class="kw">else </span>{
-<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">match </span>raw.as_i420() {
-<a href=#486 id=486 data-nosnippet>486</a>            <span class="prelude-val">Some</span>(c) =&gt; c.into_owned().data,
-<a href=#487 id=487 data-nosnippet>487</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return</span>,
-<a href=#488 id=488 data-nosnippet>488</a>        }
-<a href=#489 id=489 data-nosnippet>489</a>    };
-<a href=#490 id=490 data-nosnippet>490</a>    sink.push_frame(key, w, h, data);
-<a href=#491 id=491 data-nosnippet>491</a>}
-<a href=#492 id=492 data-nosnippet>492</a>
-<a href=#493 id=493 data-nosnippet>493</a><span class="doccomment">/// The blocking video decode loop: owns the `!Send` `VideoDecoder`, rebuilds it
-<a href=#494 id=494 data-nosnippet>494</a>/// when the sender's codec changes (the sender's choice drives decode), and pushes
-<a href=#495 id=495 data-nosnippet>495</a>/// each decoded frame to the sink through a shallow playout stage
-<a href=#496 id=496 data-nosnippet>496</a>/// ([`VIDEO_PLAYOUT_DELAY_US`]) that replays the sender's frame spacing. A decode
-<a href=#497 id=497 data-nosnippet>497</a>/// failure raises `resync_needed` — this thread's only route to the control plane
-<a href=#498 id=498 data-nosnippet>498</a>/// (see [`DecodeFailures`]).
-<a href=#499 id=499 data-nosnippet>499</a></span><span class="kw">fn </span>video_decode_loop(
-<a href=#500 id=500 data-nosnippet>500</a>    frame_rx: std::sync::mpsc::Receiver&lt;WireFrame&gt;,
-<a href=#501 id=501 data-nosnippet>501</a>    key: String,
-<a href=#502 id=502 data-nosnippet>502</a>    vkind: InboundVideoKind,
-<a href=#503 id=503 data-nosnippet>503</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
-<a href=#504 id=504 data-nosnippet>504</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#505 id=505 data-nosnippet>505</a>    peer_stats: Arc&lt;<span class="kw">crate</span>::stats::PeerStats&gt;,
-<a href=#506 id=506 data-nosnippet>506</a>    resync_needed: Arc&lt;AtomicBool&gt;,
-<a href=#507 id=507 data-nosnippet>507</a>) {
-<a href=#508 id=508 data-nosnippet>508</a>    <span class="kw">use </span>hound_engine::types::VideoCodec;
-<a href=#509 id=509 data-nosnippet>509</a>
-<a href=#510 id=510 data-nosnippet>510</a>    <span class="kw">let </span><span class="kw-2">mut </span>decoder: <span class="prelude-ty">Option</span>&lt;VideoDecoder&gt; = <span class="prelude-val">None</span>;
-<a href=#511 id=511 data-nosnippet>511</a>    <span class="kw">let </span><span class="kw-2">mut </span>decoder_codec: <span class="prelude-ty">Option</span>&lt;WireCodec&gt; = <span class="prelude-val">None</span>;
-<a href=#512 id=512 data-nosnippet>512</a>    <span class="kw">let </span><span class="kw-2">mut </span>retry = DecoderRetry::default();
-<a href=#513 id=513 data-nosnippet>513</a>    <span class="kw">let </span><span class="kw-2">mut </span>decode_failures = DecodeFailures::default();
-<a href=#514 id=514 data-nosnippet>514</a>    <span class="comment">// The current decode path + codec (captured at build) and a ~5 s throughput
-<a href=#515 id=515 data-nosnippet>515</a>    // window, so the log shows decoded geometry + ACTUAL decode fps + mean decode
-<a href=#516 id=516 data-nosnippet>516</a>    // cost — a crawling software decode is visible at a glance.
-<a href=#517 id=517 data-nosnippet>517</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>current_backend: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str = <span class="string">"?"</span>;
-<a href=#518 id=518 data-nosnippet>518</a>    <span class="kw">let </span><span class="kw-2">mut </span>current_codec = VideoCodec::H264;
-<a href=#519 id=519 data-nosnippet>519</a>    <span class="kw">let </span><span class="kw-2">mut </span>win_start: <span class="prelude-ty">Option</span>&lt;std::time::Instant&gt; = <span class="prelude-val">None</span>;
-<a href=#520 id=520 data-nosnippet>520</a>    <span class="kw">let </span><span class="kw-2">mut </span>win_frames: u64 = <span class="number">0</span>;
-<a href=#521 id=521 data-nosnippet>521</a>    <span class="kw">let </span><span class="kw-2">mut </span>win_decode_us: u64 = <span class="number">0</span>;
-<a href=#522 id=522 data-nosnippet>522</a>
-<a href=#523 id=523 data-nosnippet>523</a>    <span class="comment">// Playout stage: decoded frames are scheduled a shallow `VIDEO_PLAYOUT_DELAY_US`
-<a href=#524 id=524 data-nosnippet>524</a>    // ahead on the sender's capture timeline and released newest-due-first. `clock`
-<a href=#525 id=525 data-nosnippet>525</a>    // is this thread's local timeline; the buffer maps the sender's stamps onto it
-<a href=#526 id=526 data-nosnippet>526</a>    // on first push. Recovery is untouched — this sits entirely BELOW decode, so
-<a href=#527 id=527 data-nosnippet>527</a>    // the pull half's keyframe gate, PLI throttle, stall and resync paths never see
-<a href=#528 id=528 data-nosnippet>528</a>    // it, and the channel is drained exactly as fast as before.
-<a href=#529 id=529 data-nosnippet>529</a>    </span><span class="kw">let </span>clock = CaptureClock::start();
-<a href=#530 id=530 data-nosnippet>530</a>    <span class="kw">let </span><span class="kw-2">mut </span>playout: hound_media::PlayoutBuffer&lt;PlayoutVideo&gt; =
-<a href=#531 id=531 data-nosnippet>531</a>        hound_media::PlayoutBuffer::with_capacity(VIDEO_PLAYOUT_DELAY_US, VIDEO_PLAYOUT_MAX_FRAMES);
-<a href=#532 id=532 data-nosnippet>532</a>    <span class="kw">let </span><span class="kw-2">mut </span>stamps = PlayoutStamps::default();
-<a href=#533 id=533 data-nosnippet>533</a>    <span class="kw">let </span><span class="kw-2">mut </span>reported_drops = <span class="number">0u64</span>;
-<a href=#534 id=534 data-nosnippet>534</a>
-<a href=#535 id=535 data-nosnippet>535</a>    <span class="kw">loop </span>{
-<a href=#536 id=536 data-nosnippet>536</a>        <span class="comment">// Wait for the next encoded frame — but never past the moment a buffered
-<a href=#537 id=537 data-nosnippet>537</a>        // frame comes due, so a sparse producer (a static share re-emitting at ~1 fps)
-<a href=#538 id=538 data-nosnippet>538</a>        // is still released at the target instead of being held for its successor.
-<a href=#539 id=539 data-nosnippet>539</a>        </span><span class="kw">let </span>arrived = <span class="kw">match </span>playout.next_due_us() {
-<a href=#540 id=540 data-nosnippet>540</a>            <span class="prelude-val">Some</span>(due) =&gt; {
-<a href=#541 id=541 data-nosnippet>541</a>                <span class="kw">let </span>wait = Duration::from_micros(due.saturating_sub(clock.now()).max(<span class="number">0</span>) <span class="kw">as </span>u64);
-<a href=#542 id=542 data-nosnippet>542</a>                <span class="kw">match </span>frame_rx.recv_timeout(wait) {
-<a href=#543 id=543 data-nosnippet>543</a>                    <span class="prelude-val">Ok</span>(f) =&gt; <span class="prelude-val">Some</span>(f),
-<a href=#544 id=544 data-nosnippet>544</a>                    <span class="prelude-val">Err</span>(std::sync::mpsc::RecvTimeoutError::Timeout) =&gt; <span class="prelude-val">None</span>,
-<a href=#545 id=545 data-nosnippet>545</a>                    <span class="prelude-val">Err</span>(std::sync::mpsc::RecvTimeoutError::Disconnected) =&gt; <span class="kw">break</span>,
-<a href=#546 id=546 data-nosnippet>546</a>                }
-<a href=#547 id=547 data-nosnippet>547</a>            }
-<a href=#548 id=548 data-nosnippet>548</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">match </span>frame_rx.recv() {
-<a href=#549 id=549 data-nosnippet>549</a>                <span class="prelude-val">Ok</span>(f) =&gt; <span class="prelude-val">Some</span>(f),
-<a href=#550 id=550 data-nosnippet>550</a>                <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">break</span>,
-<a href=#551 id=551 data-nosnippet>551</a>            },
-<a href=#552 id=552 data-nosnippet>552</a>        };
-<a href=#553 id=553 data-nosnippet>553</a>        <span class="kw">if </span>stop.load(Ordering::Relaxed) {
-<a href=#554 id=554 data-nosnippet>554</a>            <span class="kw">break</span>;
-<a href=#555 id=555 data-nosnippet>555</a>        }
-<a href=#556 id=556 data-nosnippet>556</a>        <span class="comment">// Release BEFORE decoding what just arrived: that frame belongs to a later
-<a href=#557 id=557 data-nosnippet>557</a>        // playout slot, so its decode must not delay a frame that is due now. A
-<a href=#558 id=558 data-nosnippet>558</a>        // burst collapses to the freshest — an overdrawn intermediate is pure judder.
-<a href=#559 id=559 data-nosnippet>559</a>        </span><span class="kw">let </span>now_us = clock.now();
-<a href=#560 id=560 data-nosnippet>560</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(item) = playout.pop_latest_due(now_us) {
-<a href=#561 id=561 data-nosnippet>561</a>            peer_stats.video_dwell(vkind, now_us - item.queued_us);
-<a href=#562 id=562 data-nosnippet>562</a>            push_decoded(sink.as_ref(), <span class="kw-2">&amp;</span>key, item.frame);
-<a href=#563 id=563 data-nosnippet>563</a>        }
-<a href=#564 id=564 data-nosnippet>564</a>        <span class="comment">// Playout-drop total: superseded (the collapse policy above), plus the
-<a href=#565 id=565 data-nosnippet>565</a>        // buffer's own late/overflow drops. A gauge — only written when it moves.
-<a href=#566 id=566 data-nosnippet>566</a>        </span><span class="kw">let </span>dropped = playout.superseded_drops() + playout.late_drops() + playout.overflow_drops();
-<a href=#567 id=567 data-nosnippet>567</a>        <span class="kw">if </span><span class="macro">dropped !</span>= reported_drops {
-<a href=#568 id=568 data-nosnippet>568</a>            reported_drops = dropped;
-<a href=#569 id=569 data-nosnippet>569</a>            peer_stats.set_video_playout_dropped_total(vkind, dropped);
-<a href=#570 id=570 data-nosnippet>570</a>        }
-<a href=#571 id=571 data-nosnippet>571</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(frame) = arrived <span class="kw">else </span>{
-<a href=#572 id=572 data-nosnippet>572</a>            <span class="kw">continue</span>; <span class="comment">// woke only to release
-<a href=#573 id=573 data-nosnippet>573</a>        </span>};
-<a href=#574 id=574 data-nosnippet>574</a>        <span class="comment">// (Re)build the decoder if the sender's codec changed.
-<a href=#575 id=575 data-nosnippet>575</a>        </span><span class="kw">if </span><span class="macro">decoder_codec !</span>= <span class="prelude-val">Some</span>(frame.codec) {
-<a href=#576 id=576 data-nosnippet>576</a>            <span class="kw">let </span>now = std::time::Instant::now();
-<a href=#577 id=577 data-nosnippet>577</a>            <span class="kw">if </span>retry.blocked(frame.codec, now) {
-<a href=#578 id=578 data-nosnippet>578</a>                <span class="comment">// Still inside the retry window for this codec's last failure — skip
-<a href=#579 id=579 data-nosnippet>579</a>                // the expensive platform-decoder construction and stay silent (see
-<a href=#580 id=580 data-nosnippet>580</a>                // `RETRY_AFTER`).
-<a href=#581 id=581 data-nosnippet>581</a>                </span><span class="macro">tracing::trace!</span>(codec = <span class="question-mark">?</span>frame.codec, <span class="string">"video: decoder build suppressed (retry window)"</span>);
-<a href=#582 id=582 data-nosnippet>582</a>                <span class="kw">continue</span>;
-<a href=#583 id=583 data-nosnippet>583</a>            }
-<a href=#584 id=584 data-nosnippet>584</a>            <span class="kw">let </span>vc = <span class="kw">match </span>frame.codec {
-<a href=#585 id=585 data-nosnippet>585</a>                WireCodec::H264 =&gt; VideoCodec::H264,
-<a href=#586 id=586 data-nosnippet>586</a>                WireCodec::H265 =&gt; VideoCodec::H265,
-<a href=#587 id=587 data-nosnippet>587</a>                WireCodec::Av1 =&gt; VideoCodec::Av1,
-<a href=#588 id=588 data-nosnippet>588</a>                WireCodec::Opus =&gt; <span class="kw">continue</span>, <span class="comment">// not a video codec; ignore
-<a href=#589 id=589 data-nosnippet>589</a>            </span>};
-<a href=#590 id=590 data-nosnippet>590</a>            <span class="kw">match </span>Engine::new().video_decoder(vc) {
-<a href=#591 id=591 data-nosnippet>591</a>                <span class="prelude-val">Ok</span>(d) =&gt; {
-<a href=#592 id=592 data-nosnippet>592</a>                    retry.clear();
-<a href=#593 id=593 data-nosnippet>593</a>                    <span class="comment">// Surface the actual decode path + codec. A software fallback
-<a href=#594 id=594 data-nosnippet>594</a>                    // (e.g. AV1 with no HW block) is CPU-heavy and can starve the
-<a href=#595 id=595 data-nosnippet>595</a>                    // audio fill path, so make HW-vs-SW visible in the call log.
-<a href=#596 id=596 data-nosnippet>596</a>                    </span>current_backend = d.backend();
-<a href=#597 id=597 data-nosnippet>597</a>                    current_codec = vc;
-<a href=#598 id=598 data-nosnippet>598</a>                    win_start = <span class="prelude-val">None</span>;
-<a href=#599 id=599 data-nosnippet>599</a>                    win_frames = <span class="number">0</span>;
-<a href=#600 id=600 data-nosnippet>600</a>                    win_decode_us = <span class="number">0</span>;
-<a href=#601 id=601 data-nosnippet>601</a>                    <span class="macro">tracing::info!</span>(
-<a href=#602 id=602 data-nosnippet>602</a>                        target: <span class="string">"video_decode"</span>,
-<a href=#603 id=603 data-nosnippet>603</a>                        key = %key,
-<a href=#604 id=604 data-nosnippet>604</a>                        codec = <span class="question-mark">?</span>vc,
-<a href=#605 id=605 data-nosnippet>605</a>                        backend = current_backend,
-<a href=#606 id=606 data-nosnippet>606</a>                        <span class="string">"video: decode path selected"
-<a href=#607 id=607 data-nosnippet>607</a>                    </span>);
-<a href=#608 id=608 data-nosnippet>608</a>                    decoder = <span class="prelude-val">Some</span>(d);
-<a href=#609 id=609 data-nosnippet>609</a>                    decoder_codec = <span class="prelude-val">Some</span>(frame.codec);
-<a href=#610 id=610 data-nosnippet>610</a>                    <span class="comment">// Surface the live decode codec in the RTC-debug panel (also
-<a href=#611 id=611 data-nosnippet>611</a>                    // tracks a mid-stream sender codec switch), and count the build:
-<a href=#612 id=612 data-nosnippet>612</a>                    // repeated builds inside one window are churn, and each one costs
-<a href=#613 id=613 data-nosnippet>613</a>                    // the stream its reference chain (the video report reads this).
-<a href=#614 id=614 data-nosnippet>614</a>                    </span>peer_stats.set_inbound_video_codec(vkind, video_codec_to_ctl(vc).label());
-<a href=#615 id=615 data-nosnippet>615</a>                    peer_stats.video_decoder_built(vkind);
-<a href=#616 id=616 data-nosnippet>616</a>                }
-<a href=#617 id=617 data-nosnippet>617</a>                <span class="comment">// A decoder that will not BUILD is, today, a silently black tile: the
-<a href=#618 id=618 data-nosnippet>618</a>                // loop logs once and re-attempts every `RETRY_AFTER` for as long as
-<a href=#619 id=619 data-nosnippet>619</a>                // the subscription lives, and nothing reaches the UI — no event, no
-<a href=#620 id=620 data-nosnippet>620</a>                // placeholder, no "this stream can't be played here". Deliberate for
-<a href=#621 id=621 data-nosnippet>621</a>                // the codec case it was written for (an unsupported wire codec is the
-<a href=#622 id=622 data-nosnippet>622</a>                // sender's problem to fix and the retry is how it heals), and a known
-<a href=#623 id=623 data-nosnippet>623</a>                // gap for the RESOURCE case: on Apple this is also where decode-session
-<a href=#624 id=624 data-nosnippet>624</a>                // exhaustion lands, because VideoToolbox has no software fallback
-<a href=#625 id=625 data-nosnippet>625</a>                // behind it (`hound_engine`'s `platform::HW_DECODE_SESSIONS`). The
-<a href=#626 id=626 data-nosnippet>626</a>                // protection for that is upstream and preventive — `DecodeBudget` caps
-<a href=#627 id=627 data-nosnippet>627</a>                // how many sessions this receiver ever asks for — not a recovery here.
-<a href=#628 id=628 data-nosnippet>628</a>                // Two fallbacks that would make it a recovery are deferred, not
-<a href=#629 id=629 data-nosnippet>629</a>                // rejected: openh264 SW H.264 on Apple, and dav1d for AV1.
-<a href=#630 id=630 data-nosnippet>630</a>                </span><span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#631 id=631 data-nosnippet>631</a>                    <span class="kw">match </span>retry.on_failure(frame.codec, now) {
-<a href=#632 id=632 data-nosnippet>632</a>                        RetryLog::WarnFirstFailure =&gt; {
-<a href=#633 id=633 data-nosnippet>633</a>                            <span class="macro">tracing::warn!</span>(%e, codec = <span class="question-mark">?</span>frame.codec, <span class="string">"video: failed to build decoder"</span>);
-<a href=#634 id=634 data-nosnippet>634</a>                        }
-<a href=#635 id=635 data-nosnippet>635</a>                        RetryLog::Suppressed =&gt; {
-<a href=#636 id=636 data-nosnippet>636</a>                            <span class="macro">tracing::trace!</span>(%e, codec = <span class="question-mark">?</span>frame.codec, <span class="string">"video: decoder build still failing"</span>);
-<a href=#637 id=637 data-nosnippet>637</a>                        }
-<a href=#638 id=638 data-nosnippet>638</a>                    }
-<a href=#639 id=639 data-nosnippet>639</a>                    <span class="kw">continue</span>;
-<a href=#640 id=640 data-nosnippet>640</a>                }
-<a href=#641 id=641 data-nosnippet>641</a>            }
-<a href=#642 id=642 data-nosnippet>642</a>        }
-<a href=#643 id=643 data-nosnippet>643</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(dec) = decoder.as_mut() <span class="kw">else </span>{
-<a href=#644 id=644 data-nosnippet>644</a>            <span class="kw">continue</span>;
-<a href=#645 id=645 data-nosnippet>645</a>        };
-<a href=#646 id=646 data-nosnippet>646</a>        <span class="kw">let </span>decode_start = std::time::Instant::now();
-<a href=#647 id=647 data-nosnippet>647</a>        <span class="kw">match </span>dec.decode(<span class="kw-2">&amp;</span>frame.data) {
-<a href=#648 id=648 data-nosnippet>648</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(raw)) =&gt; {
-<a href=#649 id=649 data-nosnippet>649</a>                decode_failures.on_success();
-<a href=#650 id=650 data-nosnippet>650</a>                <span class="kw">let </span>decode_us = decode_start.elapsed().as_micros().min(i64::MAX <span class="kw">as </span>u128) <span class="kw">as </span>i64;
-<a href=#651 id=651 data-nosnippet>651</a>                <span class="kw">let </span>(w, h) = (raw.width(), raw.height());
-<a href=#652 id=652 data-nosnippet>652</a>                <span class="comment">// Every decoder backend emits an OWNED I420 `RawFrame` — each `decode`
-<a href=#653 id=653 data-nosnippet>653</a>                // call allocates a fresh conversion buffer (vt_decoder / vaapi / sw all
-<a href=#654 id=654 data-nosnippet>654</a>                // output I420, asserted in their tests). So the frame is MOVED from here
-<a href=#655 id=655 data-nosnippet>655</a>                // to the sink (through the playout buffer, which only ever reads its
-<a href=#656 id=656 data-nosnippet>656</a>                // timestamp): the decoder's single conversion alloc stays the only one
-<a href=#657 id=657 data-nosnippet>657</a>                // on this path, and a GPU-resident frame keeps its zero-copy surface.
-<a href=#658 id=658 data-nosnippet>658</a>                </span><span class="kw">match </span>stamps.observe(frame.timestamp_us) {
-<a href=#659 id=659 data-nosnippet>659</a>                    <span class="comment">// Schedule it — the pump at the top of the loop releases it at its
-<a href=#660 id=660 data-nosnippet>660</a>                    // playout time.
-<a href=#661 id=661 data-nosnippet>661</a>                    </span>PlayoutMode::Buffered =&gt; {
-<a href=#662 id=662 data-nosnippet>662</a>                        <span class="kw">let </span>queued_us = clock.now();
-<a href=#663 id=663 data-nosnippet>663</a>                        playout.push(
-<a href=#664 id=664 data-nosnippet>664</a>                            queued_us,
-<a href=#665 id=665 data-nosnippet>665</a>                            PlayoutVideo {
-<a href=#666 id=666 data-nosnippet>666</a>                                ts_us: frame.timestamp_us,
-<a href=#667 id=667 data-nosnippet>667</a>                                queued_us,
-<a href=#668 id=668 data-nosnippet>668</a>                                frame: raw,
-<a href=#669 id=669 data-nosnippet>669</a>                            },
-<a href=#670 id=670 data-nosnippet>670</a>                        );
-<a href=#671 id=671 data-nosnippet>671</a>                    }
-<a href=#672 id=672 data-nosnippet>672</a>                    <span class="comment">// Still probing: render on arrival so the probe itself costs nothing.
-<a href=#673 id=673 data-nosnippet>673</a>                    </span>PlayoutMode::Probing =&gt; push_decoded(sink.as_ref(), <span class="kw-2">&amp;</span>key, raw),
-<a href=#674 id=674 data-nosnippet>674</a>                    <span class="comment">// Latched off (possibly just now): hand over anything still queued —
-<a href=#675 id=675 data-nosnippet>675</a>                    // newest wins — so no frame is stranded, then render on arrival.
-<a href=#676 id=676 data-nosnippet>676</a>                    </span>PlayoutMode::PassThrough =&gt; {
-<a href=#677 id=677 data-nosnippet>677</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(item) = playout.pop_latest_due(i64::MAX) {
-<a href=#678 id=678 data-nosnippet>678</a>                            push_decoded(sink.as_ref(), <span class="kw-2">&amp;</span>key, item.frame);
-<a href=#679 id=679 data-nosnippet>679</a>                        }
-<a href=#680 id=680 data-nosnippet>680</a>                        push_decoded(sink.as_ref(), <span class="kw-2">&amp;</span>key, raw);
-<a href=#681 id=681 data-nosnippet>681</a>                    }
-<a href=#682 id=682 data-nosnippet>682</a>                }
-<a href=#683 id=683 data-nosnippet>683</a>                <span class="comment">// RTC-debug: one decoded frame (geometry + decode-time tail).
-<a href=#684 id=684 data-nosnippet>684</a>                </span>peer_stats.video_decoded(vkind, w, h, decode_us);
-<a href=#685 id=685 data-nosnippet>685</a>
-<a href=#686 id=686 data-nosnippet>686</a>                <span class="comment">// ~5 s decode-throughput sample: decoded geometry + ACTUAL fps +
-<a href=#687 id=687 data-nosnippet>687</a>                // mean decode cost on the current path (HW/SW visible above).
-<a href=#688 id=688 data-nosnippet>688</a>                </span><span class="kw">let </span>now = std::time::Instant::now();
-<a href=#689 id=689 data-nosnippet>689</a>                <span class="kw">let </span>start = <span class="kw-2">*</span>win_start.get_or_insert(now);
-<a href=#690 id=690 data-nosnippet>690</a>                win_frames += <span class="number">1</span>;
-<a href=#691 id=691 data-nosnippet>691</a>                win_decode_us += decode_us.max(<span class="number">0</span>) <span class="kw">as </span>u64;
-<a href=#692 id=692 data-nosnippet>692</a>                <span class="kw">let </span>elapsed = now.duration_since(start);
-<a href=#693 id=693 data-nosnippet>693</a>                <span class="kw">if </span>elapsed &gt;= std::time::Duration::from_secs(<span class="number">5</span>) {
-<a href=#694 id=694 data-nosnippet>694</a>                    <span class="kw">let </span>secs = elapsed.as_secs_f64().max(<span class="number">0.001</span>);
-<a href=#695 id=695 data-nosnippet>695</a>                    <span class="kw">let </span>fps = win_frames <span class="kw">as </span>f64 / secs;
-<a href=#696 id=696 data-nosnippet>696</a>                    <span class="kw">let </span>mean_ms = (win_decode_us <span class="kw">as </span>f64 / win_frames <span class="kw">as </span>f64) / <span class="number">1000.0</span>;
-<a href=#697 id=697 data-nosnippet>697</a>                    <span class="macro">tracing::info!</span>(
-<a href=#698 id=698 data-nosnippet>698</a>                        target: <span class="string">"video_decode"</span>,
-<a href=#699 id=699 data-nosnippet>699</a>                        key = %key,
-<a href=#700 id=700 data-nosnippet>700</a>                        codec = <span class="question-mark">?</span>current_codec,
-<a href=#701 id=701 data-nosnippet>701</a>                        backend = current_backend,
-<a href=#702 id=702 data-nosnippet>702</a>                        width = w,
-<a href=#703 id=703 data-nosnippet>703</a>                        height = h,
-<a href=#704 id=704 data-nosnippet>704</a>                        fps = <span class="macro">format!</span>(<span class="string">"{fps:.1}"</span>),
-<a href=#705 id=705 data-nosnippet>705</a>                        decode_ms = <span class="macro">format!</span>(<span class="string">"{mean_ms:.1}"</span>),
-<a href=#706 id=706 data-nosnippet>706</a>                        <span class="string">"video: decode throughput"
-<a href=#707 id=707 data-nosnippet>707</a>                    </span>);
-<a href=#708 id=708 data-nosnippet>708</a>                    win_start = <span class="prelude-val">Some</span>(now);
-<a href=#709 id=709 data-nosnippet>709</a>                    win_frames = <span class="number">0</span>;
-<a href=#710 id=710 data-nosnippet>710</a>                    win_decode_us = <span class="number">0</span>;
-<a href=#711 id=711 data-nosnippet>711</a>                }
-<a href=#712 id=712 data-nosnippet>712</a>            }
-<a href=#713 id=713 data-nosnippet>713</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {} <span class="comment">// decoder buffering; keep feeding
-<a href=#714 id=714 data-nosnippet>714</a>            </span><span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#715 id=715 data-nosnippet>715</a>                <span class="comment">// Ask the pull half for a fresh reference — this thread has no
-<a href=#716 id=716 data-nosnippet>716</a>                // control-plane handle, and nothing else notices a decode failure
-<a href=#717 id=717 data-nosnippet>717</a>                // (frames keep arriving, so no stall; failing is fast, so no
-<a href=#718 id=718 data-nosnippet>718</a>                // backpressure). Decoder teardown is paced, not per-frame — see
-<a href=#719 id=719 data-nosnippet>719</a>                // `DecodeFailures`.
-<a href=#720 id=720 data-nosnippet>720</a>                </span><span class="kw">let </span>act = decode_failures.on_failure(std::time::Instant::now());
-<a href=#721 id=721 data-nosnippet>721</a>                <span class="kw">if </span>act.log {
-<a href=#722 id=722 data-nosnippet>722</a>                    <span class="macro">tracing::warn!</span>(
-<a href=#723 id=723 data-nosnippet>723</a>                        %e,
-<a href=#724 id=724 data-nosnippet>724</a>                        key = %key,
-<a href=#725 id=725 data-nosnippet>725</a>                        codec = <span class="question-mark">?</span>current_codec,
-<a href=#726 id=726 data-nosnippet>726</a>                        backend = current_backend,
-<a href=#727 id=727 data-nosnippet>727</a>                        rebuild = act.rebuild,
-<a href=#728 id=728 data-nosnippet>728</a>                        <span class="string">"video: decode failed — requesting a keyframe"
-<a href=#729 id=729 data-nosnippet>729</a>                    </span>);
-<a href=#730 id=730 data-nosnippet>730</a>                }
-<a href=#731 id=731 data-nosnippet>731</a>                <span class="kw">if </span>act.rebuild {
-<a href=#732 id=732 data-nosnippet>732</a>                    decoder = <span class="prelude-val">None</span>;
-<a href=#733 id=733 data-nosnippet>733</a>                    decoder_codec = <span class="prelude-val">None</span>;
-<a href=#734 id=734 data-nosnippet>734</a>                }
-<a href=#735 id=735 data-nosnippet>735</a>                resync_needed.store(<span class="bool-val">true</span>, Ordering::Relaxed);
-<a href=#736 id=736 data-nosnippet>736</a>            }
-<a href=#737 id=737 data-nosnippet>737</a>        }
-<a href=#738 id=738 data-nosnippet>738</a>    }
-<a href=#739 id=739 data-nosnippet>739</a>}
-<a href=#740 id=740 data-nosnippet>740</a>
-<a href=#741 id=741 data-nosnippet>741</a><span class="comment">// ─── Decoder-rebuild + decode-failure policies (pure, no IO) ────────────────────
-<a href=#742 id=742 data-nosnippet>742</a>//
-<a href=#743 id=743 data-nosnippet>743</a>// Both guard the same storm described on `RETRY_AFTER` — the wire codec byte and
-<a href=#744 id=744 data-nosnippet>744</a>// the payload are sender-controlled, so neither an undecodable codec nor an
-<a href=#745 id=745 data-nosnippet>745</a>// undecodable stream may make the decode loop retry expensive platform-decoder
-<a href=#746 id=746 data-nosnippet>746</a>// construction (and warn) on every single frame.
-<a href=#747 id=747 data-nosnippet>747</a>
-<a href=#748 id=748 data-nosnippet>748</a></span><span class="attr">#[cfg(test)]
-<a href=#749 id=749 data-nosnippet>749</a></span><span class="kw">mod </span>decoder_retry_tests {
-<a href=#750 id=750 data-nosnippet>750</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#751 id=751 data-nosnippet>751</a>
-<a href=#752 id=752 data-nosnippet>752</a>    <span class="attr">#[test]
-<a href=#753 id=753 data-nosnippet>753</a>    </span><span class="kw">fn </span>blocks_same_codec_within_window() {
-<a href=#754 id=754 data-nosnippet>754</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
-<a href=#755 id=755 data-nosnippet>755</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#756 id=756 data-nosnippet>756</a>        <span class="macro">assert_eq!</span>(r.on_failure(WireCodec::Av1, t0), RetryLog::WarnFirstFailure);
-<a href=#757 id=757 data-nosnippet>757</a>        <span class="macro">assert!</span>(r.blocked(WireCodec::Av1, t0 + Duration::from_secs(<span class="number">1</span>)));
-<a href=#758 id=758 data-nosnippet>758</a>        <span class="macro">assert!</span>(r.blocked(WireCodec::Av1, t0 + RETRY_AFTER - Duration::from_millis(<span class="number">1</span>)));
-<a href=#759 id=759 data-nosnippet>759</a>    }
-<a href=#760 id=760 data-nosnippet>760</a>
-<a href=#761 id=761 data-nosnippet>761</a>    <span class="attr">#[test]
-<a href=#762 id=762 data-nosnippet>762</a>    </span><span class="kw">fn </span>allows_after_window_elapses() {
-<a href=#763 id=763 data-nosnippet>763</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
-<a href=#764 id=764 data-nosnippet>764</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#765 id=765 data-nosnippet>765</a>        r.on_failure(WireCodec::Av1, t0);
-<a href=#766 id=766 data-nosnippet>766</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::Av1, t0 + RETRY_AFTER));
-<a href=#767 id=767 data-nosnippet>767</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::Av1, t0 + RETRY_AFTER + Duration::from_secs(<span class="number">1</span>)));
-<a href=#768 id=768 data-nosnippet>768</a>    }
-<a href=#769 id=769 data-nosnippet>769</a>
-<a href=#770 id=770 data-nosnippet>770</a>    <span class="attr">#[test]
-<a href=#771 id=771 data-nosnippet>771</a>    </span><span class="kw">fn </span>different_codec_unblocks_immediately() {
-<a href=#772 id=772 data-nosnippet>772</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
-<a href=#773 id=773 data-nosnippet>773</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#774 id=774 data-nosnippet>774</a>        r.on_failure(WireCodec::Av1, t0);
-<a href=#775 id=775 data-nosnippet>775</a>        <span class="comment">// H.265 never failed — must never be blocked by AV1's failure, even the
-<a href=#776 id=776 data-nosnippet>776</a>        // very same instant.
-<a href=#777 id=777 data-nosnippet>777</a>        </span><span class="macro">assert!</span>(!r.blocked(WireCodec::H265, t0));
-<a href=#778 id=778 data-nosnippet>778</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::H264, t0));
-<a href=#779 id=779 data-nosnippet>779</a>    }
-<a href=#780 id=780 data-nosnippet>780</a>
-<a href=#781 id=781 data-nosnippet>781</a>    <span class="attr">#[test]
-<a href=#782 id=782 data-nosnippet>782</a>    </span><span class="kw">fn </span>first_failure_warns_subsequent_within_window_suppressed() {
-<a href=#783 id=783 data-nosnippet>783</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
-<a href=#784 id=784 data-nosnippet>784</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#785 id=785 data-nosnippet>785</a>        <span class="macro">assert_eq!</span>(r.on_failure(WireCodec::Av1, t0), RetryLog::WarnFirstFailure);
-<a href=#786 id=786 data-nosnippet>786</a>        <span class="comment">// A second failure for the SAME codec while still in-window (in practice the
-<a href=#787 id=787 data-nosnippet>787</a>        // caller wouldn't retry inside the window at all, but the policy itself must
-<a href=#788 id=788 data-nosnippet>788</a>        // not warn twice in a row regardless).
-<a href=#789 id=789 data-nosnippet>789</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#790 id=790 data-nosnippet>790</a>            r.on_failure(WireCodec::Av1, t0 + Duration::from_millis(<span class="number">1</span>)),
-<a href=#791 id=791 data-nosnippet>791</a>            RetryLog::Suppressed
-<a href=#792 id=792 data-nosnippet>792</a>        );
-<a href=#793 id=793 data-nosnippet>793</a>    }
-<a href=#794 id=794 data-nosnippet>794</a>
-<a href=#795 id=795 data-nosnippet>795</a>    <span class="attr">#[test]
-<a href=#796 id=796 data-nosnippet>796</a>    </span><span class="kw">fn </span>clear_resets_the_block() {
-<a href=#797 id=797 data-nosnippet>797</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
-<a href=#798 id=798 data-nosnippet>798</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#799 id=799 data-nosnippet>799</a>        r.on_failure(WireCodec::Av1, t0);
-<a href=#800 id=800 data-nosnippet>800</a>        <span class="macro">assert!</span>(r.blocked(WireCodec::Av1, t0));
-<a href=#801 id=801 data-nosnippet>801</a>        r.clear();
-<a href=#802 id=802 data-nosnippet>802</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::Av1, t0));
-<a href=#803 id=803 data-nosnippet>803</a>        <span class="comment">// A codec that fails again after a clear is treated as a fresh streak.
-<a href=#804 id=804 data-nosnippet>804</a>        </span><span class="macro">assert_eq!</span>(r.on_failure(WireCodec::Av1, t0), RetryLog::WarnFirstFailure);
-<a href=#805 id=805 data-nosnippet>805</a>    }
-<a href=#806 id=806 data-nosnippet>806</a>
-<a href=#807 id=807 data-nosnippet>807</a>    <span class="attr">#[test]
-<a href=#808 id=808 data-nosnippet>808</a>    </span><span class="kw">fn </span>decode_failure_keeps_the_decoder_and_warns_once() {
-<a href=#809 id=809 data-nosnippet>809</a>        <span class="kw">let </span><span class="kw-2">mut </span>f = DecodeFailures::default();
-<a href=#810 id=810 data-nosnippet>810</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#811 id=811 data-nosnippet>811</a>        <span class="comment">// First failure of a streak: worth a warn, but NEVER a rebuild — the
-<a href=#812 id=812 data-nosnippet>812</a>        // reference is simply gone and a keyframe fixes it.
-<a href=#813 id=813 data-nosnippet>813</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#814 id=814 data-nosnippet>814</a>            f.on_failure(t0),
-<a href=#815 id=815 data-nosnippet>815</a>            DecodeAction {
-<a href=#816 id=816 data-nosnippet>816</a>                log: <span class="bool-val">true</span>,
-<a href=#817 id=817 data-nosnippet>817</a>                rebuild: <span class="bool-val">false
-<a href=#818 id=818 data-nosnippet>818</a>            </span>}
-<a href=#819 id=819 data-nosnippet>819</a>        );
-<a href=#820 id=820 data-nosnippet>820</a>        <span class="comment">// Every frame of a 30 fps stream failing must not warn or rebuild again.
-<a href=#821 id=821 data-nosnippet>821</a>        </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..<span class="number">150u64 </span>{
-<a href=#822 id=822 data-nosnippet>822</a>            <span class="macro">assert_eq!</span>(
-<a href=#823 id=823 data-nosnippet>823</a>                f.on_failure(t0 + Duration::from_millis(<span class="number">33 </span>* i)),
-<a href=#824 id=824 data-nosnippet>824</a>                DecodeAction {
-<a href=#825 id=825 data-nosnippet>825</a>                    log: <span class="bool-val">false</span>,
-<a href=#826 id=826 data-nosnippet>826</a>                    rebuild: <span class="bool-val">false
-<a href=#827 id=827 data-nosnippet>827</a>                </span>},
-<a href=#828 id=828 data-nosnippet>828</a>                <span class="string">"frame {i} inside the window"
-<a href=#829 id=829 data-nosnippet>829</a>            </span>);
-<a href=#830 id=830 data-nosnippet>830</a>        }
-<a href=#831 id=831 data-nosnippet>831</a>    }
-<a href=#832 id=832 data-nosnippet>832</a>
-<a href=#833 id=833 data-nosnippet>833</a>    <span class="attr">#[test]
-<a href=#834 id=834 data-nosnippet>834</a>    </span><span class="kw">fn </span>a_streak_outliving_the_window_rebuilds_at_most_once_per_window() {
-<a href=#835 id=835 data-nosnippet>835</a>        <span class="kw">let </span><span class="kw-2">mut </span>f = DecodeFailures::default();
-<a href=#836 id=836 data-nosnippet>836</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#837 id=837 data-nosnippet>837</a>        f.on_failure(t0);
-<a href=#838 id=838 data-nosnippet>838</a>        <span class="comment">// The streak survived a full request window ⇒ treat the decoder as wedged.
-<a href=#839 id=839 data-nosnippet>839</a>        </span><span class="kw">let </span>a = f.on_failure(t0 + RETRY_AFTER);
-<a href=#840 id=840 data-nosnippet>840</a>        <span class="macro">assert!</span>(a.rebuild &amp;&amp; a.log);
-<a href=#841 id=841 data-nosnippet>841</a>        <span class="comment">// ...but not again on the next frame.
-<a href=#842 id=842 data-nosnippet>842</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#843 id=843 data-nosnippet>843</a>            f.on_failure(t0 + RETRY_AFTER + Duration::from_millis(<span class="number">33</span>)),
-<a href=#844 id=844 data-nosnippet>844</a>            DecodeAction {
-<a href=#845 id=845 data-nosnippet>845</a>                log: <span class="bool-val">false</span>,
-<a href=#846 id=846 data-nosnippet>846</a>                rebuild: <span class="bool-val">false
-<a href=#847 id=847 data-nosnippet>847</a>            </span>}
-<a href=#848 id=848 data-nosnippet>848</a>        );
-<a href=#849 id=849 data-nosnippet>849</a>        <span class="kw">let </span>b = f.on_failure(t0 + RETRY_AFTER + RETRY_AFTER);
-<a href=#850 id=850 data-nosnippet>850</a>        <span class="macro">assert!</span>(b.rebuild &amp;&amp; b.log, <span class="string">"one rebuild + one warn per window"</span>);
-<a href=#851 id=851 data-nosnippet>851</a>    }
-<a href=#852 id=852 data-nosnippet>852</a>
-<a href=#853 id=853 data-nosnippet>853</a>    <span class="attr">#[test]
-<a href=#854 id=854 data-nosnippet>854</a>    </span><span class="kw">fn </span>a_decoded_frame_ends_the_streak() {
-<a href=#855 id=855 data-nosnippet>855</a>        <span class="kw">let </span><span class="kw-2">mut </span>f = DecodeFailures::default();
-<a href=#856 id=856 data-nosnippet>856</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#857 id=857 data-nosnippet>857</a>        f.on_failure(t0);
-<a href=#858 id=858 data-nosnippet>858</a>        <span class="macro">assert!</span>(f.on_failure(t0 + RETRY_AFTER).rebuild);
-<a href=#859 id=859 data-nosnippet>859</a>        f.on_success();
-<a href=#860 id=860 data-nosnippet>860</a>        <span class="comment">// A fresh streak starts over: warn, no immediate rebuild.
-<a href=#861 id=861 data-nosnippet>861</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#862 id=862 data-nosnippet>862</a>            f.on_failure(t0 + RETRY_AFTER + Duration::from_millis(<span class="number">33</span>)),
-<a href=#863 id=863 data-nosnippet>863</a>            DecodeAction {
-<a href=#864 id=864 data-nosnippet>864</a>                log: <span class="bool-val">true</span>,
-<a href=#865 id=865 data-nosnippet>865</a>                rebuild: <span class="bool-val">false
-<a href=#866 id=866 data-nosnippet>866</a>            </span>}
-<a href=#867 id=867 data-nosnippet>867</a>        );
-<a href=#868 id=868 data-nosnippet>868</a>    }
-<a href=#869 id=869 data-nosnippet>869</a>
-<a href=#870 id=870 data-nosnippet>870</a>    <span class="comment">// ── playout timestamp gate ────────────────────────────────────────────────
-<a href=#871 id=871 data-nosnippet>871</a>
-<a href=#872 id=872 data-nosnippet>872</a>    </span><span class="doccomment">/// A normal 30 fps sender turns pacing on after the probe run and stays on.
-<a href=#873 id=873 data-nosnippet>873</a>    </span><span class="attr">#[test]
-<a href=#874 id=874 data-nosnippet>874</a>    </span><span class="kw">fn </span>advancing_stamps_enable_buffering() {
-<a href=#875 id=875 data-nosnippet>875</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = PlayoutStamps::default();
-<a href=#876 id=876 data-nosnippet>876</a>        <span class="macro">assert_eq!</span>(
-<a href=#877 id=877 data-nosnippet>877</a>            s.observe(<span class="number">0</span>),
-<a href=#878 id=878 data-nosnippet>878</a>            PlayoutMode::Probing,
-<a href=#879 id=879 data-nosnippet>879</a>            <span class="string">"one stamp proves nothing"
-<a href=#880 id=880 data-nosnippet>880</a>        </span>);
-<a href=#881 id=881 data-nosnippet>881</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">33_000</span>), PlayoutMode::Probing);
-<a href=#882 id=882 data-nosnippet>882</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">66_000</span>), PlayoutMode::Probing);
-<a href=#883 id=883 data-nosnippet>883</a>        <span class="macro">assert_eq!</span>(
-<a href=#884 id=884 data-nosnippet>884</a>            s.observe(<span class="number">99_000</span>),
-<a href=#885 id=885 data-nosnippet>885</a>            PlayoutMode::Buffered,
-<a href=#886 id=886 data-nosnippet>886</a>            <span class="string">"three advances in a row ⇒ schedule playout"
-<a href=#887 id=887 data-nosnippet>887</a>        </span>);
-<a href=#888 id=888 data-nosnippet>888</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">4</span>..<span class="number">100i64 </span>{
-<a href=#889 id=889 data-nosnippet>889</a>            <span class="macro">assert_eq!</span>(s.observe(i * <span class="number">33_000</span>), PlayoutMode::Buffered);
-<a href=#890 id=890 data-nosnippet>890</a>        }
-<a href=#891 id=891 data-nosnippet>891</a>    }
-<a href=#892 id=892 data-nosnippet>892</a>
-<a href=#893 id=893 data-nosnippet>893</a>    <span class="doccomment">/// A ZERO-stamping encoder (the MFT / rav1e paths) must latch pass-through: a
-<a href=#894 id=894 data-nosnippet>894</a>    /// buffer keyed on a constant timestamp would drop every frame after the first
-<a href=#895 id=895 data-nosnippet>895</a>    /// as late, freezing the tile.
-<a href=#896 id=896 data-nosnippet>896</a>    </span><span class="attr">#[test]
-<a href=#897 id=897 data-nosnippet>897</a>    </span><span class="kw">fn </span>constant_stamps_latch_pass_through() {
-<a href=#898 id=898 data-nosnippet>898</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = PlayoutStamps::default();
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="comment">// The TILE's key, shared with the reconcile loop's release path: both simulcast
+<a href=#98 id=98 data-nosnippet>98</a>    // layers of this tile land here, so a layer switch never changes it.
+<a href=#99 id=99 data-nosnippet>99</a>    </span><span class="kw">let </span>key = video_key(peer, source);
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="comment">// Camera vs screen feed SEPARATE inbound-video stat buckets (so a peer sharing
+<a href=#101 id=101 data-nosnippet>101</a>    // both does not report a summed fps/bitrate).
+<a href=#102 id=102 data-nosnippet>102</a>    </span><span class="kw">let </span>vkind = inbound_video_kind(source);
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="comment">// RTC-debug: mark this stream's decode pipeline LIVE for as long as this future
+<a href=#104 id=104 data-nosnippet>104</a>    // exists. A guard (not a pair of calls) because the subscribe loop stops a
+<a href=#105 id=105 data-nosnippet>105</a>    // pipeline by aborting the task — tokio drops the future, which runs this Drop,
+<a href=#106 id=106 data-nosnippet>106</a>    // where a trailing statement would simply never execute. The video report needs
+<a href=#107 id=107 data-nosnippet>107</a>    // the distinction: subscribed-but-dry is a wedge, unsubscribed-and-dry is a track
+<a href=#108 id=108 data-nosnippet>108</a>    // the peer stopped publishing.
+<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="kw">let </span>_subscribed = SubscribedGauge::arm(peer_stats.clone(), vkind);
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="comment">// Drop-on-full channel from the async pull half to the blocking decode thread.
+<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="kw">let </span>(frame_tx, frame_rx) = std::sync::mpsc::sync_channel::&lt;WireFrame&gt;(<span class="number">8</span>);
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span>decode_stop = stop.clone();
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span>decode_stats = peer_stats.clone();
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="comment">// Decode → pull back-channel. The decode thread owns the `!Send` decoder and
+<a href=#116 id=116 data-nosnippet>116</a>    // has no control-plane handle, so a decode failure (stale reference, wedged
+<a href=#117 id=117 data-nosnippet>117</a>    // session) is raised here; the pull half — the only half holding the keyframe
+<a href=#118 id=118 data-nosnippet>118</a>    // gate and the PLI throttle — acts on it. Without this the tile freezes until
+<a href=#119 id=119 data-nosnippet>119</a>    // the sender's next NATURAL IDR (4 s camera, up to 60 s screenshare) because
+<a href=#120 id=120 data-nosnippet>120</a>    // neither pull-side recovery fires: frames keep arriving (no stall) and a
+<a href=#121 id=121 data-nosnippet>121</a>    // fast-failing decode never backs the channel up.
+<a href=#122 id=122 data-nosnippet>122</a>    </span><span class="kw">let </span>resync_needed = Arc::new(AtomicBool::new(<span class="bool-val">false</span>));
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">let </span>decode_resync = resync_needed.clone();
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">let </span>decode_thread = std::thread::Builder::new()
+<a href=#125 id=125 data-nosnippet>125</a>        .name(<span class="macro">format!</span>(<span class="string">"call-video-decode:{}"</span>, peer.<span class="number">0</span>))
+<a href=#126 id=126 data-nosnippet>126</a>        .spawn(<span class="kw">move </span>|| {
+<a href=#127 id=127 data-nosnippet>127</a>            video_decode_loop(
+<a href=#128 id=128 data-nosnippet>128</a>                frame_rx,
+<a href=#129 id=129 data-nosnippet>129</a>                key,
+<a href=#130 id=130 data-nosnippet>130</a>                vkind,
+<a href=#131 id=131 data-nosnippet>131</a>                sink,
+<a href=#132 id=132 data-nosnippet>132</a>                decode_stop,
+<a href=#133 id=133 data-nosnippet>133</a>                decode_stats,
+<a href=#134 id=134 data-nosnippet>134</a>                decode_resync,
+<a href=#135 id=135 data-nosnippet>135</a>            )
+<a href=#136 id=136 data-nosnippet>136</a>        })
+<a href=#137 id=137 data-nosnippet>137</a>        .ok();
+<a href=#138 id=138 data-nosnippet>138</a>
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">let </span>started = Instant::now();
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">let </span><span class="kw-2">mut </span>pli = PliThrottle::default();
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="comment">// One throttled recovery keyframe request — stall, backpressure drop and
+<a href=#142 id=142 data-nosnippet>142</a>    // decode resync all need exactly this.
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">let </span>ask_keyframe = |pli: <span class="kw-2">&amp;mut </span>PliThrottle| {
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">if </span>pli.fire(Instant::now()) {
+<a href=#145 id=145 data-nosnippet>145</a>            <span class="kw">let _ </span>= control_outbound.send(ClientMessage::RequestKeyframe {
+<a href=#146 id=146 data-nosnippet>146</a>                track: hound_control::TrackId(track_id),
+<a href=#147 id=147 data-nosnippet>147</a>            });
+<a href=#148 id=148 data-nosnippet>148</a>            peer_stats.video_keyframe_requested(vkind);
+<a href=#149 id=149 data-nosnippet>149</a>        }
+<a href=#150 id=150 data-nosnippet>150</a>    };
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="comment">// The bandwidth half of demand-driven simulcast: folds each arriving frame's
+<a href=#152 id=152 data-nosnippet>152</a>    // wire `frame_seq` into a windowed delivery ratio against `source_bps`, with
+<a href=#153 id=153 data-nosnippet>153</a>    // the source/4 · source/2 hysteresis (see `hound_media::downlink`'s docs). A
+<a href=#154 id=154 data-nosnippet>154</a>    // fresh instance per pipeline — the reset-on-restart contract falls out of
+<a href=#155 id=155 data-nosnippet>155</a>    // that for free, matching the fresh `downlink_cell` this pipeline was given.
+<a href=#156 id=156 data-nosnippet>156</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>downlink_demand =
+<a href=#157 id=157 data-nosnippet>157</a>        hound_media::DownlinkDemand::new(hound_media::DownlinkConfig::default());
+<a href=#158 id=158 data-nosnippet>158</a>
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span><span class="kw-2">mut </span>awaiting_keyframe = <span class="bool-val">true</span>;
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="comment">// A decode-triggered resync is outstanding (distinct from the pre-first-keyframe
+<a href=#161 id=161 data-nosnippet>161</a>    // wait, which the subscribe-time nag owns): keep re-asking while deltas arrive.
+<a href=#162 id=162 data-nosnippet>162</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>resync_pending = <span class="bool-val">false</span>;
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">let </span>frame = <span class="kw">match </span>subscriber.next_frame_stalled(VIDEO_STALL).<span class="kw">await </span>{
+<a href=#165 id=165 data-nosnippet>165</a>            <span class="prelude-val">Ok</span>(VideoPull::Frame(f)) =&gt; f,
+<a href=#166 id=166 data-nosnippet>166</a>            <span class="prelude-val">Ok</span>(VideoPull::Stalled) =&gt; {
+<a href=#167 id=167 data-nosnippet>167</a>                <span class="comment">// A total downlink stall is exactly when this receiver most needs the
+<a href=#168 id=168 data-nosnippet>168</a>                // low layer, and `observe_frame` can only decide from an arrival — so
+<a href=#169 id=169 data-nosnippet>169</a>                // drive the decider from the stall tick too (same window boundary, so
+<a href=#170 id=170 data-nosnippet>170</a>                // it can neither shorten a window nor double-evaluate one).
+<a href=#171 id=171 data-nosnippet>171</a>                </span><span class="kw">let </span>now_us = started.elapsed().as_micros().min(i64::MAX <span class="kw">as </span>u128) <span class="kw">as </span>i64;
+<a href=#172 id=172 data-nosnippet>172</a>                downlink_cell.store(downlink_demand.on_tick(now_us, source_bps));
+<a href=#173 id=173 data-nosnippet>173</a>                <span class="kw">if </span>!got_keyframe.load(Ordering::Relaxed)
+<a href=#174 id=174 data-nosnippet>174</a>                    &amp;&amp; started.elapsed() &gt;= FIRST_KEYFRAME_DEADLINE
+<a href=#175 id=175 data-nosnippet>175</a>                {
+<a href=#176 id=176 data-nosnippet>176</a>                    <span class="macro">tracing::warn!</span>(
+<a href=#177 id=177 data-nosnippet>177</a>                        peer = peer.<span class="number">0</span>,
+<a href=#178 id=178 data-nosnippet>178</a>                        track = track_id,
+<a href=#179 id=179 data-nosnippet>179</a>                        <span class="string">"video: no keyframe within the deadline — ending pipeline for a fresh subscribe"
+<a href=#180 id=180 data-nosnippet>180</a>                    </span>);
+<a href=#181 id=181 data-nosnippet>181</a>                    <span class="kw">break</span>;
+<a href=#182 id=182 data-nosnippet>182</a>                }
+<a href=#183 id=183 data-nosnippet>183</a>                <span class="comment">// Whatever the abandoned group still owed is gone — re-latch the
+<a href=#184 id=184 data-nosnippet>184</a>                // gate and ask the producer to roll a fresh, decodable group.
+<a href=#185 id=185 data-nosnippet>185</a>                </span>awaiting_keyframe = <span class="bool-val">true</span>;
+<a href=#186 id=186 data-nosnippet>186</a>                ask_keyframe(<span class="kw-2">&amp;mut </span>pli);
+<a href=#187 id=187 data-nosnippet>187</a>                <span class="kw">continue</span>;
+<a href=#188 id=188 data-nosnippet>188</a>            }
+<a href=#189 id=189 data-nosnippet>189</a>            <span class="prelude-val">Ok</span>(VideoPull::End) | <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">break</span>,
+<a href=#190 id=190 data-nosnippet>190</a>        };
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="comment">// RTC-debug: one inbound encoded AU received for this peer's camera/screen video.
+<a href=#192 id=192 data-nosnippet>192</a>        </span>peer_stats.video_received(vkind, frame.data.len());
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="comment">// Downlink demand: fold this arrival's wire `frame_seq` into the windowed
+<a href=#194 id=194 data-nosnippet>194</a>        // delivery-ratio decider, independent of the keyframe gate below — a frame
+<a href=#195 id=195 data-nosnippet>195</a>        // that arrives but gets dropped pre-decode (awaiting a keyframe) still
+<a href=#196 id=196 data-nosnippet>196</a>        // reached us over the wire, so it is NOT downlink loss. `now_us` mirrors
+<a href=#197 id=197 data-nosnippet>197</a>        // the elapsed-since-`started` convention the decode-throughput log below
+<a href=#198 id=198 data-nosnippet>198</a>        // already uses for this same pipeline.
+<a href=#199 id=199 data-nosnippet>199</a>        </span><span class="kw">let </span>now_us = started.elapsed().as_micros().min(i64::MAX <span class="kw">as </span>u128) <span class="kw">as </span>i64;
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">let </span>req = downlink_demand.observe_frame(frame.frame_seq, now_us, source_bps);
+<a href=#201 id=201 data-nosnippet>201</a>        downlink_cell.store(req);
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="comment">// RTC-debug: the same `frame_seq` continuity the decider folds is the only
+<a href=#203 id=203 data-nosnippet>203</a>        // receiver-side loss signal this path has — surface its running total.
+<a href=#204 id=204 data-nosnippet>204</a>        </span>peer_stats.set_video_frames_lost(vkind, downlink_demand.lost_estimate());
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="comment">// Decode failed on the other half: its reference is gone (or its session is
+<a href=#206 id=206 data-nosnippet>206</a>        // wedged), so every further delta is undecodable. Re-latch the gate — cheap
+<a href=#207 id=207 data-nosnippet>207</a>        // delta skips instead of feeding a decoder that can't use them — and ask for
+<a href=#208 id=208 data-nosnippet>208</a>        // a fresh reference.
+<a href=#209 id=209 data-nosnippet>209</a>        </span><span class="kw">if </span>resync_needed.swap(<span class="bool-val">false</span>, Ordering::Relaxed) {
+<a href=#210 id=210 data-nosnippet>210</a>            awaiting_keyframe = <span class="bool-val">true</span>;
+<a href=#211 id=211 data-nosnippet>211</a>            resync_pending = <span class="bool-val">true</span>;
+<a href=#212 id=212 data-nosnippet>212</a>            ask_keyframe(<span class="kw-2">&amp;mut </span>pli);
+<a href=#213 id=213 data-nosnippet>213</a>        }
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="comment">// Keyframe gate: drop deltas until the first keyframe so the decode thread
+<a href=#215 id=215 data-nosnippet>215</a>        // never decodes against a missing reference. Passing the gate also stops
+<a href=#216 id=216 data-nosnippet>216</a>        // the awaiting-keyframe re-request nag (see `start_pipeline`).
+<a href=#217 id=217 data-nosnippet>217</a>        </span><span class="kw">if </span>awaiting_keyframe {
+<a href=#218 id=218 data-nosnippet>218</a>            <span class="kw">if </span>!frame.keyframe {
+<a href=#219 id=219 data-nosnippet>219</a>                <span class="comment">// Keep nagging while a resync is outstanding: a single request can
+<a href=#220 id=220 data-nosnippet>220</a>                // land inside the producer's own keyframe throttle and be coalesced
+<a href=#221 id=221 data-nosnippet>221</a>                // away, and nothing else re-fires once the stream is flowing.
+<a href=#222 id=222 data-nosnippet>222</a>                </span><span class="kw">if </span>resync_pending {
+<a href=#223 id=223 data-nosnippet>223</a>                    ask_keyframe(<span class="kw-2">&amp;mut </span>pli);
+<a href=#224 id=224 data-nosnippet>224</a>                }
+<a href=#225 id=225 data-nosnippet>225</a>                <span class="kw">continue</span>;
+<a href=#226 id=226 data-nosnippet>226</a>            }
+<a href=#227 id=227 data-nosnippet>227</a>            awaiting_keyframe = <span class="bool-val">false</span>;
+<a href=#228 id=228 data-nosnippet>228</a>            resync_pending = <span class="bool-val">false</span>;
+<a href=#229 id=229 data-nosnippet>229</a>            got_keyframe.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#230 id=230 data-nosnippet>230</a>        }
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="comment">// Backpressure → drop. A dropped frame breaks decode continuity for the
+<a href=#232 id=232 data-nosnippet>232</a>        // rest of its GOP, so re-latch the gate (cheap delta skips instead of
+<a href=#233 id=233 data-nosnippet>233</a>        // corrupt decodes) and request a keyframe to resync.
+<a href=#234 id=234 data-nosnippet>234</a>        </span><span class="kw">if </span>frame_tx.try_send(frame).is_err() {
+<a href=#235 id=235 data-nosnippet>235</a>            <span class="comment">// If the decode thread is gone, end the pull.
+<a href=#236 id=236 data-nosnippet>236</a>            </span><span class="kw">if </span>decode_thread.as_ref().is_none_or(|h| h.is_finished()) {
+<a href=#237 id=237 data-nosnippet>237</a>                <span class="kw">break</span>;
+<a href=#238 id=238 data-nosnippet>238</a>            }
+<a href=#239 id=239 data-nosnippet>239</a>            awaiting_keyframe = <span class="bool-val">true</span>;
+<a href=#240 id=240 data-nosnippet>240</a>            ask_keyframe(<span class="kw-2">&amp;mut </span>pli);
+<a href=#241 id=241 data-nosnippet>241</a>        }
+<a href=#242 id=242 data-nosnippet>242</a>    }
+<a href=#243 id=243 data-nosnippet>243</a>    drop(frame_tx); <span class="comment">// ends the decode loop
+<a href=#244 id=244 data-nosnippet>244</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(h) = decode_thread {
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let _ </span>= h.join();
+<a href=#246 id=246 data-nosnippet>246</a>    }
+<a href=#247 id=247 data-nosnippet>247</a>}
+<a href=#248 id=248 data-nosnippet>248</a>
+<a href=#249 id=249 data-nosnippet>249</a><span class="doccomment">/// How long the decode loop withholds retrying platform-decoder construction for a
+<a href=#250 id=250 data-nosnippet>250</a>/// codec that just failed to build. Without this, the per-packet wire codec byte is
+<a href=#251 id=251 data-nosnippet>251</a>/// **sender-controlled** — a peer sending AV1 to a box with no AV1 decode makes every
+<a href=#252 id=252 data-nosnippet>252</a>/// single frame re-attempt `Engine::new().video_decoder(..)` (a VideoToolbox/VAAPI
+<a href=#253 id=253 data-nosnippet>253</a>/// session setup) and `warn!`, forever. That is a remotely triggerable retry storm
+<a href=#254 id=254 data-nosnippet>254</a>/// (CPU burn + log spam) for the lifetime of the subscription.
+<a href=#255 id=255 data-nosnippet>255</a></span><span class="kw">const </span>RETRY_AFTER: Duration = Duration::from_secs(<span class="number">5</span>);
+<a href=#256 id=256 data-nosnippet>256</a>
+<a href=#257 id=257 data-nosnippet>257</a><span class="doccomment">/// Whether a just-recorded decoder-construction failure should be logged. Only the
+<a href=#258 id=258 data-nosnippet>258</a>/// FIRST failure of a streak is worth a `warn!`; every suppressed retry inside
+<a href=#259 id=259 data-nosnippet>259</a>/// [`RETRY_AFTER`] would just repeat it forever.
+<a href=#260 id=260 data-nosnippet>260</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#261 id=261 data-nosnippet>261</a></span><span class="kw">enum </span>RetryLog {
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="doccomment">/// First failure for this codec (or the first after a different codec/success) —
+<a href=#263 id=263 data-nosnippet>263</a>    /// log it.
+<a href=#264 id=264 data-nosnippet>264</a>    </span>WarnFirstFailure,
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="doccomment">/// A retry still inside the window — stay quiet.
+<a href=#266 id=266 data-nosnippet>266</a>    </span>Suppressed,
+<a href=#267 id=267 data-nosnippet>267</a>}
+<a href=#268 id=268 data-nosnippet>268</a>
+<a href=#269 id=269 data-nosnippet>269</a><span class="doccomment">/// Pure decoder-(re)build retry policy (see [`RETRY_AFTER`]). Consulted before every
+<a href=#270 id=270 data-nosnippet>270</a>/// `Engine::new().video_decoder(..)` call for a codec whose current decoder doesn't
+<a href=#271 id=271 data-nosnippet>271</a>/// match. Takes `now` as a parameter so it is unit-testable without a live clock.
+<a href=#272 id=272 data-nosnippet>272</a></span><span class="attr">#[derive(Default)]
+<a href=#273 id=273 data-nosnippet>273</a></span><span class="kw">struct </span>DecoderRetry {
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="doccomment">/// The codec that last failed to construct, and when.
+<a href=#275 id=275 data-nosnippet>275</a>    </span>failed: <span class="prelude-ty">Option</span>&lt;(WireCodec, Instant)&gt;,
+<a href=#276 id=276 data-nosnippet>276</a>}
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a><span class="kw">impl </span>DecoderRetry {
+<a href=#279 id=279 data-nosnippet>279</a>    <span class="doccomment">/// Should a construction attempt for `codec` be skipped right now? Only true
+<a href=#280 id=280 data-nosnippet>280</a>    /// within [`RETRY_AFTER`] of a failure for the SAME codec — a different incoming
+<a href=#281 id=281 data-nosnippet>281</a>    /// codec byte is unrelated and always gets its own first attempt immediately.
+<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">fn </span>blocked(<span class="kw-2">&amp;</span><span class="self">self</span>, codec: WireCodec, now: Instant) -&gt; bool {
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="macro">matches!</span>(<span class="self">self</span>.failed, <span class="prelude-val">Some</span>((c, at)) <span class="kw">if </span>c == codec &amp;&amp; now.duration_since(at) &lt; RETRY_AFTER)
+<a href=#284 id=284 data-nosnippet>284</a>    }
+<a href=#285 id=285 data-nosnippet>285</a>
+<a href=#286 id=286 data-nosnippet>286</a>    <span class="doccomment">/// Record a construction failure for `codec` at `now`. Returns whether to log it
+<a href=#287 id=287 data-nosnippet>287</a>    /// — [`RetryLog::WarnFirstFailure`] only the first time this codec fails in a row.
+<a href=#288 id=288 data-nosnippet>288</a>    </span><span class="kw">fn </span>on_failure(<span class="kw-2">&amp;mut </span><span class="self">self</span>, codec: WireCodec, now: Instant) -&gt; RetryLog {
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">let </span>first = !<span class="macro">matches!</span>(<span class="self">self</span>.failed, <span class="prelude-val">Some</span>((c, <span class="kw">_</span>)) <span class="kw">if </span>c == codec);
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="self">self</span>.failed = <span class="prelude-val">Some</span>((codec, now));
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">if </span>first {
+<a href=#292 id=292 data-nosnippet>292</a>            RetryLog::WarnFirstFailure
+<a href=#293 id=293 data-nosnippet>293</a>        } <span class="kw">else </span>{
+<a href=#294 id=294 data-nosnippet>294</a>            RetryLog::Suppressed
+<a href=#295 id=295 data-nosnippet>295</a>        }
+<a href=#296 id=296 data-nosnippet>296</a>    }
+<a href=#297 id=297 data-nosnippet>297</a>
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="doccomment">/// Clear the block — call on a successful build.
+<a href=#299 id=299 data-nosnippet>299</a>    </span><span class="kw">fn </span>clear(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#300 id=300 data-nosnippet>300</a>        <span class="self">self</span>.failed = <span class="prelude-val">None</span>;
+<a href=#301 id=301 data-nosnippet>301</a>    }
+<a href=#302 id=302 data-nosnippet>302</a>}
+<a href=#303 id=303 data-nosnippet>303</a>
+<a href=#304 id=304 data-nosnippet>304</a><span class="doccomment">/// What the decode loop should do about one `decode` failure — see [`DecodeFailures`].
+<a href=#305 id=305 data-nosnippet>305</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#306 id=306 data-nosnippet>306</a></span><span class="kw">struct </span>DecodeAction {
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="doccomment">/// `warn!` this one: the first of a streak, then at most one per [`RETRY_AFTER`].
+<a href=#308 id=308 data-nosnippet>308</a>    </span>log: bool,
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="doccomment">/// Tear the decoder down so the next frame rebuilds it.
+<a href=#310 id=310 data-nosnippet>310</a>    </span>rebuild: bool,
+<a href=#311 id=311 data-nosnippet>311</a>}
+<a href=#312 id=312 data-nosnippet>312</a>
+<a href=#313 id=313 data-nosnippet>313</a><span class="doccomment">/// Pure consecutive-decode-failure policy. A decode error is NOT a construction
+<a href=#314 id=314 data-nosnippet>314</a>/// error: the usual cause is a missing reference, which the decoders heal from on
+<a href=#315 id=315 data-nosnippet>315</a>/// the next keyframe by themselves (VideoToolbox rebuilds its session on new
+<a href=#316 id=316 data-nosnippet>316</a>/// SPS/PPS, openh264 absorbs in-band parameter sets) — so the loop KEEPS the
+<a href=#317 id=317 data-nosnippet>317</a>/// decoder and only signals the pull half to request one. Tearing down per failure
+<a href=#318 id=318 data-nosnippet>318</a>/// instead re-ran `Engine::new().video_decoder(..)` (a full VAAPI/openh264 setup)
+<a href=#319 id=319 data-nosnippet>319</a>/// and an `info!` at the arrival frame rate — the very storm [`RETRY_AFTER`] exists
+<a href=#320 id=320 data-nosnippet>320</a>/// to bound, reached through the decode door.
+<a href=#321 id=321 data-nosnippet>321</a>///
+<a href=#322 id=322 data-nosnippet>322</a>/// Only a streak that OUTLIVES a full [`RETRY_AFTER`] window is treated as a wedged
+<a href=#323 id=323 data-nosnippet>323</a>/// decoder (a VT session invalidated across sleep keeps identical SPS/PPS, so
+<a href=#324 id=324 data-nosnippet>324</a>/// nothing triggers its own rebuild) and torn down — at most once per window, so a
+<a href=#325 id=325 data-nosnippet>325</a>/// sender-controlled corrupt stream still can't drive a rebuild storm. Takes `now`
+<a href=#326 id=326 data-nosnippet>326</a>/// as a parameter so it is unit-testable without a live clock.
+<a href=#327 id=327 data-nosnippet>327</a></span><span class="attr">#[derive(Default)]
+<a href=#328 id=328 data-nosnippet>328</a></span><span class="kw">struct </span>DecodeFailures {
+<a href=#329 id=329 data-nosnippet>329</a>    <span class="doccomment">/// Start of the current failure streak (`None` between streaks).
+<a href=#330 id=330 data-nosnippet>330</a>    </span>since: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
+<a href=#331 id=331 data-nosnippet>331</a>    <span class="doccomment">/// Last failure logged, and last teardown — two independent [`RETRY_AFTER`] paces.
+<a href=#332 id=332 data-nosnippet>332</a>    </span>logged: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
+<a href=#333 id=333 data-nosnippet>333</a>    torn_down: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
+<a href=#334 id=334 data-nosnippet>334</a>}
+<a href=#335 id=335 data-nosnippet>335</a>
+<a href=#336 id=336 data-nosnippet>336</a><span class="kw">impl </span>DecodeFailures {
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="doccomment">/// Record a decode failure at `now` and decide what the loop does about it.
+<a href=#338 id=338 data-nosnippet>338</a>    </span><span class="kw">fn </span>on_failure(<span class="kw-2">&amp;mut </span><span class="self">self</span>, now: Instant) -&gt; DecodeAction {
+<a href=#339 id=339 data-nosnippet>339</a>        <span class="kw">let </span>started = <span class="kw-2">*</span><span class="self">self</span>.since.get_or_insert(now);
+<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>log = <span class="self">self
+<a href=#341 id=341 data-nosnippet>341</a>            </span>.logged
+<a href=#342 id=342 data-nosnippet>342</a>            .is_none_or(|t| now.duration_since(t) &gt;= RETRY_AFTER);
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">if </span>log {
+<a href=#344 id=344 data-nosnippet>344</a>            <span class="self">self</span>.logged = <span class="prelude-val">Some</span>(now);
+<a href=#345 id=345 data-nosnippet>345</a>        }
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">let </span>rebuild = now.duration_since(started) &gt;= RETRY_AFTER
+<a href=#347 id=347 data-nosnippet>347</a>            &amp;&amp; <span class="self">self
+<a href=#348 id=348 data-nosnippet>348</a>                </span>.torn_down
+<a href=#349 id=349 data-nosnippet>349</a>                .is_none_or(|t| now.duration_since(t) &gt;= RETRY_AFTER);
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="kw">if </span>rebuild {
+<a href=#351 id=351 data-nosnippet>351</a>            <span class="self">self</span>.torn_down = <span class="prelude-val">Some</span>(now);
+<a href=#352 id=352 data-nosnippet>352</a>        }
+<a href=#353 id=353 data-nosnippet>353</a>        DecodeAction { log, rebuild }
+<a href=#354 id=354 data-nosnippet>354</a>    }
+<a href=#355 id=355 data-nosnippet>355</a>
+<a href=#356 id=356 data-nosnippet>356</a>    <span class="doccomment">/// A frame decoded — the streak (if any) is over.
+<a href=#357 id=357 data-nosnippet>357</a>    </span><span class="kw">fn </span>on_success(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw-2">*</span><span class="self">self </span>= <span class="self">Self</span>::default();
+<a href=#359 id=359 data-nosnippet>359</a>    }
+<a href=#360 id=360 data-nosnippet>360</a>}
+<a href=#361 id=361 data-nosnippet>361</a>
+<a href=#362 id=362 data-nosnippet>362</a><span class="comment">// ─── Receive-side video playout (presentation pacing) ──────────────────────────
+<a href=#363 id=363 data-nosnippet>363</a>
+<a href=#364 id=364 data-nosnippet>364</a></span><span class="doccomment">/// How long a decoded frame waits in the playout buffer before it reaches the
+<a href=#365 id=365 data-nosnippet>365</a>/// renderer. Deliberately SHALLOW — between one and two 30 fps frame intervals —
+<a href=#366 id=366 data-nosnippet>366</a>/// because this stage buys *presentation pacing*, not loss recovery: frames arrive
+<a href=#367 id=367 data-nosnippet>367</a>/// and decode in bursts (a group flush, a retransmit tail, a slow software decode),
+<a href=#368 id=368 data-nosnippet>368</a>/// and rendering them the instant they pop out plays a nominally-30 fps tile as
+<a href=#369 id=369 data-nosnippet>369</a>/// judder. Scheduling each frame against the sender's capture clock replays the
+<a href=#370 id=370 data-nosnippet>370</a>/// sender's spacing instead.
+<a href=#371 id=371 data-nosnippet>371</a>///
+<a href=#372 id=372 data-nosnippet>372</a>/// It is NOT lip-sync. Anchoring video against the audio plane's own (adaptive,
+<a href=#373 id=373 data-nosnippet>373</a>/// far deeper) jitter depth is a cross-plane problem this stage deliberately does
+<a href=#374 id=374 data-nosnippet>374</a>/// not attempt — see the module docs.
+<a href=#375 id=375 data-nosnippet>375</a></span><span class="kw">const </span>VIDEO_PLAYOUT_DELAY_US: i64 = <span class="number">40_000</span>;
+<a href=#376 id=376 data-nosnippet>376</a>
+<a href=#377 id=377 data-nosnippet>377</a><span class="doccomment">/// Bound on decoded frames held for playout. A decoded frame can hold a GPU
+<a href=#378 id=378 data-nosnippet>378</a>/// surface lease (a VideoToolbox IOSurface, a D3D11 texture-pool slot), so the
+<a href=#379 id=379 data-nosnippet>379</a>/// depth must stay well inside a decoder's pool: 8 is several times the
+<a href=#380 id=380 data-nosnippet>380</a>/// steady-state occupancy (1–2 frames at the shallow target) and only reachable
+<a href=#381 id=381 data-nosnippet>381</a>/// when the pump is already hundreds of ms behind, where drop-oldest is the right
+<a href=#382 id=382 data-nosnippet>382</a>/// answer for video anyway.
+<a href=#383 id=383 data-nosnippet>383</a></span><span class="kw">const </span>VIDEO_PLAYOUT_MAX_FRAMES: usize = <span class="number">8</span>;
+<a href=#384 id=384 data-nosnippet>384</a>
+<a href=#385 id=385 data-nosnippet>385</a><span class="doccomment">/// Consecutive strictly-advancing wire timestamps that turn playout scheduling on
+<a href=#386 id=386 data-nosnippet>386</a>/// (or, in the other direction, non-advancing ones that latch it off) — see
+<a href=#387 id=387 data-nosnippet>387</a>/// [`PlayoutMode`]. Three frames is ~100 ms of stream: long enough not to judge a
+<a href=#388 id=388 data-nosnippet>388</a>/// sender on one duplicate stamp, short enough that pacing engages immediately.
+<a href=#389 id=389 data-nosnippet>389</a></span><span class="kw">const </span>VIDEO_STAMP_RUN: u32 = <span class="number">3</span>;
+<a href=#390 id=390 data-nosnippet>390</a>
+<a href=#391 id=391 data-nosnippet>391</a><span class="doccomment">/// Whether this sender's wire timestamps can schedule playout at all.
+<a href=#392 id=392 data-nosnippet>392</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+<a href=#393 id=393 data-nosnippet>393</a></span><span class="kw">enum </span>PlayoutMode {
+<a href=#394 id=394 data-nosnippet>394</a>    <span class="doccomment">/// Not enough evidence yet — render on arrival, so a stream is never delayed
+<a href=#395 id=395 data-nosnippet>395</a>    /// by the probe itself.
+<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="attr">#[default]
+<a href=#397 id=397 data-nosnippet>397</a>    </span>Probing,
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="doccomment">/// Timestamps advance: schedule through the playout buffer.
+<a href=#399 id=399 data-nosnippet>399</a>    </span>Buffered,
+<a href=#400 id=400 data-nosnippet>400</a>    <span class="doccomment">/// Latched off. Some encoders stamp every chunk `TimestampUs::ZERO` (the MFT
+<a href=#401 id=401 data-nosnippet>401</a>    /// and rav1e paths do), and a buffer keyed on a constant timestamp drops every
+<a href=#402 id=402 data-nosnippet>402</a>    /// frame after the first as late — a frozen tile. Render on arrival, forever.
+<a href=#403 id=403 data-nosnippet>403</a>    </span>PassThrough,
+<a href=#404 id=404 data-nosnippet>404</a>}
+<a href=#405 id=405 data-nosnippet>405</a>
+<a href=#406 id=406 data-nosnippet>406</a><span class="doccomment">/// Pure wire-timestamp usability policy behind [`PlayoutMode`]: it only ever reads
+<a href=#407 id=407 data-nosnippet>407</a>/// the timestamps a sender puts on the wire, so it is unit-testable without a
+<a href=#408 id=408 data-nosnippet>408</a>/// decoder, a clock, or a sink.
+<a href=#409 id=409 data-nosnippet>409</a></span><span class="attr">#[derive(Debug, Default)]
+<a href=#410 id=410 data-nosnippet>410</a></span><span class="kw">struct </span>PlayoutStamps {
+<a href=#411 id=411 data-nosnippet>411</a>    mode: PlayoutMode,
+<a href=#412 id=412 data-nosnippet>412</a>    last_ts: <span class="prelude-ty">Option</span>&lt;i64&gt;,
+<a href=#413 id=413 data-nosnippet>413</a>    <span class="doccomment">/// Current run of advancing / non-advancing timestamps (each resets the other).
+<a href=#414 id=414 data-nosnippet>414</a>    </span>advancing: u32,
+<a href=#415 id=415 data-nosnippet>415</a>    stale: u32,
+<a href=#416 id=416 data-nosnippet>416</a>}
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a><span class="kw">impl </span>PlayoutStamps {
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="doccomment">/// Fold one arriving frame's wire timestamp in and report how its decoded
+<a href=#420 id=420 data-nosnippet>420</a>    /// output should be delivered. [`PlayoutMode::PassThrough`] is terminal — a
+<a href=#421 id=421 data-nosnippet>421</a>    /// sender that cannot stamp will not start.
+<a href=#422 id=422 data-nosnippet>422</a>    </span><span class="kw">fn </span>observe(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ts_us: i64) -&gt; PlayoutMode {
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">if </span><span class="self">self</span>.mode == PlayoutMode::PassThrough {
+<a href=#424 id=424 data-nosnippet>424</a>            <span class="kw">return </span><span class="self">self</span>.mode;
+<a href=#425 id=425 data-nosnippet>425</a>        }
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">match </span><span class="self">self</span>.last_ts {
+<a href=#427 id=427 data-nosnippet>427</a>            <span class="prelude-val">Some</span>(last) <span class="kw">if </span>ts_us &gt; last =&gt; {
+<a href=#428 id=428 data-nosnippet>428</a>                <span class="self">self</span>.stale = <span class="number">0</span>;
+<a href=#429 id=429 data-nosnippet>429</a>                <span class="self">self</span>.advancing = <span class="self">self</span>.advancing.saturating_add(<span class="number">1</span>);
+<a href=#430 id=430 data-nosnippet>430</a>                <span class="kw">if </span><span class="self">self</span>.advancing &gt;= VIDEO_STAMP_RUN {
+<a href=#431 id=431 data-nosnippet>431</a>                    <span class="self">self</span>.mode = PlayoutMode::Buffered;
+<a href=#432 id=432 data-nosnippet>432</a>                }
+<a href=#433 id=433 data-nosnippet>433</a>            }
+<a href=#434 id=434 data-nosnippet>434</a>            <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; {
+<a href=#435 id=435 data-nosnippet>435</a>                <span class="self">self</span>.advancing = <span class="number">0</span>;
+<a href=#436 id=436 data-nosnippet>436</a>                <span class="self">self</span>.stale = <span class="self">self</span>.stale.saturating_add(<span class="number">1</span>);
+<a href=#437 id=437 data-nosnippet>437</a>                <span class="kw">if </span><span class="self">self</span>.stale &gt;= VIDEO_STAMP_RUN {
+<a href=#438 id=438 data-nosnippet>438</a>                    <span class="self">self</span>.mode = PlayoutMode::PassThrough;
+<a href=#439 id=439 data-nosnippet>439</a>                }
+<a href=#440 id=440 data-nosnippet>440</a>            }
+<a href=#441 id=441 data-nosnippet>441</a>            <span class="prelude-val">None </span>=&gt; {}
+<a href=#442 id=442 data-nosnippet>442</a>        }
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="comment">// A non-advancing stamp must not move the baseline backwards (a stamp of 0
+<a href=#444 id=444 data-nosnippet>444</a>        // after a real one would otherwise re-arm the advancing run every frame).
+<a href=#445 id=445 data-nosnippet>445</a>        </span><span class="self">self</span>.last_ts = <span class="prelude-val">Some</span>(<span class="self">self</span>.last_ts.map_or(ts_us, |last| last.max(ts_us)));
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="self">self</span>.mode
+<a href=#447 id=447 data-nosnippet>447</a>    }
+<a href=#448 id=448 data-nosnippet>448</a>}
+<a href=#449 id=449 data-nosnippet>449</a>
+<a href=#450 id=450 data-nosnippet>450</a><span class="doccomment">/// A decoded frame waiting for its playout slot. Carries the SENDER's capture-clock
+<a href=#451 id=451 data-nosnippet>451</a>/// timestamp (what the buffer schedules against — the decoders do not thread a
+<a href=#452 id=452 data-nosnippet>452</a>/// timestamp onto their output, and the wire frame is the only place it exists) and
+<a href=#453 id=453 data-nosnippet>453</a>/// the local time it was queued, for the dwell stat. The frame itself is moved in
+<a href=#454 id=454 data-nosnippet>454</a>/// and out, never copied.
+<a href=#455 id=455 data-nosnippet>455</a>///
+<a href=#456 id=456 data-nosnippet>456</a>/// Pairing the decoder's output with the timestamp of the frame just fed assumes
+<a href=#457 id=457 data-nosnippet>457</a>/// one-in-one-out decode (true for every backend here — no B-frames on the wire). A
+<a href=#458 id=458 data-nosnippet>458</a>/// decoder that reordered would shift every stamp by a CONSTANT, which the buffer
+<a href=#459 id=459 data-nosnippet>459</a>/// absorbs in its anchor; only spacing matters to this stage.
+<a href=#460 id=460 data-nosnippet>460</a></span><span class="kw">struct </span>PlayoutVideo {
+<a href=#461 id=461 data-nosnippet>461</a>    ts_us: i64,
+<a href=#462 id=462 data-nosnippet>462</a>    queued_us: i64,
+<a href=#463 id=463 data-nosnippet>463</a>    frame: hound_engine::types::RawFrame,
+<a href=#464 id=464 data-nosnippet>464</a>}
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a><span class="kw">impl </span>hound_media::Timestamped <span class="kw">for </span>PlayoutVideo {
+<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">fn </span>timestamp_us(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; i64 {
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="self">self</span>.ts_us
+<a href=#469 id=469 data-nosnippet>469</a>    }
+<a href=#470 id=470 data-nosnippet>470</a>}
+<a href=#471 id=471 data-nosnippet>471</a>
+<a href=#472 id=472 data-nosnippet>472</a><span class="doccomment">/// Hand one DECODED frame to the render sink, surface-first (zero-copy GPU handle)
+<a href=#473 id=473 data-nosnippet>473</a>/// with materialized I420 as the universal fallback. Consumes the frame, so the
+<a href=#474 id=474 data-nosnippet>474</a>/// no-surface case MOVES the decoder's conversion buffer instead of copying ~1.4 MB
+<a href=#475 id=475 data-nosnippet>475</a>/// per frame per peer ([`push_preview`] is the borrow-based capture-side twin).
+<a href=#476 id=476 data-nosnippet>476</a></span><span class="kw">fn </span>push_decoded(sink: <span class="kw-2">&amp;</span><span class="kw">dyn </span>VideoSink, key: <span class="kw-2">&amp;</span>str, raw: hound_engine::types::RawFrame) {
+<a href=#477 id=477 data-nosnippet>477</a>    <span class="kw">if </span>RenderSurfaceHandle::for_frame(<span class="kw-2">&amp;</span>raw).is_some_and(|handle| sink.push_surface(key, handle)) {
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">return</span>;
+<a href=#479 id=479 data-nosnippet>479</a>    }
+<a href=#480 id=480 data-nosnippet>480</a>    <span class="kw">let </span>(w, h) = (raw.width(), raw.height());
+<a href=#481 id=481 data-nosnippet>481</a>    <span class="kw">let </span>data = <span class="kw">if </span>raw.surface.is_none() &amp;&amp; raw.format == hound_engine::types::PixelFormat::I420 {
+<a href=#482 id=482 data-nosnippet>482</a>        raw.data
+<a href=#483 id=483 data-nosnippet>483</a>    } <span class="kw">else </span>{
+<a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">match </span>raw.as_i420() {
+<a href=#485 id=485 data-nosnippet>485</a>            <span class="prelude-val">Some</span>(c) =&gt; c.into_owned().data,
+<a href=#486 id=486 data-nosnippet>486</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return</span>,
+<a href=#487 id=487 data-nosnippet>487</a>        }
+<a href=#488 id=488 data-nosnippet>488</a>    };
+<a href=#489 id=489 data-nosnippet>489</a>    sink.push_frame(key, w, h, data);
+<a href=#490 id=490 data-nosnippet>490</a>}
+<a href=#491 id=491 data-nosnippet>491</a>
+<a href=#492 id=492 data-nosnippet>492</a><span class="doccomment">/// The blocking video decode loop: owns the `!Send` `VideoDecoder`, rebuilds it
+<a href=#493 id=493 data-nosnippet>493</a>/// when the sender's codec changes (the sender's choice drives decode), and pushes
+<a href=#494 id=494 data-nosnippet>494</a>/// each decoded frame to the sink through a shallow playout stage
+<a href=#495 id=495 data-nosnippet>495</a>/// ([`VIDEO_PLAYOUT_DELAY_US`]) that replays the sender's frame spacing. A decode
+<a href=#496 id=496 data-nosnippet>496</a>/// failure raises `resync_needed` — this thread's only route to the control plane
+<a href=#497 id=497 data-nosnippet>497</a>/// (see [`DecodeFailures`]).
+<a href=#498 id=498 data-nosnippet>498</a></span><span class="kw">fn </span>video_decode_loop(
+<a href=#499 id=499 data-nosnippet>499</a>    frame_rx: std::sync::mpsc::Receiver&lt;WireFrame&gt;,
+<a href=#500 id=500 data-nosnippet>500</a>    key: String,
+<a href=#501 id=501 data-nosnippet>501</a>    vkind: InboundVideoKind,
+<a href=#502 id=502 data-nosnippet>502</a>    sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;,
+<a href=#503 id=503 data-nosnippet>503</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#504 id=504 data-nosnippet>504</a>    peer_stats: Arc&lt;<span class="kw">crate</span>::stats::PeerStats&gt;,
+<a href=#505 id=505 data-nosnippet>505</a>    resync_needed: Arc&lt;AtomicBool&gt;,
+<a href=#506 id=506 data-nosnippet>506</a>) {
+<a href=#507 id=507 data-nosnippet>507</a>    <span class="kw">use </span>hound_engine::types::VideoCodec;
+<a href=#508 id=508 data-nosnippet>508</a>
+<a href=#509 id=509 data-nosnippet>509</a>    <span class="kw">let </span><span class="kw-2">mut </span>decoder: <span class="prelude-ty">Option</span>&lt;VideoDecoder&gt; = <span class="prelude-val">None</span>;
+<a href=#510 id=510 data-nosnippet>510</a>    <span class="kw">let </span><span class="kw-2">mut </span>decoder_codec: <span class="prelude-ty">Option</span>&lt;WireCodec&gt; = <span class="prelude-val">None</span>;
+<a href=#511 id=511 data-nosnippet>511</a>    <span class="kw">let </span><span class="kw-2">mut </span>retry = DecoderRetry::default();
+<a href=#512 id=512 data-nosnippet>512</a>    <span class="kw">let </span><span class="kw-2">mut </span>decode_failures = DecodeFailures::default();
+<a href=#513 id=513 data-nosnippet>513</a>    <span class="comment">// The current decode path + codec (captured at build) and a ~5 s throughput
+<a href=#514 id=514 data-nosnippet>514</a>    // window, so the log shows decoded geometry + ACTUAL decode fps + mean decode
+<a href=#515 id=515 data-nosnippet>515</a>    // cost — a crawling software decode is visible at a glance.
+<a href=#516 id=516 data-nosnippet>516</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>current_backend: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str = <span class="string">"?"</span>;
+<a href=#517 id=517 data-nosnippet>517</a>    <span class="kw">let </span><span class="kw-2">mut </span>current_codec = VideoCodec::H264;
+<a href=#518 id=518 data-nosnippet>518</a>    <span class="kw">let </span><span class="kw-2">mut </span>win_start: <span class="prelude-ty">Option</span>&lt;std::time::Instant&gt; = <span class="prelude-val">None</span>;
+<a href=#519 id=519 data-nosnippet>519</a>    <span class="kw">let </span><span class="kw-2">mut </span>win_frames: u64 = <span class="number">0</span>;
+<a href=#520 id=520 data-nosnippet>520</a>    <span class="kw">let </span><span class="kw-2">mut </span>win_decode_us: u64 = <span class="number">0</span>;
+<a href=#521 id=521 data-nosnippet>521</a>
+<a href=#522 id=522 data-nosnippet>522</a>    <span class="comment">// Playout stage: decoded frames are scheduled a shallow `VIDEO_PLAYOUT_DELAY_US`
+<a href=#523 id=523 data-nosnippet>523</a>    // ahead on the sender's capture timeline and released newest-due-first. `clock`
+<a href=#524 id=524 data-nosnippet>524</a>    // is this thread's local timeline; the buffer maps the sender's stamps onto it
+<a href=#525 id=525 data-nosnippet>525</a>    // on first push. Recovery is untouched — this sits entirely BELOW decode, so
+<a href=#526 id=526 data-nosnippet>526</a>    // the pull half's keyframe gate, PLI throttle, stall and resync paths never see
+<a href=#527 id=527 data-nosnippet>527</a>    // it, and the channel is drained exactly as fast as before.
+<a href=#528 id=528 data-nosnippet>528</a>    </span><span class="kw">let </span>clock = CaptureClock::start();
+<a href=#529 id=529 data-nosnippet>529</a>    <span class="kw">let </span><span class="kw-2">mut </span>playout: hound_media::PlayoutBuffer&lt;PlayoutVideo&gt; =
+<a href=#530 id=530 data-nosnippet>530</a>        hound_media::PlayoutBuffer::with_capacity(VIDEO_PLAYOUT_DELAY_US, VIDEO_PLAYOUT_MAX_FRAMES);
+<a href=#531 id=531 data-nosnippet>531</a>    <span class="kw">let </span><span class="kw-2">mut </span>stamps = PlayoutStamps::default();
+<a href=#532 id=532 data-nosnippet>532</a>    <span class="kw">let </span><span class="kw-2">mut </span>reported_drops = <span class="number">0u64</span>;
+<a href=#533 id=533 data-nosnippet>533</a>
+<a href=#534 id=534 data-nosnippet>534</a>    <span class="kw">loop </span>{
+<a href=#535 id=535 data-nosnippet>535</a>        <span class="comment">// Wait for the next encoded frame — but never past the moment a buffered
+<a href=#536 id=536 data-nosnippet>536</a>        // frame comes due, so a sparse producer (a static share re-emitting at ~1 fps)
+<a href=#537 id=537 data-nosnippet>537</a>        // is still released at the target instead of being held for its successor.
+<a href=#538 id=538 data-nosnippet>538</a>        </span><span class="kw">let </span>arrived = <span class="kw">match </span>playout.next_due_us() {
+<a href=#539 id=539 data-nosnippet>539</a>            <span class="prelude-val">Some</span>(due) =&gt; {
+<a href=#540 id=540 data-nosnippet>540</a>                <span class="kw">let </span>wait = Duration::from_micros(due.saturating_sub(clock.now()).max(<span class="number">0</span>) <span class="kw">as </span>u64);
+<a href=#541 id=541 data-nosnippet>541</a>                <span class="kw">match </span>frame_rx.recv_timeout(wait) {
+<a href=#542 id=542 data-nosnippet>542</a>                    <span class="prelude-val">Ok</span>(f) =&gt; <span class="prelude-val">Some</span>(f),
+<a href=#543 id=543 data-nosnippet>543</a>                    <span class="prelude-val">Err</span>(std::sync::mpsc::RecvTimeoutError::Timeout) =&gt; <span class="prelude-val">None</span>,
+<a href=#544 id=544 data-nosnippet>544</a>                    <span class="prelude-val">Err</span>(std::sync::mpsc::RecvTimeoutError::Disconnected) =&gt; <span class="kw">break</span>,
+<a href=#545 id=545 data-nosnippet>545</a>                }
+<a href=#546 id=546 data-nosnippet>546</a>            }
+<a href=#547 id=547 data-nosnippet>547</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">match </span>frame_rx.recv() {
+<a href=#548 id=548 data-nosnippet>548</a>                <span class="prelude-val">Ok</span>(f) =&gt; <span class="prelude-val">Some</span>(f),
+<a href=#549 id=549 data-nosnippet>549</a>                <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">break</span>,
+<a href=#550 id=550 data-nosnippet>550</a>            },
+<a href=#551 id=551 data-nosnippet>551</a>        };
+<a href=#552 id=552 data-nosnippet>552</a>        <span class="kw">if </span>stop.load(Ordering::Relaxed) {
+<a href=#553 id=553 data-nosnippet>553</a>            <span class="kw">break</span>;
+<a href=#554 id=554 data-nosnippet>554</a>        }
+<a href=#555 id=555 data-nosnippet>555</a>        <span class="comment">// Release BEFORE decoding what just arrived: that frame belongs to a later
+<a href=#556 id=556 data-nosnippet>556</a>        // playout slot, so its decode must not delay a frame that is due now. A
+<a href=#557 id=557 data-nosnippet>557</a>        // burst collapses to the freshest — an overdrawn intermediate is pure judder.
+<a href=#558 id=558 data-nosnippet>558</a>        </span><span class="kw">let </span>now_us = clock.now();
+<a href=#559 id=559 data-nosnippet>559</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(item) = playout.pop_latest_due(now_us) {
+<a href=#560 id=560 data-nosnippet>560</a>            peer_stats.video_dwell(vkind, now_us - item.queued_us);
+<a href=#561 id=561 data-nosnippet>561</a>            push_decoded(sink.as_ref(), <span class="kw-2">&amp;</span>key, item.frame);
+<a href=#562 id=562 data-nosnippet>562</a>        }
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="comment">// Playout-drop total: superseded (the collapse policy above), plus the
+<a href=#564 id=564 data-nosnippet>564</a>        // buffer's own late/overflow drops. A gauge — only written when it moves.
+<a href=#565 id=565 data-nosnippet>565</a>        </span><span class="kw">let </span>dropped = playout.superseded_drops() + playout.late_drops() + playout.overflow_drops();
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw">if </span><span class="macro">dropped !</span>= reported_drops {
+<a href=#567 id=567 data-nosnippet>567</a>            reported_drops = dropped;
+<a href=#568 id=568 data-nosnippet>568</a>            peer_stats.set_video_playout_dropped_total(vkind, dropped);
+<a href=#569 id=569 data-nosnippet>569</a>        }
+<a href=#570 id=570 data-nosnippet>570</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(frame) = arrived <span class="kw">else </span>{
+<a href=#571 id=571 data-nosnippet>571</a>            <span class="kw">continue</span>; <span class="comment">// woke only to release
+<a href=#572 id=572 data-nosnippet>572</a>        </span>};
+<a href=#573 id=573 data-nosnippet>573</a>        <span class="comment">// (Re)build the decoder if the sender's codec changed.
+<a href=#574 id=574 data-nosnippet>574</a>        </span><span class="kw">if </span><span class="macro">decoder_codec !</span>= <span class="prelude-val">Some</span>(frame.codec) {
+<a href=#575 id=575 data-nosnippet>575</a>            <span class="kw">let </span>now = std::time::Instant::now();
+<a href=#576 id=576 data-nosnippet>576</a>            <span class="kw">if </span>retry.blocked(frame.codec, now) {
+<a href=#577 id=577 data-nosnippet>577</a>                <span class="comment">// Still inside the retry window for this codec's last failure — skip
+<a href=#578 id=578 data-nosnippet>578</a>                // the expensive platform-decoder construction and stay silent (see
+<a href=#579 id=579 data-nosnippet>579</a>                // `RETRY_AFTER`).
+<a href=#580 id=580 data-nosnippet>580</a>                </span><span class="macro">tracing::trace!</span>(codec = <span class="question-mark">?</span>frame.codec, <span class="string">"video: decoder build suppressed (retry window)"</span>);
+<a href=#581 id=581 data-nosnippet>581</a>                <span class="kw">continue</span>;
+<a href=#582 id=582 data-nosnippet>582</a>            }
+<a href=#583 id=583 data-nosnippet>583</a>            <span class="kw">let </span>vc = <span class="kw">match </span>frame.codec {
+<a href=#584 id=584 data-nosnippet>584</a>                WireCodec::H264 =&gt; VideoCodec::H264,
+<a href=#585 id=585 data-nosnippet>585</a>                WireCodec::H265 =&gt; VideoCodec::H265,
+<a href=#586 id=586 data-nosnippet>586</a>                WireCodec::Av1 =&gt; VideoCodec::Av1,
+<a href=#587 id=587 data-nosnippet>587</a>                WireCodec::Opus =&gt; <span class="kw">continue</span>, <span class="comment">// not a video codec; ignore
+<a href=#588 id=588 data-nosnippet>588</a>            </span>};
+<a href=#589 id=589 data-nosnippet>589</a>            <span class="kw">match </span>Engine::new().video_decoder(vc) {
+<a href=#590 id=590 data-nosnippet>590</a>                <span class="prelude-val">Ok</span>(d) =&gt; {
+<a href=#591 id=591 data-nosnippet>591</a>                    retry.clear();
+<a href=#592 id=592 data-nosnippet>592</a>                    <span class="comment">// Surface the actual decode path + codec. A software fallback
+<a href=#593 id=593 data-nosnippet>593</a>                    // (e.g. AV1 with no HW block) is CPU-heavy and can starve the
+<a href=#594 id=594 data-nosnippet>594</a>                    // audio fill path, so make HW-vs-SW visible in the call log.
+<a href=#595 id=595 data-nosnippet>595</a>                    </span>current_backend = d.backend();
+<a href=#596 id=596 data-nosnippet>596</a>                    current_codec = vc;
+<a href=#597 id=597 data-nosnippet>597</a>                    win_start = <span class="prelude-val">None</span>;
+<a href=#598 id=598 data-nosnippet>598</a>                    win_frames = <span class="number">0</span>;
+<a href=#599 id=599 data-nosnippet>599</a>                    win_decode_us = <span class="number">0</span>;
+<a href=#600 id=600 data-nosnippet>600</a>                    <span class="macro">tracing::info!</span>(
+<a href=#601 id=601 data-nosnippet>601</a>                        target: <span class="string">"video_decode"</span>,
+<a href=#602 id=602 data-nosnippet>602</a>                        key = %key,
+<a href=#603 id=603 data-nosnippet>603</a>                        codec = <span class="question-mark">?</span>vc,
+<a href=#604 id=604 data-nosnippet>604</a>                        backend = current_backend,
+<a href=#605 id=605 data-nosnippet>605</a>                        <span class="string">"video: decode path selected"
+<a href=#606 id=606 data-nosnippet>606</a>                    </span>);
+<a href=#607 id=607 data-nosnippet>607</a>                    decoder = <span class="prelude-val">Some</span>(d);
+<a href=#608 id=608 data-nosnippet>608</a>                    decoder_codec = <span class="prelude-val">Some</span>(frame.codec);
+<a href=#609 id=609 data-nosnippet>609</a>                    <span class="comment">// Surface the live decode codec in the RTC-debug panel (also
+<a href=#610 id=610 data-nosnippet>610</a>                    // tracks a mid-stream sender codec switch), and count the build:
+<a href=#611 id=611 data-nosnippet>611</a>                    // repeated builds inside one window are churn, and each one costs
+<a href=#612 id=612 data-nosnippet>612</a>                    // the stream its reference chain (the video report reads this).
+<a href=#613 id=613 data-nosnippet>613</a>                    </span>peer_stats.set_inbound_video_codec(vkind, video_codec_to_ctl(vc).label());
+<a href=#614 id=614 data-nosnippet>614</a>                    peer_stats.video_decoder_built(vkind);
+<a href=#615 id=615 data-nosnippet>615</a>                }
+<a href=#616 id=616 data-nosnippet>616</a>                <span class="comment">// A decoder that will not BUILD is, today, a silently black tile: the
+<a href=#617 id=617 data-nosnippet>617</a>                // loop logs once and re-attempts every `RETRY_AFTER` for as long as
+<a href=#618 id=618 data-nosnippet>618</a>                // the subscription lives, and nothing reaches the UI — no event, no
+<a href=#619 id=619 data-nosnippet>619</a>                // placeholder, no "this stream can't be played here". Deliberate for
+<a href=#620 id=620 data-nosnippet>620</a>                // the codec case it was written for (an unsupported wire codec is the
+<a href=#621 id=621 data-nosnippet>621</a>                // sender's problem to fix and the retry is how it heals), and a known
+<a href=#622 id=622 data-nosnippet>622</a>                // gap for the RESOURCE case: on Apple this is also where decode-session
+<a href=#623 id=623 data-nosnippet>623</a>                // exhaustion lands, because VideoToolbox has no software fallback
+<a href=#624 id=624 data-nosnippet>624</a>                // behind it (`hound_engine`'s `platform::HW_DECODE_SESSIONS`). The
+<a href=#625 id=625 data-nosnippet>625</a>                // protection for that is upstream and preventive — `DecodeBudget` caps
+<a href=#626 id=626 data-nosnippet>626</a>                // how many sessions this receiver ever asks for — not a recovery here.
+<a href=#627 id=627 data-nosnippet>627</a>                // Two fallbacks that would make it a recovery are deferred, not
+<a href=#628 id=628 data-nosnippet>628</a>                // rejected: openh264 SW H.264 on Apple, and dav1d for AV1.
+<a href=#629 id=629 data-nosnippet>629</a>                </span><span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#630 id=630 data-nosnippet>630</a>                    <span class="kw">match </span>retry.on_failure(frame.codec, now) {
+<a href=#631 id=631 data-nosnippet>631</a>                        RetryLog::WarnFirstFailure =&gt; {
+<a href=#632 id=632 data-nosnippet>632</a>                            <span class="macro">tracing::warn!</span>(%e, codec = <span class="question-mark">?</span>frame.codec, <span class="string">"video: failed to build decoder"</span>);
+<a href=#633 id=633 data-nosnippet>633</a>                        }
+<a href=#634 id=634 data-nosnippet>634</a>                        RetryLog::Suppressed =&gt; {
+<a href=#635 id=635 data-nosnippet>635</a>                            <span class="macro">tracing::trace!</span>(%e, codec = <span class="question-mark">?</span>frame.codec, <span class="string">"video: decoder build still failing"</span>);
+<a href=#636 id=636 data-nosnippet>636</a>                        }
+<a href=#637 id=637 data-nosnippet>637</a>                    }
+<a href=#638 id=638 data-nosnippet>638</a>                    <span class="kw">continue</span>;
+<a href=#639 id=639 data-nosnippet>639</a>                }
+<a href=#640 id=640 data-nosnippet>640</a>            }
+<a href=#641 id=641 data-nosnippet>641</a>        }
+<a href=#642 id=642 data-nosnippet>642</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(dec) = decoder.as_mut() <span class="kw">else </span>{
+<a href=#643 id=643 data-nosnippet>643</a>            <span class="kw">continue</span>;
+<a href=#644 id=644 data-nosnippet>644</a>        };
+<a href=#645 id=645 data-nosnippet>645</a>        <span class="kw">let </span>decode_start = std::time::Instant::now();
+<a href=#646 id=646 data-nosnippet>646</a>        <span class="kw">match </span>dec.decode(<span class="kw-2">&amp;</span>frame.data) {
+<a href=#647 id=647 data-nosnippet>647</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(raw)) =&gt; {
+<a href=#648 id=648 data-nosnippet>648</a>                decode_failures.on_success();
+<a href=#649 id=649 data-nosnippet>649</a>                <span class="kw">let </span>decode_us = decode_start.elapsed().as_micros().min(i64::MAX <span class="kw">as </span>u128) <span class="kw">as </span>i64;
+<a href=#650 id=650 data-nosnippet>650</a>                <span class="kw">let </span>(w, h) = (raw.width(), raw.height());
+<a href=#651 id=651 data-nosnippet>651</a>                <span class="comment">// Every decoder backend emits an OWNED I420 `RawFrame` — each `decode`
+<a href=#652 id=652 data-nosnippet>652</a>                // call allocates a fresh conversion buffer (vt_decoder / vaapi / sw all
+<a href=#653 id=653 data-nosnippet>653</a>                // output I420, asserted in their tests). So the frame is MOVED from here
+<a href=#654 id=654 data-nosnippet>654</a>                // to the sink (through the playout buffer, which only ever reads its
+<a href=#655 id=655 data-nosnippet>655</a>                // timestamp): the decoder's single conversion alloc stays the only one
+<a href=#656 id=656 data-nosnippet>656</a>                // on this path, and a GPU-resident frame keeps its zero-copy surface.
+<a href=#657 id=657 data-nosnippet>657</a>                </span><span class="kw">match </span>stamps.observe(frame.timestamp_us) {
+<a href=#658 id=658 data-nosnippet>658</a>                    <span class="comment">// Schedule it — the pump at the top of the loop releases it at its
+<a href=#659 id=659 data-nosnippet>659</a>                    // playout time.
+<a href=#660 id=660 data-nosnippet>660</a>                    </span>PlayoutMode::Buffered =&gt; {
+<a href=#661 id=661 data-nosnippet>661</a>                        <span class="kw">let </span>queued_us = clock.now();
+<a href=#662 id=662 data-nosnippet>662</a>                        playout.push(
+<a href=#663 id=663 data-nosnippet>663</a>                            queued_us,
+<a href=#664 id=664 data-nosnippet>664</a>                            PlayoutVideo {
+<a href=#665 id=665 data-nosnippet>665</a>                                ts_us: frame.timestamp_us,
+<a href=#666 id=666 data-nosnippet>666</a>                                queued_us,
+<a href=#667 id=667 data-nosnippet>667</a>                                frame: raw,
+<a href=#668 id=668 data-nosnippet>668</a>                            },
+<a href=#669 id=669 data-nosnippet>669</a>                        );
+<a href=#670 id=670 data-nosnippet>670</a>                    }
+<a href=#671 id=671 data-nosnippet>671</a>                    <span class="comment">// Still probing: render on arrival so the probe itself costs nothing.
+<a href=#672 id=672 data-nosnippet>672</a>                    </span>PlayoutMode::Probing =&gt; push_decoded(sink.as_ref(), <span class="kw-2">&amp;</span>key, raw),
+<a href=#673 id=673 data-nosnippet>673</a>                    <span class="comment">// Latched off (possibly just now): hand over anything still queued —
+<a href=#674 id=674 data-nosnippet>674</a>                    // newest wins — so no frame is stranded, then render on arrival.
+<a href=#675 id=675 data-nosnippet>675</a>                    </span>PlayoutMode::PassThrough =&gt; {
+<a href=#676 id=676 data-nosnippet>676</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(item) = playout.pop_latest_due(i64::MAX) {
+<a href=#677 id=677 data-nosnippet>677</a>                            push_decoded(sink.as_ref(), <span class="kw-2">&amp;</span>key, item.frame);
+<a href=#678 id=678 data-nosnippet>678</a>                        }
+<a href=#679 id=679 data-nosnippet>679</a>                        push_decoded(sink.as_ref(), <span class="kw-2">&amp;</span>key, raw);
+<a href=#680 id=680 data-nosnippet>680</a>                    }
+<a href=#681 id=681 data-nosnippet>681</a>                }
+<a href=#682 id=682 data-nosnippet>682</a>                <span class="comment">// RTC-debug: one decoded frame (geometry + decode-time tail).
+<a href=#683 id=683 data-nosnippet>683</a>                </span>peer_stats.video_decoded(vkind, w, h, decode_us);
+<a href=#684 id=684 data-nosnippet>684</a>
+<a href=#685 id=685 data-nosnippet>685</a>                <span class="comment">// ~5 s decode-throughput sample: decoded geometry + ACTUAL fps +
+<a href=#686 id=686 data-nosnippet>686</a>                // mean decode cost on the current path (HW/SW visible above).
+<a href=#687 id=687 data-nosnippet>687</a>                </span><span class="kw">let </span>now = std::time::Instant::now();
+<a href=#688 id=688 data-nosnippet>688</a>                <span class="kw">let </span>start = <span class="kw-2">*</span>win_start.get_or_insert(now);
+<a href=#689 id=689 data-nosnippet>689</a>                win_frames += <span class="number">1</span>;
+<a href=#690 id=690 data-nosnippet>690</a>                win_decode_us += decode_us.max(<span class="number">0</span>) <span class="kw">as </span>u64;
+<a href=#691 id=691 data-nosnippet>691</a>                <span class="kw">let </span>elapsed = now.duration_since(start);
+<a href=#692 id=692 data-nosnippet>692</a>                <span class="kw">if </span>elapsed &gt;= std::time::Duration::from_secs(<span class="number">5</span>) {
+<a href=#693 id=693 data-nosnippet>693</a>                    <span class="kw">let </span>secs = elapsed.as_secs_f64().max(<span class="number">0.001</span>);
+<a href=#694 id=694 data-nosnippet>694</a>                    <span class="kw">let </span>fps = win_frames <span class="kw">as </span>f64 / secs;
+<a href=#695 id=695 data-nosnippet>695</a>                    <span class="kw">let </span>mean_ms = (win_decode_us <span class="kw">as </span>f64 / win_frames <span class="kw">as </span>f64) / <span class="number">1000.0</span>;
+<a href=#696 id=696 data-nosnippet>696</a>                    <span class="macro">tracing::info!</span>(
+<a href=#697 id=697 data-nosnippet>697</a>                        target: <span class="string">"video_decode"</span>,
+<a href=#698 id=698 data-nosnippet>698</a>                        key = %key,
+<a href=#699 id=699 data-nosnippet>699</a>                        codec = <span class="question-mark">?</span>current_codec,
+<a href=#700 id=700 data-nosnippet>700</a>                        backend = current_backend,
+<a href=#701 id=701 data-nosnippet>701</a>                        width = w,
+<a href=#702 id=702 data-nosnippet>702</a>                        height = h,
+<a href=#703 id=703 data-nosnippet>703</a>                        fps = <span class="macro">format!</span>(<span class="string">"{fps:.1}"</span>),
+<a href=#704 id=704 data-nosnippet>704</a>                        decode_ms = <span class="macro">format!</span>(<span class="string">"{mean_ms:.1}"</span>),
+<a href=#705 id=705 data-nosnippet>705</a>                        <span class="string">"video: decode throughput"
+<a href=#706 id=706 data-nosnippet>706</a>                    </span>);
+<a href=#707 id=707 data-nosnippet>707</a>                    win_start = <span class="prelude-val">Some</span>(now);
+<a href=#708 id=708 data-nosnippet>708</a>                    win_frames = <span class="number">0</span>;
+<a href=#709 id=709 data-nosnippet>709</a>                    win_decode_us = <span class="number">0</span>;
+<a href=#710 id=710 data-nosnippet>710</a>                }
+<a href=#711 id=711 data-nosnippet>711</a>            }
+<a href=#712 id=712 data-nosnippet>712</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {} <span class="comment">// decoder buffering; keep feeding
+<a href=#713 id=713 data-nosnippet>713</a>            </span><span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#714 id=714 data-nosnippet>714</a>                <span class="comment">// Ask the pull half for a fresh reference — this thread has no
+<a href=#715 id=715 data-nosnippet>715</a>                // control-plane handle, and nothing else notices a decode failure
+<a href=#716 id=716 data-nosnippet>716</a>                // (frames keep arriving, so no stall; failing is fast, so no
+<a href=#717 id=717 data-nosnippet>717</a>                // backpressure). Decoder teardown is paced, not per-frame — see
+<a href=#718 id=718 data-nosnippet>718</a>                // `DecodeFailures`.
+<a href=#719 id=719 data-nosnippet>719</a>                </span><span class="kw">let </span>act = decode_failures.on_failure(std::time::Instant::now());
+<a href=#720 id=720 data-nosnippet>720</a>                <span class="kw">if </span>act.log {
+<a href=#721 id=721 data-nosnippet>721</a>                    <span class="macro">tracing::warn!</span>(
+<a href=#722 id=722 data-nosnippet>722</a>                        %e,
+<a href=#723 id=723 data-nosnippet>723</a>                        key = %key,
+<a href=#724 id=724 data-nosnippet>724</a>                        codec = <span class="question-mark">?</span>current_codec,
+<a href=#725 id=725 data-nosnippet>725</a>                        backend = current_backend,
+<a href=#726 id=726 data-nosnippet>726</a>                        rebuild = act.rebuild,
+<a href=#727 id=727 data-nosnippet>727</a>                        <span class="string">"video: decode failed — requesting a keyframe"
+<a href=#728 id=728 data-nosnippet>728</a>                    </span>);
+<a href=#729 id=729 data-nosnippet>729</a>                }
+<a href=#730 id=730 data-nosnippet>730</a>                <span class="kw">if </span>act.rebuild {
+<a href=#731 id=731 data-nosnippet>731</a>                    decoder = <span class="prelude-val">None</span>;
+<a href=#732 id=732 data-nosnippet>732</a>                    decoder_codec = <span class="prelude-val">None</span>;
+<a href=#733 id=733 data-nosnippet>733</a>                }
+<a href=#734 id=734 data-nosnippet>734</a>                resync_needed.store(<span class="bool-val">true</span>, Ordering::Relaxed);
+<a href=#735 id=735 data-nosnippet>735</a>            }
+<a href=#736 id=736 data-nosnippet>736</a>        }
+<a href=#737 id=737 data-nosnippet>737</a>    }
+<a href=#738 id=738 data-nosnippet>738</a>}
+<a href=#739 id=739 data-nosnippet>739</a>
+<a href=#740 id=740 data-nosnippet>740</a><span class="comment">// ─── Decoder-rebuild + decode-failure policies (pure, no IO) ────────────────────
+<a href=#741 id=741 data-nosnippet>741</a>//
+<a href=#742 id=742 data-nosnippet>742</a>// Both guard the same storm described on `RETRY_AFTER` — the wire codec byte and
+<a href=#743 id=743 data-nosnippet>743</a>// the payload are sender-controlled, so neither an undecodable codec nor an
+<a href=#744 id=744 data-nosnippet>744</a>// undecodable stream may make the decode loop retry expensive platform-decoder
+<a href=#745 id=745 data-nosnippet>745</a>// construction (and warn) on every single frame.
+<a href=#746 id=746 data-nosnippet>746</a>
+<a href=#747 id=747 data-nosnippet>747</a></span><span class="attr">#[cfg(test)]
+<a href=#748 id=748 data-nosnippet>748</a></span><span class="kw">mod </span>decoder_retry_tests {
+<a href=#749 id=749 data-nosnippet>749</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#750 id=750 data-nosnippet>750</a>
+<a href=#751 id=751 data-nosnippet>751</a>    <span class="attr">#[test]
+<a href=#752 id=752 data-nosnippet>752</a>    </span><span class="kw">fn </span>blocks_same_codec_within_window() {
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="macro">assert_eq!</span>(r.on_failure(WireCodec::Av1, t0), RetryLog::WarnFirstFailure);
+<a href=#756 id=756 data-nosnippet>756</a>        <span class="macro">assert!</span>(r.blocked(WireCodec::Av1, t0 + Duration::from_secs(<span class="number">1</span>)));
+<a href=#757 id=757 data-nosnippet>757</a>        <span class="macro">assert!</span>(r.blocked(WireCodec::Av1, t0 + RETRY_AFTER - Duration::from_millis(<span class="number">1</span>)));
+<a href=#758 id=758 data-nosnippet>758</a>    }
+<a href=#759 id=759 data-nosnippet>759</a>
+<a href=#760 id=760 data-nosnippet>760</a>    <span class="attr">#[test]
+<a href=#761 id=761 data-nosnippet>761</a>    </span><span class="kw">fn </span>allows_after_window_elapses() {
+<a href=#762 id=762 data-nosnippet>762</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
+<a href=#763 id=763 data-nosnippet>763</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#764 id=764 data-nosnippet>764</a>        r.on_failure(WireCodec::Av1, t0);
+<a href=#765 id=765 data-nosnippet>765</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::Av1, t0 + RETRY_AFTER));
+<a href=#766 id=766 data-nosnippet>766</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::Av1, t0 + RETRY_AFTER + Duration::from_secs(<span class="number">1</span>)));
+<a href=#767 id=767 data-nosnippet>767</a>    }
+<a href=#768 id=768 data-nosnippet>768</a>
+<a href=#769 id=769 data-nosnippet>769</a>    <span class="attr">#[test]
+<a href=#770 id=770 data-nosnippet>770</a>    </span><span class="kw">fn </span>different_codec_unblocks_immediately() {
+<a href=#771 id=771 data-nosnippet>771</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
+<a href=#772 id=772 data-nosnippet>772</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#773 id=773 data-nosnippet>773</a>        r.on_failure(WireCodec::Av1, t0);
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="comment">// H.265 never failed — must never be blocked by AV1's failure, even the
+<a href=#775 id=775 data-nosnippet>775</a>        // very same instant.
+<a href=#776 id=776 data-nosnippet>776</a>        </span><span class="macro">assert!</span>(!r.blocked(WireCodec::H265, t0));
+<a href=#777 id=777 data-nosnippet>777</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::H264, t0));
+<a href=#778 id=778 data-nosnippet>778</a>    }
+<a href=#779 id=779 data-nosnippet>779</a>
+<a href=#780 id=780 data-nosnippet>780</a>    <span class="attr">#[test]
+<a href=#781 id=781 data-nosnippet>781</a>    </span><span class="kw">fn </span>first_failure_warns_subsequent_within_window_suppressed() {
+<a href=#782 id=782 data-nosnippet>782</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
+<a href=#783 id=783 data-nosnippet>783</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#784 id=784 data-nosnippet>784</a>        <span class="macro">assert_eq!</span>(r.on_failure(WireCodec::Av1, t0), RetryLog::WarnFirstFailure);
+<a href=#785 id=785 data-nosnippet>785</a>        <span class="comment">// A second failure for the SAME codec while still in-window (in practice the
+<a href=#786 id=786 data-nosnippet>786</a>        // caller wouldn't retry inside the window at all, but the policy itself must
+<a href=#787 id=787 data-nosnippet>787</a>        // not warn twice in a row regardless).
+<a href=#788 id=788 data-nosnippet>788</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#789 id=789 data-nosnippet>789</a>            r.on_failure(WireCodec::Av1, t0 + Duration::from_millis(<span class="number">1</span>)),
+<a href=#790 id=790 data-nosnippet>790</a>            RetryLog::Suppressed
+<a href=#791 id=791 data-nosnippet>791</a>        );
+<a href=#792 id=792 data-nosnippet>792</a>    }
+<a href=#793 id=793 data-nosnippet>793</a>
+<a href=#794 id=794 data-nosnippet>794</a>    <span class="attr">#[test]
+<a href=#795 id=795 data-nosnippet>795</a>    </span><span class="kw">fn </span>clear_resets_the_block() {
+<a href=#796 id=796 data-nosnippet>796</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
+<a href=#797 id=797 data-nosnippet>797</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#798 id=798 data-nosnippet>798</a>        r.on_failure(WireCodec::Av1, t0);
+<a href=#799 id=799 data-nosnippet>799</a>        <span class="macro">assert!</span>(r.blocked(WireCodec::Av1, t0));
+<a href=#800 id=800 data-nosnippet>800</a>        r.clear();
+<a href=#801 id=801 data-nosnippet>801</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::Av1, t0));
+<a href=#802 id=802 data-nosnippet>802</a>        <span class="comment">// A codec that fails again after a clear is treated as a fresh streak.
+<a href=#803 id=803 data-nosnippet>803</a>        </span><span class="macro">assert_eq!</span>(r.on_failure(WireCodec::Av1, t0), RetryLog::WarnFirstFailure);
+<a href=#804 id=804 data-nosnippet>804</a>    }
+<a href=#805 id=805 data-nosnippet>805</a>
+<a href=#806 id=806 data-nosnippet>806</a>    <span class="attr">#[test]
+<a href=#807 id=807 data-nosnippet>807</a>    </span><span class="kw">fn </span>decode_failure_keeps_the_decoder_and_warns_once() {
+<a href=#808 id=808 data-nosnippet>808</a>        <span class="kw">let </span><span class="kw-2">mut </span>f = DecodeFailures::default();
+<a href=#809 id=809 data-nosnippet>809</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#810 id=810 data-nosnippet>810</a>        <span class="comment">// First failure of a streak: worth a warn, but NEVER a rebuild — the
+<a href=#811 id=811 data-nosnippet>811</a>        // reference is simply gone and a keyframe fixes it.
+<a href=#812 id=812 data-nosnippet>812</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#813 id=813 data-nosnippet>813</a>            f.on_failure(t0),
+<a href=#814 id=814 data-nosnippet>814</a>            DecodeAction {
+<a href=#815 id=815 data-nosnippet>815</a>                log: <span class="bool-val">true</span>,
+<a href=#816 id=816 data-nosnippet>816</a>                rebuild: <span class="bool-val">false
+<a href=#817 id=817 data-nosnippet>817</a>            </span>}
+<a href=#818 id=818 data-nosnippet>818</a>        );
+<a href=#819 id=819 data-nosnippet>819</a>        <span class="comment">// Every frame of a 30 fps stream failing must not warn or rebuild again.
+<a href=#820 id=820 data-nosnippet>820</a>        </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..<span class="number">150u64 </span>{
+<a href=#821 id=821 data-nosnippet>821</a>            <span class="macro">assert_eq!</span>(
+<a href=#822 id=822 data-nosnippet>822</a>                f.on_failure(t0 + Duration::from_millis(<span class="number">33 </span>* i)),
+<a href=#823 id=823 data-nosnippet>823</a>                DecodeAction {
+<a href=#824 id=824 data-nosnippet>824</a>                    log: <span class="bool-val">false</span>,
+<a href=#825 id=825 data-nosnippet>825</a>                    rebuild: <span class="bool-val">false
+<a href=#826 id=826 data-nosnippet>826</a>                </span>},
+<a href=#827 id=827 data-nosnippet>827</a>                <span class="string">"frame {i} inside the window"
+<a href=#828 id=828 data-nosnippet>828</a>            </span>);
+<a href=#829 id=829 data-nosnippet>829</a>        }
+<a href=#830 id=830 data-nosnippet>830</a>    }
+<a href=#831 id=831 data-nosnippet>831</a>
+<a href=#832 id=832 data-nosnippet>832</a>    <span class="attr">#[test]
+<a href=#833 id=833 data-nosnippet>833</a>    </span><span class="kw">fn </span>a_streak_outliving_the_window_rebuilds_at_most_once_per_window() {
+<a href=#834 id=834 data-nosnippet>834</a>        <span class="kw">let </span><span class="kw-2">mut </span>f = DecodeFailures::default();
+<a href=#835 id=835 data-nosnippet>835</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#836 id=836 data-nosnippet>836</a>        f.on_failure(t0);
+<a href=#837 id=837 data-nosnippet>837</a>        <span class="comment">// The streak survived a full request window ⇒ treat the decoder as wedged.
+<a href=#838 id=838 data-nosnippet>838</a>        </span><span class="kw">let </span>a = f.on_failure(t0 + RETRY_AFTER);
+<a href=#839 id=839 data-nosnippet>839</a>        <span class="macro">assert!</span>(a.rebuild &amp;&amp; a.log);
+<a href=#840 id=840 data-nosnippet>840</a>        <span class="comment">// ...but not again on the next frame.
+<a href=#841 id=841 data-nosnippet>841</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#842 id=842 data-nosnippet>842</a>            f.on_failure(t0 + RETRY_AFTER + Duration::from_millis(<span class="number">33</span>)),
+<a href=#843 id=843 data-nosnippet>843</a>            DecodeAction {
+<a href=#844 id=844 data-nosnippet>844</a>                log: <span class="bool-val">false</span>,
+<a href=#845 id=845 data-nosnippet>845</a>                rebuild: <span class="bool-val">false
+<a href=#846 id=846 data-nosnippet>846</a>            </span>}
+<a href=#847 id=847 data-nosnippet>847</a>        );
+<a href=#848 id=848 data-nosnippet>848</a>        <span class="kw">let </span>b = f.on_failure(t0 + RETRY_AFTER + RETRY_AFTER);
+<a href=#849 id=849 data-nosnippet>849</a>        <span class="macro">assert!</span>(b.rebuild &amp;&amp; b.log, <span class="string">"one rebuild + one warn per window"</span>);
+<a href=#850 id=850 data-nosnippet>850</a>    }
+<a href=#851 id=851 data-nosnippet>851</a>
+<a href=#852 id=852 data-nosnippet>852</a>    <span class="attr">#[test]
+<a href=#853 id=853 data-nosnippet>853</a>    </span><span class="kw">fn </span>a_decoded_frame_ends_the_streak() {
+<a href=#854 id=854 data-nosnippet>854</a>        <span class="kw">let </span><span class="kw-2">mut </span>f = DecodeFailures::default();
+<a href=#855 id=855 data-nosnippet>855</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#856 id=856 data-nosnippet>856</a>        f.on_failure(t0);
+<a href=#857 id=857 data-nosnippet>857</a>        <span class="macro">assert!</span>(f.on_failure(t0 + RETRY_AFTER).rebuild);
+<a href=#858 id=858 data-nosnippet>858</a>        f.on_success();
+<a href=#859 id=859 data-nosnippet>859</a>        <span class="comment">// A fresh streak starts over: warn, no immediate rebuild.
+<a href=#860 id=860 data-nosnippet>860</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#861 id=861 data-nosnippet>861</a>            f.on_failure(t0 + RETRY_AFTER + Duration::from_millis(<span class="number">33</span>)),
+<a href=#862 id=862 data-nosnippet>862</a>            DecodeAction {
+<a href=#863 id=863 data-nosnippet>863</a>                log: <span class="bool-val">true</span>,
+<a href=#864 id=864 data-nosnippet>864</a>                rebuild: <span class="bool-val">false
+<a href=#865 id=865 data-nosnippet>865</a>            </span>}
+<a href=#866 id=866 data-nosnippet>866</a>        );
+<a href=#867 id=867 data-nosnippet>867</a>    }
+<a href=#868 id=868 data-nosnippet>868</a>
+<a href=#869 id=869 data-nosnippet>869</a>    <span class="comment">// ── playout timestamp gate ────────────────────────────────────────────────
+<a href=#870 id=870 data-nosnippet>870</a>
+<a href=#871 id=871 data-nosnippet>871</a>    </span><span class="doccomment">/// A normal 30 fps sender turns pacing on after the probe run and stays on.
+<a href=#872 id=872 data-nosnippet>872</a>    </span><span class="attr">#[test]
+<a href=#873 id=873 data-nosnippet>873</a>    </span><span class="kw">fn </span>advancing_stamps_enable_buffering() {
+<a href=#874 id=874 data-nosnippet>874</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = PlayoutStamps::default();
+<a href=#875 id=875 data-nosnippet>875</a>        <span class="macro">assert_eq!</span>(
+<a href=#876 id=876 data-nosnippet>876</a>            s.observe(<span class="number">0</span>),
+<a href=#877 id=877 data-nosnippet>877</a>            PlayoutMode::Probing,
+<a href=#878 id=878 data-nosnippet>878</a>            <span class="string">"one stamp proves nothing"
+<a href=#879 id=879 data-nosnippet>879</a>        </span>);
+<a href=#880 id=880 data-nosnippet>880</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">33_000</span>), PlayoutMode::Probing);
+<a href=#881 id=881 data-nosnippet>881</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">66_000</span>), PlayoutMode::Probing);
+<a href=#882 id=882 data-nosnippet>882</a>        <span class="macro">assert_eq!</span>(
+<a href=#883 id=883 data-nosnippet>883</a>            s.observe(<span class="number">99_000</span>),
+<a href=#884 id=884 data-nosnippet>884</a>            PlayoutMode::Buffered,
+<a href=#885 id=885 data-nosnippet>885</a>            <span class="string">"three advances in a row ⇒ schedule playout"
+<a href=#886 id=886 data-nosnippet>886</a>        </span>);
+<a href=#887 id=887 data-nosnippet>887</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">4</span>..<span class="number">100i64 </span>{
+<a href=#888 id=888 data-nosnippet>888</a>            <span class="macro">assert_eq!</span>(s.observe(i * <span class="number">33_000</span>), PlayoutMode::Buffered);
+<a href=#889 id=889 data-nosnippet>889</a>        }
+<a href=#890 id=890 data-nosnippet>890</a>    }
+<a href=#891 id=891 data-nosnippet>891</a>
+<a href=#892 id=892 data-nosnippet>892</a>    <span class="doccomment">/// A ZERO-stamping encoder (the MFT / rav1e paths) must latch pass-through: a
+<a href=#893 id=893 data-nosnippet>893</a>    /// buffer keyed on a constant timestamp would drop every frame after the first
+<a href=#894 id=894 data-nosnippet>894</a>    /// as late, freezing the tile.
+<a href=#895 id=895 data-nosnippet>895</a>    </span><span class="attr">#[test]
+<a href=#896 id=896 data-nosnippet>896</a>    </span><span class="kw">fn </span>constant_stamps_latch_pass_through() {
+<a href=#897 id=897 data-nosnippet>897</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = PlayoutStamps::default();
+<a href=#898 id=898 data-nosnippet>898</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">0</span>), PlayoutMode::Probing);
 <a href=#899 id=899 data-nosnippet>899</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">0</span>), PlayoutMode::Probing);
 <a href=#900 id=900 data-nosnippet>900</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">0</span>), PlayoutMode::Probing);
-<a href=#901 id=901 data-nosnippet>901</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">0</span>), PlayoutMode::Probing);
-<a href=#902 id=902 data-nosnippet>902</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">0</span>), PlayoutMode::PassThrough);
-<a href=#903 id=903 data-nosnippet>903</a>        <span class="comment">// Terminal: a sender that cannot stamp does not get a second chance.
-<a href=#904 id=904 data-nosnippet>904</a>        </span><span class="kw">for </span>ts <span class="kw">in </span>[<span class="number">1_000</span>, <span class="number">2_000</span>, <span class="number">3_000</span>, <span class="number">4_000</span>, <span class="number">5_000</span>] {
-<a href=#905 id=905 data-nosnippet>905</a>            <span class="macro">assert_eq!</span>(s.observe(ts), PlayoutMode::PassThrough);
-<a href=#906 id=906 data-nosnippet>906</a>        }
-<a href=#907 id=907 data-nosnippet>907</a>    }
-<a href=#908 id=908 data-nosnippet>908</a>
-<a href=#909 id=909 data-nosnippet>909</a>    <span class="doccomment">/// One duplicate stamp is not a verdict — a healthy stream that emits two chunks
-<a href=#910 id=910 data-nosnippet>910</a>    /// on the same capture timestamp must keep its pacing.
-<a href=#911 id=911 data-nosnippet>911</a>    </span><span class="attr">#[test]
-<a href=#912 id=912 data-nosnippet>912</a>    </span><span class="kw">fn </span>an_isolated_duplicate_does_not_disable_pacing() {
-<a href=#913 id=913 data-nosnippet>913</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = PlayoutStamps::default();
-<a href=#914 id=914 data-nosnippet>914</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">4i64 </span>{
-<a href=#915 id=915 data-nosnippet>915</a>            s.observe(i * <span class="number">33_000</span>);
-<a href=#916 id=916 data-nosnippet>916</a>        }
-<a href=#917 id=917 data-nosnippet>917</a>        <span class="macro">assert_eq!</span>(s.mode, PlayoutMode::Buffered);
-<a href=#918 id=918 data-nosnippet>918</a>        <span class="macro">assert_eq!</span>(
-<a href=#919 id=919 data-nosnippet>919</a>            s.observe(<span class="number">99_000</span>),
-<a href=#920 id=920 data-nosnippet>920</a>            PlayoutMode::Buffered,
-<a href=#921 id=921 data-nosnippet>921</a>            <span class="string">"a repeat of the last stamp is tolerated"
-<a href=#922 id=922 data-nosnippet>922</a>        </span>);
-<a href=#923 id=923 data-nosnippet>923</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">132_000</span>), PlayoutMode::Buffered);
-<a href=#924 id=924 data-nosnippet>924</a>    }
-<a href=#925 id=925 data-nosnippet>925</a>
-<a href=#926 id=926 data-nosnippet>926</a>    <span class="doccomment">/// A stamp that goes BACKWARDS must not re-arm the advancing run against itself
-<a href=#927 id=927 data-nosnippet>927</a>    /// (baseline stays at the high-water mark), so a sender alternating 0 / real
-<a href=#928 id=928 data-nosnippet>928</a>    /// still latches off instead of oscillating.
-<a href=#929 id=929 data-nosnippet>929</a>    </span><span class="attr">#[test]
-<a href=#930 id=930 data-nosnippet>930</a>    </span><span class="kw">fn </span>backwards_stamps_do_not_rearm_the_advance_run() {
-<a href=#931 id=931 data-nosnippet>931</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = PlayoutStamps::default();
-<a href=#932 id=932 data-nosnippet>932</a>        s.observe(<span class="number">0</span>);
-<a href=#933 id=933 data-nosnippet>933</a>        s.observe(<span class="number">33_000</span>);
-<a href=#934 id=934 data-nosnippet>934</a>        <span class="comment">// Alternating "real, then 0" — every 0 is stale, and the real stamp that
-<a href=#935 id=935 data-nosnippet>935</a>        // follows is behind the high-water mark, so it is stale too.
-<a href=#936 id=936 data-nosnippet>936</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">3 </span>{
-<a href=#937 id=937 data-nosnippet>937</a>            s.observe(<span class="number">0</span>);
-<a href=#938 id=938 data-nosnippet>938</a>            s.observe(<span class="number">10_000</span>);
-<a href=#939 id=939 data-nosnippet>939</a>        }
-<a href=#940 id=940 data-nosnippet>940</a>        <span class="macro">assert_eq!</span>(s.mode, PlayoutMode::PassThrough);
-<a href=#941 id=941 data-nosnippet>941</a>    }
-<a href=#942 id=942 data-nosnippet>942</a>
-<a href=#943 id=943 data-nosnippet>943</a>    <span class="attr">#[test]
-<a href=#944 id=944 data-nosnippet>944</a>    </span><span class="kw">fn </span>codec_switch_then_back_reevaluates_independently() {
-<a href=#945 id=945 data-nosnippet>945</a>        <span class="comment">// AV1 fails, then H.265 also fails (its own first-failure), then AV1 comes
-<a href=#946 id=946 data-nosnippet>946</a>        // back — still governed by AV1's OWN window, unaffected by H.265's failure.
-<a href=#947 id=947 data-nosnippet>947</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
-<a href=#948 id=948 data-nosnippet>948</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#949 id=949 data-nosnippet>949</a>        r.on_failure(WireCodec::Av1, t0);
-<a href=#950 id=950 data-nosnippet>950</a>        <span class="macro">assert_eq!</span>(
-<a href=#951 id=951 data-nosnippet>951</a>            r.on_failure(WireCodec::H265, t0 + Duration::from_secs(<span class="number">1</span>)),
-<a href=#952 id=952 data-nosnippet>952</a>            RetryLog::WarnFirstFailure,
-<a href=#953 id=953 data-nosnippet>953</a>            <span class="string">"a different codec's failure is its own first"
-<a href=#954 id=954 data-nosnippet>954</a>        </span>);
-<a href=#955 id=955 data-nosnippet>955</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::Av1, t0 + Duration::from_secs(<span class="number">1</span>)));
-<a href=#956 id=956 data-nosnippet>956</a>    }
-<a href=#957 id=957 data-nosnippet>957</a>}
+<a href=#901 id=901 data-nosnippet>901</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">0</span>), PlayoutMode::PassThrough);
+<a href=#902 id=902 data-nosnippet>902</a>        <span class="comment">// Terminal: a sender that cannot stamp does not get a second chance.
+<a href=#903 id=903 data-nosnippet>903</a>        </span><span class="kw">for </span>ts <span class="kw">in </span>[<span class="number">1_000</span>, <span class="number">2_000</span>, <span class="number">3_000</span>, <span class="number">4_000</span>, <span class="number">5_000</span>] {
+<a href=#904 id=904 data-nosnippet>904</a>            <span class="macro">assert_eq!</span>(s.observe(ts), PlayoutMode::PassThrough);
+<a href=#905 id=905 data-nosnippet>905</a>        }
+<a href=#906 id=906 data-nosnippet>906</a>    }
+<a href=#907 id=907 data-nosnippet>907</a>
+<a href=#908 id=908 data-nosnippet>908</a>    <span class="doccomment">/// One duplicate stamp is not a verdict — a healthy stream that emits two chunks
+<a href=#909 id=909 data-nosnippet>909</a>    /// on the same capture timestamp must keep its pacing.
+<a href=#910 id=910 data-nosnippet>910</a>    </span><span class="attr">#[test]
+<a href=#911 id=911 data-nosnippet>911</a>    </span><span class="kw">fn </span>an_isolated_duplicate_does_not_disable_pacing() {
+<a href=#912 id=912 data-nosnippet>912</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = PlayoutStamps::default();
+<a href=#913 id=913 data-nosnippet>913</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">4i64 </span>{
+<a href=#914 id=914 data-nosnippet>914</a>            s.observe(i * <span class="number">33_000</span>);
+<a href=#915 id=915 data-nosnippet>915</a>        }
+<a href=#916 id=916 data-nosnippet>916</a>        <span class="macro">assert_eq!</span>(s.mode, PlayoutMode::Buffered);
+<a href=#917 id=917 data-nosnippet>917</a>        <span class="macro">assert_eq!</span>(
+<a href=#918 id=918 data-nosnippet>918</a>            s.observe(<span class="number">99_000</span>),
+<a href=#919 id=919 data-nosnippet>919</a>            PlayoutMode::Buffered,
+<a href=#920 id=920 data-nosnippet>920</a>            <span class="string">"a repeat of the last stamp is tolerated"
+<a href=#921 id=921 data-nosnippet>921</a>        </span>);
+<a href=#922 id=922 data-nosnippet>922</a>        <span class="macro">assert_eq!</span>(s.observe(<span class="number">132_000</span>), PlayoutMode::Buffered);
+<a href=#923 id=923 data-nosnippet>923</a>    }
+<a href=#924 id=924 data-nosnippet>924</a>
+<a href=#925 id=925 data-nosnippet>925</a>    <span class="doccomment">/// A stamp that goes BACKWARDS must not re-arm the advancing run against itself
+<a href=#926 id=926 data-nosnippet>926</a>    /// (baseline stays at the high-water mark), so a sender alternating 0 / real
+<a href=#927 id=927 data-nosnippet>927</a>    /// still latches off instead of oscillating.
+<a href=#928 id=928 data-nosnippet>928</a>    </span><span class="attr">#[test]
+<a href=#929 id=929 data-nosnippet>929</a>    </span><span class="kw">fn </span>backwards_stamps_do_not_rearm_the_advance_run() {
+<a href=#930 id=930 data-nosnippet>930</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = PlayoutStamps::default();
+<a href=#931 id=931 data-nosnippet>931</a>        s.observe(<span class="number">0</span>);
+<a href=#932 id=932 data-nosnippet>932</a>        s.observe(<span class="number">33_000</span>);
+<a href=#933 id=933 data-nosnippet>933</a>        <span class="comment">// Alternating "real, then 0" — every 0 is stale, and the real stamp that
+<a href=#934 id=934 data-nosnippet>934</a>        // follows is behind the high-water mark, so it is stale too.
+<a href=#935 id=935 data-nosnippet>935</a>        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">3 </span>{
+<a href=#936 id=936 data-nosnippet>936</a>            s.observe(<span class="number">0</span>);
+<a href=#937 id=937 data-nosnippet>937</a>            s.observe(<span class="number">10_000</span>);
+<a href=#938 id=938 data-nosnippet>938</a>        }
+<a href=#939 id=939 data-nosnippet>939</a>        <span class="macro">assert_eq!</span>(s.mode, PlayoutMode::PassThrough);
+<a href=#940 id=940 data-nosnippet>940</a>    }
+<a href=#941 id=941 data-nosnippet>941</a>
+<a href=#942 id=942 data-nosnippet>942</a>    <span class="attr">#[test]
+<a href=#943 id=943 data-nosnippet>943</a>    </span><span class="kw">fn </span>codec_switch_then_back_reevaluates_independently() {
+<a href=#944 id=944 data-nosnippet>944</a>        <span class="comment">// AV1 fails, then H.265 also fails (its own first-failure), then AV1 comes
+<a href=#945 id=945 data-nosnippet>945</a>        // back — still governed by AV1's OWN window, unaffected by H.265's failure.
+<a href=#946 id=946 data-nosnippet>946</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>r = DecoderRetry::default();
+<a href=#947 id=947 data-nosnippet>947</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#948 id=948 data-nosnippet>948</a>        r.on_failure(WireCodec::Av1, t0);
+<a href=#949 id=949 data-nosnippet>949</a>        <span class="macro">assert_eq!</span>(
+<a href=#950 id=950 data-nosnippet>950</a>            r.on_failure(WireCodec::H265, t0 + Duration::from_secs(<span class="number">1</span>)),
+<a href=#951 id=951 data-nosnippet>951</a>            RetryLog::WarnFirstFailure,
+<a href=#952 id=952 data-nosnippet>952</a>            <span class="string">"a different codec's failure is its own first"
+<a href=#953 id=953 data-nosnippet>953</a>        </span>);
+<a href=#954 id=954 data-nosnippet>954</a>        <span class="macro">assert!</span>(!r.blocked(WireCodec::Av1, t0 + Duration::from_secs(<span class="number">1</span>)));
+<a href=#955 id=955 data-nosnippet>955</a>    }
+<a href=#956 id=956 data-nosnippet>956</a>}
 </code></pre></div></section></main></body></html>

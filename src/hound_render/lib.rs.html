@@ -89,49 +89,85 @@
 <a href=#89 id=89 data-nosnippet>89</a>}
 <a href=#90 id=90 data-nosnippet>90</a>
 <a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// Release `stream_key`'s mailbox — the "this stream is gone for good" hook
-<a href=#92 id=92 data-nosnippet>92</a>/// (the peer left, the pipeline ended), distinct from the tile-lifecycle
-<a href=#93 id=93 data-nosnippet>93</a>/// [`detach`]. Only registered/attached streams are drained, so an orphaned
-<a href=#94 id=94 data-nosnippet>94</a>/// mailbox keeps its last frame alive forever — on macOS a +1 retain on a
+<a href=#92 id=92 data-nosnippet>92</a>/// (the peer left, the pipeline ended, the tile unsubscribed), distinct from the
+<a href=#93 id=93 data-nosnippet>93</a>/// tile-lifecycle [`detach`]. Only registered/attached streams are drained, so an
+<a href=#94 id=94 data-nosnippet>94</a>/// orphaned mailbox keeps its last frame alive forever — on macOS a +1 retain on a
 <a href=#95 id=95 data-nosnippet>95</a>/// VideoToolbox decode-pool buffer, elsewhere a full I420 `Vec`. Idempotent and
 <a href=#96 id=96 data-nosnippet>96</a>/// safe for an unknown key; if a tile is somehow still attached under the key
 <a href=#97 id=97 data-nosnippet>97</a>/// the mailbox is only emptied (never orphaned), so a later push still draws.
-<a href=#98 id=98 data-nosnippet>98</a></span><span class="kw">pub fn </span>drop_stream(stream_key: <span class="kw-2">&amp;</span>str) {
-<a href=#99 id=99 data-nosnippet>99</a>    platform::imp::drop_stream(stream_key)
-<a href=#100 id=100 data-nosnippet>100</a>}
-<a href=#101 id=101 data-nosnippet>101</a>
-<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// Run `cb` once a real decoded frame has been drawn into `texture_id` (fires
-<a href=#103 id=103 data-nosnippet>103</a>/// inline if one already has). This is the signal a **blank-free texture swap**
-<a href=#104 id=104 data-nosnippet>104</a>/// flips on: Dart attaches a new, freshly allocated buffer for a stream while the
-<a href=#105 id=105 data-nosnippet>105</a>/// OLD texture is still composited (frozen on its last frame), and only shows the
-<a href=#106 id=106 data-nosnippet>106</a>/// new one once it has content — a zero-filled CVPixelBuffer would otherwise flash
-<a href=#107 id=107 data-nosnippet>107</a>/// black. `cb` is DROPPED UNCALLED if the texture is detached or replaced first, so
-<a href=#108 id=108 data-nosnippet>108</a>/// a caller awaiting it sees "never" rather than hanging.
-<a href=#109 id=109 data-nosnippet>109</a>///
-<a href=#110 id=110 data-nosnippet>110</a>/// Platforms without an arrival-driven render loop (Windows/Linux, whose plugins
-<a href=#111 id=111 data-nosnippet>111</a>/// ping their texture on a fixed timer) fire `cb` inline — there is no first-frame
-<a href=#112 id=112 data-nosnippet>112</a>/// edge to observe, so the caller keeps its previous flip-immediately behaviour.
-<a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">pub fn </span>notify_on_draw(texture_id: i64, cb: Box&lt;<span class="kw">dyn </span>FnOnce() + Send&gt;) {
-<a href=#114 id=114 data-nosnippet>114</a>    platform::imp::notify_on_draw(texture_id, cb)
-<a href=#115 id=115 data-nosnippet>115</a>}
-<a href=#116 id=116 data-nosnippet>116</a>
-<a href=#117 id=117 data-nosnippet>117</a><span class="doccomment">/// Push the latest decoded I420 frame for `stream_key` (drop-oldest). `i420`
-<a href=#118 id=118 data-nosnippet>118</a>/// is tightly packed `w*h + 2*(w/2 * h/2)` bytes, stride == width, even
-<a href=#119 id=119 data-nosnippet>119</a>/// extents. Cheap and non-blocking on every platform — safe to call from a
-<a href=#120 id=120 data-nosnippet>120</a>/// decode/capture thread; never from a real-time audio thread.
-<a href=#121 id=121 data-nosnippet>121</a></span><span class="kw">pub fn </span>push_frame(stream_key: <span class="kw-2">&amp;</span>str, w: u32, h: u32, i420: Vec&lt;u8&gt;) {
-<a href=#122 id=122 data-nosnippet>122</a>    platform::imp::push_frame(stream_key, w, h, i420)
-<a href=#123 id=123 data-nosnippet>123</a>}
-<a href=#124 id=124 data-nosnippet>124</a>
-<a href=#125 id=125 data-nosnippet>125</a><span class="doccomment">/// Push a decoded frame that is still GPU-resident, identified by a
-<a href=#126 id=126 data-nosnippet>126</a>/// platform-defined surface pointer — on macOS an IOSurface-backed NV12
-<a href=#127 id=127 data-nosnippet>127</a>/// `CVPixelBufferRef` (a retain is taken synchronously), on Windows a borrowed
-<a href=#128 id=128 data-nosnippet>128</a>/// NV12 `ID3D11Texture2D` (consumed synchronously: the blit into the Flutter
-<a href=#129 id=129 data-nosnippet>129</a>/// target happens inside this call). Valid for the duration of the call.
-<a href=#130 id=130 data-nosnippet>130</a>/// Returns `true` if the platform renderer took the surface; `false` where
-<a href=#131 id=131 data-nosnippet>131</a>/// there is no surface renderer, the tile is not attached yet (Windows), or
-<a href=#132 id=132 data-nosnippet>132</a>/// zero-copy is disabled via `HOUND_ZEROCOPY_VIDEO=0` — the caller then falls
-<a href=#133 id=133 data-nosnippet>133</a>/// back to [`push_frame`] with materialized I420.
-<a href=#134 id=134 data-nosnippet>134</a></span><span class="kw">pub fn </span>push_surface(stream_key: <span class="kw-2">&amp;</span>str, native_surface_ptr: usize, width: u32, height: u32) -&gt; bool {
-<a href=#135 id=135 data-nosnippet>135</a>    platform::imp::push_surface(stream_key, native_surface_ptr, width, height)
+<a href=#98 id=98 data-nosnippet>98</a>///
+<a href=#99 id=99 data-nosnippet>99</a>/// **Never blanks a tile.** What a tile displays is the *target* buffer — the
+<a href=#100 id=100 data-nosnippet>100</a>/// IOSurface/BGRA texture/RGBA buffer the last drawn frame was rendered INTO, which
+<a href=#101 id=101 data-nosnippet>101</a>/// [`attach`] binds and only [`detach`] releases. The mailbox holds the *pending*
+<a href=#102 id=102 data-nosnippet>102</a>/// frame on its way there, so emptying it can at worst skip one undrawn frame; it
+<a href=#103 id=103 data-nosnippet>103</a>/// cannot un-draw the picture already on screen. That is why the no-blank contract
+<a href=#104 id=104 data-nosnippet>104</a>/// (see [`notify_on_draw`]) lives entirely in the attach/swap path and imposes
+<a href=#105 id=105 data-nosnippet>105</a>/// nothing here.
+<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">pub fn </span>drop_stream(stream_key: <span class="kw-2">&amp;</span>str) {
+<a href=#107 id=107 data-nosnippet>107</a>    platform::imp::drop_stream(stream_key)
+<a href=#108 id=108 data-nosnippet>108</a>}
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a><span class="doccomment">/// How much decoded video this crate is holding in its per-stream mailboxes right
+<a href=#111 id=111 data-nosnippet>111</a>/// now — the memory a stream that ended without a [`drop_stream`] would pin for the
+<a href=#112 id=112 data-nosnippet>112</a>/// process lifetime. The observable behind the release: a call whose hidden tiles
+<a href=#113 id=113 data-nosnippet>113</a>/// unsubscribe should settle back to ~0 pinned bytes rather than carrying one full
+<a href=#114 id=114 data-nosnippet>114</a>/// frame per hidden tile.
+<a href=#115 id=115 data-nosnippet>115</a>///
+<a href=#116 id=116 data-nosnippet>116</a>/// Cheap but not free (one lock plus a walk of the mailbox map), so it is a
+<a href=#117 id=117 data-nosnippet>117</a>/// diagnostic/test observable — never a per-frame call.
+<a href=#118 id=118 data-nosnippet>118</a></span><span class="kw">pub fn </span>pinned_frames() -&gt; PinnedFrames {
+<a href=#119 id=119 data-nosnippet>119</a>    platform::imp::pinned_frames()
+<a href=#120 id=120 data-nosnippet>120</a>}
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a><span class="doccomment">/// A snapshot of what [`pinned_frames`] found: how many stream mailboxes exist,
+<a href=#123 id=123 data-nosnippet>123</a>/// how many currently hold a frame, and roughly how many bytes those frames are.
+<a href=#124 id=124 data-nosnippet>124</a>///
+<a href=#125 id=125 data-nosnippet>125</a>/// `bytes` is the frames' pixel payload: exact for a CPU I420 buffer, and the
+<a href=#126 id=126 data-nosnippet>126</a>/// 12-bits-per-pixel NV12 equivalent for a GPU surface (whose real cost is a
+<a href=#127 id=127 data-nosnippet>127</a>/// buffer held out of the decoder's pool, not a heap allocation we own).
+<a href=#128 id=128 data-nosnippet>128</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">pub struct </span>PinnedFrames {
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="doccomment">/// Registered mailboxes, including empty ones (a live stream between frames).
+<a href=#131 id=131 data-nosnippet>131</a>    </span><span class="kw">pub </span>streams: usize,
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="doccomment">/// Mailboxes currently holding a decoded frame.
+<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">pub </span>frames: usize,
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="doccomment">/// Approximate pixel bytes those frames hold.
+<a href=#135 id=135 data-nosnippet>135</a>    </span><span class="kw">pub </span>bytes: usize,
 <a href=#136 id=136 data-nosnippet>136</a>}
+<a href=#137 id=137 data-nosnippet>137</a>
+<a href=#138 id=138 data-nosnippet>138</a><span class="doccomment">/// Run `cb` once a real decoded frame has been drawn into `texture_id` (fires
+<a href=#139 id=139 data-nosnippet>139</a>/// inline if one already has). This is the signal a **blank-free texture swap**
+<a href=#140 id=140 data-nosnippet>140</a>/// flips on: Dart attaches a new, freshly allocated buffer for a stream while the
+<a href=#141 id=141 data-nosnippet>141</a>/// OLD texture is still composited (frozen on its last frame), and only shows the
+<a href=#142 id=142 data-nosnippet>142</a>/// new one once it has content — a zero-filled CVPixelBuffer would otherwise flash
+<a href=#143 id=143 data-nosnippet>143</a>/// black. `cb` is DROPPED UNCALLED if the texture is detached or replaced first, so
+<a href=#144 id=144 data-nosnippet>144</a>/// a caller awaiting it sees "never" rather than hanging.
+<a href=#145 id=145 data-nosnippet>145</a>///
+<a href=#146 id=146 data-nosnippet>146</a>/// Platforms without an arrival-driven render loop (Windows/Linux, whose plugins
+<a href=#147 id=147 data-nosnippet>147</a>/// ping their texture on a fixed timer) fire `cb` inline — there is no first-frame
+<a href=#148 id=148 data-nosnippet>148</a>/// edge to observe, so the caller keeps its previous flip-immediately behaviour.
+<a href=#149 id=149 data-nosnippet>149</a></span><span class="kw">pub fn </span>notify_on_draw(texture_id: i64, cb: Box&lt;<span class="kw">dyn </span>FnOnce() + Send&gt;) {
+<a href=#150 id=150 data-nosnippet>150</a>    platform::imp::notify_on_draw(texture_id, cb)
+<a href=#151 id=151 data-nosnippet>151</a>}
+<a href=#152 id=152 data-nosnippet>152</a>
+<a href=#153 id=153 data-nosnippet>153</a><span class="doccomment">/// Push the latest decoded I420 frame for `stream_key` (drop-oldest). `i420`
+<a href=#154 id=154 data-nosnippet>154</a>/// is tightly packed `w*h + 2*(w/2 * h/2)` bytes, stride == width, even
+<a href=#155 id=155 data-nosnippet>155</a>/// extents. Cheap and non-blocking on every platform — safe to call from a
+<a href=#156 id=156 data-nosnippet>156</a>/// decode/capture thread; never from a real-time audio thread.
+<a href=#157 id=157 data-nosnippet>157</a></span><span class="kw">pub fn </span>push_frame(stream_key: <span class="kw-2">&amp;</span>str, w: u32, h: u32, i420: Vec&lt;u8&gt;) {
+<a href=#158 id=158 data-nosnippet>158</a>    platform::imp::push_frame(stream_key, w, h, i420)
+<a href=#159 id=159 data-nosnippet>159</a>}
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a><span class="doccomment">/// Push a decoded frame that is still GPU-resident, identified by a
+<a href=#162 id=162 data-nosnippet>162</a>/// platform-defined surface pointer — on macOS an IOSurface-backed NV12
+<a href=#163 id=163 data-nosnippet>163</a>/// `CVPixelBufferRef` (a retain is taken synchronously), on Windows a borrowed
+<a href=#164 id=164 data-nosnippet>164</a>/// NV12 `ID3D11Texture2D` (consumed synchronously: the blit into the Flutter
+<a href=#165 id=165 data-nosnippet>165</a>/// target happens inside this call). Valid for the duration of the call.
+<a href=#166 id=166 data-nosnippet>166</a>/// Returns `true` if the platform renderer took the surface; `false` where
+<a href=#167 id=167 data-nosnippet>167</a>/// there is no surface renderer, the tile is not attached yet (Windows), or
+<a href=#168 id=168 data-nosnippet>168</a>/// zero-copy is disabled via `HOUND_ZEROCOPY_VIDEO=0` — the caller then falls
+<a href=#169 id=169 data-nosnippet>169</a>/// back to [`push_frame`] with materialized I420.
+<a href=#170 id=170 data-nosnippet>170</a></span><span class="kw">pub fn </span>push_surface(stream_key: <span class="kw-2">&amp;</span>str, native_surface_ptr: usize, width: u32, height: u32) -&gt; bool {
+<a href=#171 id=171 data-nosnippet>171</a>    platform::imp::push_surface(stream_key, native_surface_ptr, width, height)
+<a href=#172 id=172 data-nosnippet>172</a>}
 </code></pre></div></section></main></body></html>

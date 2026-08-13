@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["attach","detach","drop_stream","notify_on_draw","push_frame","push_surface"],"mod":["os","platform","yuv"]};
+window.SIDEBAR_ITEMS = {"fn":["attach","detach","drop_stream","notify_on_draw","pinned_frames","push_frame","push_surface"],"mod":["os","platform","yuv"],"struct":["PinnedFrames"]};
