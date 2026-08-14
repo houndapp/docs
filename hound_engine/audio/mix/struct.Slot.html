@@ -40,14 +40,14 @@ registered untagged), so a recorded underflow <a href="struct.AudioGlitch.html" 
 pump’s push, so neither the allocation nor the free lands on the RT tick.
 Bounded by <a href="constant.SLOT_POOL_CAP.html" title="constant hound_engine::audio::mix::SLOT_POOL_CAP"><code>SLOT_POOL_CAP</code></a>; the RT side <code>try_lock</code>s and simply frees the
 buffer when contended, so it can never block on the pump.</p>
-</div><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-Slot" class="impl"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#412-621">Source</a><a href="#impl-Slot" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.Slot.html" title="struct hound_engine::audio::mix::Slot">Slot</a></h3></section></summary><div class="impl-items"><section id="method.new" class="method"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#413-432">Source</a><h4 class="code-header">fn <a href="#method.new" class="fn">new</a>(
+</div><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-Slot" class="impl"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#412-631">Source</a><a href="#impl-Slot" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.Slot.html" title="struct hound_engine::audio::mix::Slot">Slot</a></h3></section></summary><div class="impl-items"><section id="method.new" class="method"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#413-432">Source</a><h4 class="code-header">fn <a href="#method.new" class="fn">new</a>(
     starves: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.0/core/sync/atomic/struct.AtomicU64.html" title="struct core::sync::atomic::AtomicU64">AtomicU64</a>&gt;,
     playout_floor_us: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i64.html">i64</a>,
     label: &amp;'static <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.str.html">str</a>,
     peer_tag: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.u32.html">u32</a>,
-) -&gt; Self</h4></section><details class="toggle method-toggle" open><summary><section id="method.push" class="method"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#460-508">Source</a><h4 class="code-header">fn <a href="#method.push" class="fn">push</a>(
+) -&gt; Self</h4></section><details class="toggle method-toggle" open><summary><section id="method.push" class="method"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#462-518">Source</a><h4 class="code-header">fn <a href="#method.push" class="fn">push</a>(
     &amp;self,
-    arrival_us: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i64.html">i64</a>,
+    arrival_us: <a class="enum" href="https://doc.rust-lang.org/1.93.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i64.html">i64</a>&gt;,
     now_us: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i64.html">i64</a>,
     ts_us: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i64.html">i64</a>,
     samples: &amp;[<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i16.html">i16</a>],
@@ -58,10 +58,12 @@ for the caller’s per-peer stats.</p>
 <p>The two clocks are deliberately separate, and both are on the shared
 [<code>CaptureClock</code>] the bus thread pops against:</p>
 <ul>
-<li><code>arrival_us</code> — when the frame came off the WIRE. Only the jitter estimator
-sees it, and it must, because that estimator is differential
-(<code>D = arrivalΔ − tsΔ</code>): feed it anything the receive pipeline delayed and it
-measures the pipeline instead of the link.</li>
+<li><code>arrival_us</code> — when the frame came off the WIRE, or <code>None</code> for a frame that
+never crossed it (locally CONCEALED audio; see <a href="struct.BusProducer.html#method.push_concealed" title="method hound_engine::audio::mix::BusProducer::push_concealed"><code>BusProducer::push_concealed</code></a>),
+which is folded into the buffer but never into the estimator. Only the jitter
+estimator sees this instant, and it must be the wire one, because that estimator
+is differential (<code>D = arrivalΔ − tsΔ</code>): feed it anything the receive pipeline
+delayed — or synthesized — and it measures the pipeline instead of the link.</li>
 <li><code>now_us</code> — when the frame became available for PLAYOUT, i.e. now. This is what
 the buffer schedules and computes cushion against, so the cushion stays honest
 about how long the frame really has before it is due.</li>
@@ -69,7 +71,7 @@ about how long the frame really has before it is due.</li>
 <p>They differ whenever something between the wire and here holds a frame — the
 audio path’s encoded reorder hold being the case that matters. See
 <a href="struct.BusProducer.html#method.push_at" title="method hound_engine::audio::mix::BusProducer::push_at"><code>BusProducer::push_at</code></a>.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.pull_into" class="method"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#525-605">Source</a><h4 class="code-header">fn <a href="#method.pull_into" class="fn">pull_into</a>(
+</div></details><details class="toggle method-toggle" open><summary><section id="method.pull_into" class="method"><a class="src rightside" href="../../../src/hound_engine/audio/mix.rs.html#535-615">Source</a><h4 class="code-header">fn <a href="#method.pull_into" class="fn">pull_into</a>(
     &amp;self,
     now_us: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i64.html">i64</a>,
     out: &amp;mut [<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.i32.html">i32</a>],
