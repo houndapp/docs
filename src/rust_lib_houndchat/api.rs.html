@@ -1237,714 +1237,731 @@
 <a href=#1237 id=1237 data-nosnippet>1237</a>    client()<span class="question-mark">?</span>.call_set_screen_audio_enabled(enabled).<span class="kw">await
 <a href=#1238 id=1238 data-nosnippet>1238</a></span>}
 <a href=#1239 id=1239 data-nosnippet>1239</a>
-<a href=#1240 id=1240 data-nosnippet>1240</a><span class="doccomment">/// Select a call media device. `kind` is `"microphone"` | `"camera"` | `"speaker"`;
-<a href=#1241 id=1241 data-nosnippet>1241</a>/// `id` is the device id (`None` = host default).
-<a href=#1242 id=1242 data-nosnippet>1242</a></span><span class="kw">pub async fn </span>call_select_device(kind: String, id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1243 id=1243 data-nosnippet>1243</a>    <span class="kw">let </span>c = client()<span class="question-mark">?</span>;
-<a href=#1244 id=1244 data-nosnippet>1244</a>    <span class="kw">match </span>kind.as_str() {
-<a href=#1245 id=1245 data-nosnippet>1245</a>        <span class="string">"microphone" </span>=&gt; c.call_select_microphone(id).<span class="kw">await</span>,
-<a href=#1246 id=1246 data-nosnippet>1246</a>        <span class="string">"camera" </span>=&gt; c.call_select_camera(id).<span class="kw">await</span>,
-<a href=#1247 id=1247 data-nosnippet>1247</a>        <span class="string">"speaker" </span>=&gt; c.call_select_speaker(id).<span class="kw">await</span>,
-<a href=#1248 id=1248 data-nosnippet>1248</a>        other =&gt; <span class="prelude-val">Err</span>(HoundError::invalid_state(
-<a href=#1249 id=1249 data-nosnippet>1249</a>            StateCode::UnknownDeviceKind,
-<a href=#1250 id=1250 data-nosnippet>1250</a>            <span class="macro">format!</span>(<span class="string">"unknown device kind: {other}"</span>),
-<a href=#1251 id=1251 data-nosnippet>1251</a>        )),
-<a href=#1252 id=1252 data-nosnippet>1252</a>    }
-<a href=#1253 id=1253 data-nosnippet>1253</a>}
-<a href=#1254 id=1254 data-nosnippet>1254</a>
-<a href=#1255 id=1255 data-nosnippet>1255</a><span class="doccomment">/// Start sharing a screen source by id (from [`call_list_screen_sources`]).
-<a href=#1256 id=1256 data-nosnippet>1256</a>/// Requires an active call.
-<a href=#1257 id=1257 data-nosnippet>1257</a></span><span class="kw">pub async fn </span>call_screen_share_start(source: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1258 id=1258 data-nosnippet>1258</a>    client()<span class="question-mark">?</span>.call_screen_share_start(source).<span class="kw">await
-<a href=#1259 id=1259 data-nosnippet>1259</a></span>}
-<a href=#1260 id=1260 data-nosnippet>1260</a>
-<a href=#1261 id=1261 data-nosnippet>1261</a><span class="doccomment">/// Stop screen sharing (no-op if none).
-<a href=#1262 id=1262 data-nosnippet>1262</a></span><span class="kw">pub async fn </span>call_screen_share_stop() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1263 id=1263 data-nosnippet>1263</a>    client()<span class="question-mark">?</span>.call_screen_share_stop().<span class="kw">await
-<a href=#1264 id=1264 data-nosnippet>1264</a></span>}
-<a href=#1265 id=1265 data-nosnippet>1265</a>
-<a href=#1266 id=1266 data-nosnippet>1266</a><span class="doccomment">/// Set the live screen-share quality (motion↔legibility + a max resolution/fps cap).
-<a href=#1267 id=1267 data-nosnippet>1267</a>/// Reconfigures a running share's ladder live — no restart — and is remembered for the
-<a href=#1268 id=1268 data-nosnippet>1268</a>/// next share + across a reconnect. Harmless with no active call.
-<a href=#1269 id=1269 data-nosnippet>1269</a></span><span class="kw">pub async fn </span>call_set_screen_quality(quality: ScreenQuality) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1270 id=1270 data-nosnippet>1270</a>    client()<span class="question-mark">?</span>.call_set_screen_quality(quality).<span class="kw">await
-<a href=#1271 id=1271 data-nosnippet>1271</a></span>}
-<a href=#1272 id=1272 data-nosnippet>1272</a>
-<a href=#1273 id=1273 data-nosnippet>1273</a><span class="doccomment">/// List shareable screen sources (displays + windows) for the share picker.
-<a href=#1274 id=1274 data-nosnippet>1274</a>/// Returns the mirrored core type directly — no reshape needed.
-<a href=#1275 id=1275 data-nosnippet>1275</a></span><span class="kw">pub async fn </span>call_list_screen_sources() -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;ScreenSourceView&gt;, HoundError&gt; {
-<a href=#1276 id=1276 data-nosnippet>1276</a>    client()<span class="question-mark">?</span>.list_screen_sources().<span class="kw">await
-<a href=#1277 id=1277 data-nosnippet>1277</a></span>}
-<a href=#1278 id=1278 data-nosnippet>1278</a>
-<a href=#1279 id=1279 data-nosnippet>1279</a><span class="doccomment">/// One-shot preview thumbnail of a screen source for the picker (opaque RGBA,
-<a href=#1280 id=1280 data-nosnippet>1280</a>/// aspect-fit within `max_w`×`max_h`). Best-effort + cross-platform; an `Err` is
-<a href=#1281 id=1281 data-nosnippet>1281</a>/// the picker's "no thumbnail, show the title-only card" signal.
-<a href=#1282 id=1282 data-nosnippet>1282</a></span><span class="kw">pub async fn </span>call_screen_thumbnail(
-<a href=#1283 id=1283 data-nosnippet>1283</a>    source: String,
-<a href=#1284 id=1284 data-nosnippet>1284</a>    max_w: u32,
-<a href=#1285 id=1285 data-nosnippet>1285</a>    max_h: u32,
-<a href=#1286 id=1286 data-nosnippet>1286</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ScreenThumbnail, HoundError&gt; {
-<a href=#1287 id=1287 data-nosnippet>1287</a>    client()<span class="question-mark">?</span>.screen_thumbnail(source, max_w, max_h).<span class="kw">await
+<a href=#1240 id=1240 data-nosnippet>1240</a><span class="doccomment">/// Set the mic noise-suppression mode: `"off"`, `"moderate"` (default), or
+<a href=#1241 id=1241 data-nosnippet>1241</a>/// `"high"`. Applies to the live call immediately and survives reconnects.
+<a href=#1242 id=1242 data-nosnippet>1242</a></span><span class="kw">pub async fn </span>call_set_noise_suppression(mode: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1243 id=1243 data-nosnippet>1243</a>    client()<span class="question-mark">?</span>.call_set_noise_suppression(mode).<span class="kw">await
+<a href=#1244 id=1244 data-nosnippet>1244</a></span>}
+<a href=#1245 id=1245 data-nosnippet>1245</a>
+<a href=#1246 id=1246 data-nosnippet>1246</a><span class="doccomment">/// Toggle mic automatic gain control (default on). Off ships the raw device
+<a href=#1247 id=1247 data-nosnippet>1247</a>/// level — for a mic the automatic gain misjudges.
+<a href=#1248 id=1248 data-nosnippet>1248</a></span><span class="kw">pub async fn </span>call_set_agc_enabled(enabled: bool) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1249 id=1249 data-nosnippet>1249</a>    client()<span class="question-mark">?</span>.call_set_agc_enabled(enabled).<span class="kw">await
+<a href=#1250 id=1250 data-nosnippet>1250</a></span>}
+<a href=#1251 id=1251 data-nosnippet>1251</a>
+<a href=#1252 id=1252 data-nosnippet>1252</a><span class="doccomment">/// Manual mic input trim in dB (clamped ±12, default 0).
+<a href=#1253 id=1253 data-nosnippet>1253</a></span><span class="kw">pub async fn </span>call_set_input_gain(gain_db: f32) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1254 id=1254 data-nosnippet>1254</a>    client()<span class="question-mark">?</span>.call_set_input_gain(gain_db).<span class="kw">await
+<a href=#1255 id=1255 data-nosnippet>1255</a></span>}
+<a href=#1256 id=1256 data-nosnippet>1256</a>
+<a href=#1257 id=1257 data-nosnippet>1257</a><span class="doccomment">/// Select a call media device. `kind` is `"microphone"` | `"camera"` | `"speaker"`;
+<a href=#1258 id=1258 data-nosnippet>1258</a>/// `id` is the device id (`None` = host default).
+<a href=#1259 id=1259 data-nosnippet>1259</a></span><span class="kw">pub async fn </span>call_select_device(kind: String, id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1260 id=1260 data-nosnippet>1260</a>    <span class="kw">let </span>c = client()<span class="question-mark">?</span>;
+<a href=#1261 id=1261 data-nosnippet>1261</a>    <span class="kw">match </span>kind.as_str() {
+<a href=#1262 id=1262 data-nosnippet>1262</a>        <span class="string">"microphone" </span>=&gt; c.call_select_microphone(id).<span class="kw">await</span>,
+<a href=#1263 id=1263 data-nosnippet>1263</a>        <span class="string">"camera" </span>=&gt; c.call_select_camera(id).<span class="kw">await</span>,
+<a href=#1264 id=1264 data-nosnippet>1264</a>        <span class="string">"speaker" </span>=&gt; c.call_select_speaker(id).<span class="kw">await</span>,
+<a href=#1265 id=1265 data-nosnippet>1265</a>        other =&gt; <span class="prelude-val">Err</span>(HoundError::invalid_state(
+<a href=#1266 id=1266 data-nosnippet>1266</a>            StateCode::UnknownDeviceKind,
+<a href=#1267 id=1267 data-nosnippet>1267</a>            <span class="macro">format!</span>(<span class="string">"unknown device kind: {other}"</span>),
+<a href=#1268 id=1268 data-nosnippet>1268</a>        )),
+<a href=#1269 id=1269 data-nosnippet>1269</a>    }
+<a href=#1270 id=1270 data-nosnippet>1270</a>}
+<a href=#1271 id=1271 data-nosnippet>1271</a>
+<a href=#1272 id=1272 data-nosnippet>1272</a><span class="doccomment">/// Start sharing a screen source by id (from [`call_list_screen_sources`]).
+<a href=#1273 id=1273 data-nosnippet>1273</a>/// Requires an active call.
+<a href=#1274 id=1274 data-nosnippet>1274</a></span><span class="kw">pub async fn </span>call_screen_share_start(source: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1275 id=1275 data-nosnippet>1275</a>    client()<span class="question-mark">?</span>.call_screen_share_start(source).<span class="kw">await
+<a href=#1276 id=1276 data-nosnippet>1276</a></span>}
+<a href=#1277 id=1277 data-nosnippet>1277</a>
+<a href=#1278 id=1278 data-nosnippet>1278</a><span class="doccomment">/// Stop screen sharing (no-op if none).
+<a href=#1279 id=1279 data-nosnippet>1279</a></span><span class="kw">pub async fn </span>call_screen_share_stop() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1280 id=1280 data-nosnippet>1280</a>    client()<span class="question-mark">?</span>.call_screen_share_stop().<span class="kw">await
+<a href=#1281 id=1281 data-nosnippet>1281</a></span>}
+<a href=#1282 id=1282 data-nosnippet>1282</a>
+<a href=#1283 id=1283 data-nosnippet>1283</a><span class="doccomment">/// Set the live screen-share quality (motion↔legibility + a max resolution/fps cap).
+<a href=#1284 id=1284 data-nosnippet>1284</a>/// Reconfigures a running share's ladder live — no restart — and is remembered for the
+<a href=#1285 id=1285 data-nosnippet>1285</a>/// next share + across a reconnect. Harmless with no active call.
+<a href=#1286 id=1286 data-nosnippet>1286</a></span><span class="kw">pub async fn </span>call_set_screen_quality(quality: ScreenQuality) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1287 id=1287 data-nosnippet>1287</a>    client()<span class="question-mark">?</span>.call_set_screen_quality(quality).<span class="kw">await
 <a href=#1288 id=1288 data-nosnippet>1288</a></span>}
 <a href=#1289 id=1289 data-nosnippet>1289</a>
-<a href=#1290 id=1290 data-nosnippet>1290</a><span class="doccomment">/// Enumerate the available media devices (mic / camera / speaker) for the Devices
-<a href=#1291 id=1291 data-nosnippet>1291</a>/// panel. Needs no active call; pass an `id` from a returned [`DeviceView`] back to
-<a href=#1292 id=1292 data-nosnippet>1292</a>/// [`call_select_device`] (or `null` for the host default).
-<a href=#1293 id=1293 data-nosnippet>1293</a></span><span class="kw">pub async fn </span>call_list_devices() -&gt; <span class="prelude-ty">Result</span>&lt;DeviceListView, HoundError&gt; {
-<a href=#1294 id=1294 data-nosnippet>1294</a>    client()<span class="question-mark">?</span>.list_devices().<span class="kw">await
-<a href=#1295 id=1295 data-nosnippet>1295</a></span>}
-<a href=#1296 id=1296 data-nosnippet>1296</a>
-<a href=#1297 id=1297 data-nosnippet>1297</a><span class="doccomment">/// Render the agent-readable audio-quality debug report (a paste-able text block that
-<a href=#1298 id=1298 data-nosnippet>1298</a>/// pre-attributes a glitch to a pipeline stage) from the latest stats snapshot. For the
-<a href=#1299 id=1299 data-nosnippet>1299</a>/// "Copy audio report" affordance; returns a "healthy" report between calls.
-<a href=#1300 id=1300 data-nosnippet>1300</a></span><span class="kw">pub async fn </span>call_audio_debug_report() -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
-<a href=#1301 id=1301 data-nosnippet>1301</a>    <span class="prelude-val">Ok</span>(client()<span class="question-mark">?</span>.audio_debug_report())
-<a href=#1302 id=1302 data-nosnippet>1302</a>}
-<a href=#1303 id=1303 data-nosnippet>1303</a>
-<a href=#1304 id=1304 data-nosnippet>1304</a><span class="doccomment">/// Render the agent-readable video-quality debug report (the send/receive twin of
-<a href=#1305 id=1305 data-nosnippet>1305</a>/// [`call_audio_debug_report`]: a paste-able text block that pre-attributes a freeze
-<a href=#1306 id=1306 data-nosnippet>1306</a>/// or a black tile to a pipeline stage) from the latest stats snapshot. For the
-<a href=#1307 id=1307 data-nosnippet>1307</a>/// "Copy video report" affordance; returns a "healthy" report between calls.
-<a href=#1308 id=1308 data-nosnippet>1308</a></span><span class="kw">pub async fn </span>call_video_debug_report() -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
-<a href=#1309 id=1309 data-nosnippet>1309</a>    <span class="prelude-val">Ok</span>(client()<span class="question-mark">?</span>.video_debug_report())
-<a href=#1310 id=1310 data-nosnippet>1310</a>}
-<a href=#1311 id=1311 data-nosnippet>1311</a>
-<a href=#1312 id=1312 data-nosnippet>1312</a><span class="comment">// ─── Genuine reshapes (the only DTOs that survive the mirror-by-default rule) ───
+<a href=#1290 id=1290 data-nosnippet>1290</a><span class="doccomment">/// List shareable screen sources (displays + windows) for the share picker.
+<a href=#1291 id=1291 data-nosnippet>1291</a>/// Returns the mirrored core type directly — no reshape needed.
+<a href=#1292 id=1292 data-nosnippet>1292</a></span><span class="kw">pub async fn </span>call_list_screen_sources() -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;ScreenSourceView&gt;, HoundError&gt; {
+<a href=#1293 id=1293 data-nosnippet>1293</a>    client()<span class="question-mark">?</span>.list_screen_sources().<span class="kw">await
+<a href=#1294 id=1294 data-nosnippet>1294</a></span>}
+<a href=#1295 id=1295 data-nosnippet>1295</a>
+<a href=#1296 id=1296 data-nosnippet>1296</a><span class="doccomment">/// One-shot preview thumbnail of a screen source for the picker (opaque RGBA,
+<a href=#1297 id=1297 data-nosnippet>1297</a>/// aspect-fit within `max_w`×`max_h`). Best-effort + cross-platform; an `Err` is
+<a href=#1298 id=1298 data-nosnippet>1298</a>/// the picker's "no thumbnail, show the title-only card" signal.
+<a href=#1299 id=1299 data-nosnippet>1299</a></span><span class="kw">pub async fn </span>call_screen_thumbnail(
+<a href=#1300 id=1300 data-nosnippet>1300</a>    source: String,
+<a href=#1301 id=1301 data-nosnippet>1301</a>    max_w: u32,
+<a href=#1302 id=1302 data-nosnippet>1302</a>    max_h: u32,
+<a href=#1303 id=1303 data-nosnippet>1303</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ScreenThumbnail, HoundError&gt; {
+<a href=#1304 id=1304 data-nosnippet>1304</a>    client()<span class="question-mark">?</span>.screen_thumbnail(source, max_w, max_h).<span class="kw">await
+<a href=#1305 id=1305 data-nosnippet>1305</a></span>}
+<a href=#1306 id=1306 data-nosnippet>1306</a>
+<a href=#1307 id=1307 data-nosnippet>1307</a><span class="doccomment">/// Enumerate the available media devices (mic / camera / speaker) for the Devices
+<a href=#1308 id=1308 data-nosnippet>1308</a>/// panel. Needs no active call; pass an `id` from a returned [`DeviceView`] back to
+<a href=#1309 id=1309 data-nosnippet>1309</a>/// [`call_select_device`] (or `null` for the host default).
+<a href=#1310 id=1310 data-nosnippet>1310</a></span><span class="kw">pub async fn </span>call_list_devices() -&gt; <span class="prelude-ty">Result</span>&lt;DeviceListView, HoundError&gt; {
+<a href=#1311 id=1311 data-nosnippet>1311</a>    client()<span class="question-mark">?</span>.list_devices().<span class="kw">await
+<a href=#1312 id=1312 data-nosnippet>1312</a></span>}
 <a href=#1313 id=1313 data-nosnippet>1313</a>
-<a href=#1314 id=1314 data-nosnippet>1314</a></span><span class="doccomment">/// Speaking levels: mic + per-peer, each `0.0..=1.0`. Reshaped because the core
-<a href=#1315 id=1315 data-nosnippet>1315</a>/// [`LevelsView`](hound_client::LevelsView) carries `peers` as a `HashMap`, which FRB
-<a href=#1316 id=1316 data-nosnippet>1316</a>/// mirrors less cleanly than a `Vec` of pairs.
-<a href=#1317 id=1317 data-nosnippet>1317</a></span><span class="attr">#[derive(Clone, Debug)]
-<a href=#1318 id=1318 data-nosnippet>1318</a></span><span class="kw">pub struct </span>LevelsDto {
-<a href=#1319 id=1319 data-nosnippet>1319</a>    <span class="kw">pub </span>mic: f32,
-<a href=#1320 id=1320 data-nosnippet>1320</a>    <span class="doccomment">/// `(peer_id, level)` pairs (FRB mirrors a Vec more cleanly than a HashMap).
-<a href=#1321 id=1321 data-nosnippet>1321</a>    </span><span class="kw">pub </span>peers: Vec&lt;(u32, f32)&gt;,
-<a href=#1322 id=1322 data-nosnippet>1322</a>}
-<a href=#1323 id=1323 data-nosnippet>1323</a>
-<a href=#1324 id=1324 data-nosnippet>1324</a><span class="kw">fn </span>project_levels(l: <span class="kw-2">&amp;</span>hound_client::LevelsView) -&gt; LevelsDto {
-<a href=#1325 id=1325 data-nosnippet>1325</a>    LevelsDto {
-<a href=#1326 id=1326 data-nosnippet>1326</a>        mic: l.mic,
-<a href=#1327 id=1327 data-nosnippet>1327</a>        peers: l.peers.iter().map(|(k, v)| (<span class="kw-2">*</span>k, <span class="kw-2">*</span>v)).collect(),
-<a href=#1328 id=1328 data-nosnippet>1328</a>    }
-<a href=#1329 id=1329 data-nosnippet>1329</a>}
+<a href=#1314 id=1314 data-nosnippet>1314</a><span class="doccomment">/// Render the agent-readable audio-quality debug report (a paste-able text block that
+<a href=#1315 id=1315 data-nosnippet>1315</a>/// pre-attributes a glitch to a pipeline stage) from the latest stats snapshot. For the
+<a href=#1316 id=1316 data-nosnippet>1316</a>/// "Copy audio report" affordance; returns a "healthy" report between calls.
+<a href=#1317 id=1317 data-nosnippet>1317</a></span><span class="kw">pub async fn </span>call_audio_debug_report() -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
+<a href=#1318 id=1318 data-nosnippet>1318</a>    <span class="prelude-val">Ok</span>(client()<span class="question-mark">?</span>.audio_debug_report())
+<a href=#1319 id=1319 data-nosnippet>1319</a>}
+<a href=#1320 id=1320 data-nosnippet>1320</a>
+<a href=#1321 id=1321 data-nosnippet>1321</a><span class="doccomment">/// Render the agent-readable video-quality debug report (the send/receive twin of
+<a href=#1322 id=1322 data-nosnippet>1322</a>/// [`call_audio_debug_report`]: a paste-able text block that pre-attributes a freeze
+<a href=#1323 id=1323 data-nosnippet>1323</a>/// or a black tile to a pipeline stage) from the latest stats snapshot. For the
+<a href=#1324 id=1324 data-nosnippet>1324</a>/// "Copy video report" affordance; returns a "healthy" report between calls.
+<a href=#1325 id=1325 data-nosnippet>1325</a></span><span class="kw">pub async fn </span>call_video_debug_report() -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
+<a href=#1326 id=1326 data-nosnippet>1326</a>    <span class="prelude-val">Ok</span>(client()<span class="question-mark">?</span>.video_debug_report())
+<a href=#1327 id=1327 data-nosnippet>1327</a>}
+<a href=#1328 id=1328 data-nosnippet>1328</a>
+<a href=#1329 id=1329 data-nosnippet>1329</a><span class="comment">// ─── Genuine reshapes (the only DTOs that survive the mirror-by-default rule) ───
 <a href=#1330 id=1330 data-nosnippet>1330</a>
-<a href=#1331 id=1331 data-nosnippet>1331</a><span class="doccomment">/// Per-stream frame geometry — the RENDER-PATH contract that sizes each tile's
-<a href=#1332 id=1332 data-nosnippet>1332</a>/// native texture. Reshaped from [`StatsSnapshot`](hound_client::stats::StatsSnapshot)
-<a href=#1333 id=1333 data-nosnippet>1333</a>/// (the UI must never parse the debug-stats JSON for a render decision) and emitted
-<a href=#1334 id=1334 data-nosnippet>1334</a>/// only when a geometry actually changes, so the stream is near-silent in steady state.
-<a href=#1335 id=1335 data-nosnippet>1335</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Default)]
-<a href=#1336 id=1336 data-nosnippet>1336</a></span><span class="kw">pub struct </span>FrameSizesDto {
-<a href=#1337 id=1337 data-nosnippet>1337</a>    <span class="doccomment">/// `(stream_key, width, height)` for every stream with known geometry, keyed by
-<a href=#1338 id=1338 data-nosnippet>1338</a>    /// the render stream key: `"self"` is the self camera's CAPTURE geometry (stable
-<a href=#1339 id=1339 data-nosnippet>1339</a>    /// across BWE rung moves — sizing off the encode geometry would churn the texture);
-<a href=#1340 id=1340 data-nosnippet>1340</a>    /// `"cam:{peer}"` / `"screen:{peer}"` are decoded geometry. Zero-sized streams are
-<a href=#1341 id=1341 data-nosnippet>1341</a>    /// omitted (the tile keeps its default texture until the first real size lands).
-<a href=#1342 id=1342 data-nosnippet>1342</a>    </span><span class="kw">pub </span>streams: Vec&lt;(String, u32, u32)&gt;,
-<a href=#1343 id=1343 data-nosnippet>1343</a>    <span class="doccomment">/// The local screen share's ENCODE geometry `(width, height)` while sharing —
-<a href=#1344 id=1344 data-nosnippet>1344</a>    /// the self screen tile's stream key is `"screen:{self_peer}"`, an id the
-<a href=#1345 id=1345 data-nosnippet>1345</a>    /// snapshot doesn't key its outbound sections by, so it crosses as its own field.
-<a href=#1346 id=1346 data-nosnippet>1346</a>    </span><span class="kw">pub </span>self_screen: <span class="prelude-ty">Option</span>&lt;(u32, u32)&gt;,
-<a href=#1347 id=1347 data-nosnippet>1347</a>}
-<a href=#1348 id=1348 data-nosnippet>1348</a>
-<a href=#1349 id=1349 data-nosnippet>1349</a><span class="kw">fn </span>project_frame_sizes(s: <span class="kw-2">&amp;</span>hound_client::stats::StatsSnapshot) -&gt; FrameSizesDto {
-<a href=#1350 id=1350 data-nosnippet>1350</a>    <span class="kw">let </span><span class="kw-2">mut </span>streams = Vec::new();
-<a href=#1351 id=1351 data-nosnippet>1351</a>    <span class="kw">let </span><span class="kw-2">mut </span>push = |key: String, w: u32, h: u32| {
-<a href=#1352 id=1352 data-nosnippet>1352</a>        <span class="kw">if </span>w &gt; <span class="number">0 </span>&amp;&amp; h &gt; <span class="number">0 </span>{
-<a href=#1353 id=1353 data-nosnippet>1353</a>            streams.push((key, w, h));
-<a href=#1354 id=1354 data-nosnippet>1354</a>        }
-<a href=#1355 id=1355 data-nosnippet>1355</a>    };
-<a href=#1356 id=1356 data-nosnippet>1356</a>    <span class="kw">let </span>ov = <span class="kw-2">&amp;</span>s.outbound_video;
-<a href=#1357 id=1357 data-nosnippet>1357</a>    <span class="comment">// Capture geometry when known, else the encode geometry (pre-first-frame).
-<a href=#1358 id=1358 data-nosnippet>1358</a>    </span><span class="kw">if </span>ov.capture_width &gt; <span class="number">0 </span>&amp;&amp; ov.capture_height &gt; <span class="number">0 </span>{
-<a href=#1359 id=1359 data-nosnippet>1359</a>        push(<span class="string">"self"</span>.into(), ov.capture_width, ov.capture_height);
-<a href=#1360 id=1360 data-nosnippet>1360</a>    } <span class="kw">else </span>{
-<a href=#1361 id=1361 data-nosnippet>1361</a>        push(<span class="string">"self"</span>.into(), ov.width, ov.height);
-<a href=#1362 id=1362 data-nosnippet>1362</a>    }
-<a href=#1363 id=1363 data-nosnippet>1363</a>    <span class="kw">for </span>p <span class="kw">in </span><span class="kw-2">&amp;</span>s.inbound {
-<a href=#1364 id=1364 data-nosnippet>1364</a>        push(<span class="macro">format!</span>(<span class="string">"cam:{}"</span>, p.peer_id), p.video.width, p.video.height);
-<a href=#1365 id=1365 data-nosnippet>1365</a>        push(
-<a href=#1366 id=1366 data-nosnippet>1366</a>            <span class="macro">format!</span>(<span class="string">"screen:{}"</span>, p.peer_id),
-<a href=#1367 id=1367 data-nosnippet>1367</a>            p.screen_video.width,
-<a href=#1368 id=1368 data-nosnippet>1368</a>            p.screen_video.height,
-<a href=#1369 id=1369 data-nosnippet>1369</a>        );
-<a href=#1370 id=1370 data-nosnippet>1370</a>    }
-<a href=#1371 id=1371 data-nosnippet>1371</a>    <span class="kw">let </span>os = <span class="kw-2">&amp;</span>s.outbound_screen;
-<a href=#1372 id=1372 data-nosnippet>1372</a>    <span class="kw">let </span>self_screen = (os.width &gt; <span class="number">0 </span>&amp;&amp; os.height &gt; <span class="number">0</span>).then_some((os.width, os.height));
-<a href=#1373 id=1373 data-nosnippet>1373</a>    FrameSizesDto {
-<a href=#1374 id=1374 data-nosnippet>1374</a>        streams,
-<a href=#1375 id=1375 data-nosnippet>1375</a>        self_screen,
-<a href=#1376 id=1376 data-nosnippet>1376</a>    }
-<a href=#1377 id=1377 data-nosnippet>1377</a>}
-<a href=#1378 id=1378 data-nosnippet>1378</a>
-<a href=#1379 id=1379 data-nosnippet>1379</a><span class="comment">// ─── Observable streams (watch → StreamSink forwarders) ────────────────────────
-<a href=#1380 id=1380 data-nosnippet>1380</a>//
-<a href=#1381 id=1381 data-nosnippet>1381</a>// Each subscribes a `watch::Receiver` and forwards the INITIAL value plus every
-<a href=#1382 id=1382 data-nosnippet>1382</a>// change onto the sink. The forward loop ends (closing the Dart stream) when the sink
-<a href=#1383 id=1383 data-nosnippet>1383</a>// is dropped on the Dart side (`sink.add` returns Err) or the channel closes.
-<a href=#1384 id=1384 data-nosnippet>1384</a>
-<a href=#1385 id=1385 data-nosnippet>1385</a>// The forward loops are inlined per stream rather than shared through a generic
-<a href=#1386 id=1386 data-nosnippet>1386</a>// helper: `StreamSink::add` requires the FRB-private `SseEncode` bound, which can't
-<a href=#1387 id=1387 data-nosnippet>1387</a>// be named in a generic signature — but it IS satisfied for each concrete DTO once
-<a href=#1388 id=1388 data-nosnippet>1388</a>// codegen emits the impls. Each loop emits the latest value immediately (so a fresh
-<a href=#1389 id=1389 data-nosnippet>1389</a>// subscriber renders without waiting), then forwards every change until either side
-<a href=#1390 id=1390 data-nosnippet>1390</a>// closes; `sink.add` returning `Err` means the Dart side dropped the stream.
-<a href=#1391 id=1391 data-nosnippet>1391</a>
-<a href=#1392 id=1392 data-nosnippet>1392</a></span><span class="doccomment">/// Stream of auth-state snapshots (initial value + every transition).
-<a href=#1393 id=1393 data-nosnippet>1393</a></span><span class="kw">pub async fn </span>watch_auth_state(sink: StreamSink&lt;AuthState&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1394 id=1394 data-nosnippet>1394</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_auth();
-<a href=#1395 id=1395 data-nosnippet>1395</a>    <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
-<a href=#1396 id=1396 data-nosnippet>1396</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_auth_state: dart sink closed, exiting"</span>);
-<a href=#1397 id=1397 data-nosnippet>1397</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#1398 id=1398 data-nosnippet>1398</a>    }
-<a href=#1399 id=1399 data-nosnippet>1399</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
-<a href=#1400 id=1400 data-nosnippet>1400</a>        <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
-<a href=#1401 id=1401 data-nosnippet>1401</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_auth_state: dart sink closed, exiting"</span>);
-<a href=#1402 id=1402 data-nosnippet>1402</a>            <span class="kw">break</span>;
-<a href=#1403 id=1403 data-nosnippet>1403</a>        }
-<a href=#1404 id=1404 data-nosnippet>1404</a>    }
-<a href=#1405 id=1405 data-nosnippet>1405</a>    <span class="prelude-val">Ok</span>(())
-<a href=#1406 id=1406 data-nosnippet>1406</a>}
-<a href=#1407 id=1407 data-nosnippet>1407</a>
-<a href=#1408 id=1408 data-nosnippet>1408</a><span class="doccomment">/// Stream of community-tree snapshots (the sidebar): a flat list of communities, each
-<a href=#1409 id=1409 data-nosnippet>1409</a>/// with its spaces.
-<a href=#1410 id=1410 data-nosnippet>1410</a></span><span class="kw">pub async fn </span>watch_communities(sink: StreamSink&lt;Vec&lt;CommunityNode&gt;&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1411 id=1411 data-nosnippet>1411</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_community_tree();
-<a href=#1412 id=1412 data-nosnippet>1412</a>    <span class="kw">if </span>sink.add(project_tree(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
-<a href=#1413 id=1413 data-nosnippet>1413</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_communities: dart sink closed, exiting"</span>);
+<a href=#1331 id=1331 data-nosnippet>1331</a></span><span class="doccomment">/// Speaking levels: mic + per-peer, each `0.0..=1.0`. Reshaped because the core
+<a href=#1332 id=1332 data-nosnippet>1332</a>/// [`LevelsView`](hound_client::LevelsView) carries `peers` as a `HashMap`, which FRB
+<a href=#1333 id=1333 data-nosnippet>1333</a>/// mirrors less cleanly than a `Vec` of pairs.
+<a href=#1334 id=1334 data-nosnippet>1334</a></span><span class="attr">#[derive(Clone, Debug)]
+<a href=#1335 id=1335 data-nosnippet>1335</a></span><span class="kw">pub struct </span>LevelsDto {
+<a href=#1336 id=1336 data-nosnippet>1336</a>    <span class="kw">pub </span>mic: f32,
+<a href=#1337 id=1337 data-nosnippet>1337</a>    <span class="doccomment">/// `(peer_id, level)` pairs (FRB mirrors a Vec more cleanly than a HashMap).
+<a href=#1338 id=1338 data-nosnippet>1338</a>    </span><span class="kw">pub </span>peers: Vec&lt;(u32, f32)&gt;,
+<a href=#1339 id=1339 data-nosnippet>1339</a>}
+<a href=#1340 id=1340 data-nosnippet>1340</a>
+<a href=#1341 id=1341 data-nosnippet>1341</a><span class="kw">fn </span>project_levels(l: <span class="kw-2">&amp;</span>hound_client::LevelsView) -&gt; LevelsDto {
+<a href=#1342 id=1342 data-nosnippet>1342</a>    LevelsDto {
+<a href=#1343 id=1343 data-nosnippet>1343</a>        mic: l.mic,
+<a href=#1344 id=1344 data-nosnippet>1344</a>        peers: l.peers.iter().map(|(k, v)| (<span class="kw-2">*</span>k, <span class="kw-2">*</span>v)).collect(),
+<a href=#1345 id=1345 data-nosnippet>1345</a>    }
+<a href=#1346 id=1346 data-nosnippet>1346</a>}
+<a href=#1347 id=1347 data-nosnippet>1347</a>
+<a href=#1348 id=1348 data-nosnippet>1348</a><span class="doccomment">/// Per-stream frame geometry — the RENDER-PATH contract that sizes each tile's
+<a href=#1349 id=1349 data-nosnippet>1349</a>/// native texture. Reshaped from [`StatsSnapshot`](hound_client::stats::StatsSnapshot)
+<a href=#1350 id=1350 data-nosnippet>1350</a>/// (the UI must never parse the debug-stats JSON for a render decision) and emitted
+<a href=#1351 id=1351 data-nosnippet>1351</a>/// only when a geometry actually changes, so the stream is near-silent in steady state.
+<a href=#1352 id=1352 data-nosnippet>1352</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Default)]
+<a href=#1353 id=1353 data-nosnippet>1353</a></span><span class="kw">pub struct </span>FrameSizesDto {
+<a href=#1354 id=1354 data-nosnippet>1354</a>    <span class="doccomment">/// `(stream_key, width, height)` for every stream with known geometry, keyed by
+<a href=#1355 id=1355 data-nosnippet>1355</a>    /// the render stream key: `"self"` is the self camera's CAPTURE geometry (stable
+<a href=#1356 id=1356 data-nosnippet>1356</a>    /// across BWE rung moves — sizing off the encode geometry would churn the texture);
+<a href=#1357 id=1357 data-nosnippet>1357</a>    /// `"cam:{peer}"` / `"screen:{peer}"` are decoded geometry. Zero-sized streams are
+<a href=#1358 id=1358 data-nosnippet>1358</a>    /// omitted (the tile keeps its default texture until the first real size lands).
+<a href=#1359 id=1359 data-nosnippet>1359</a>    </span><span class="kw">pub </span>streams: Vec&lt;(String, u32, u32)&gt;,
+<a href=#1360 id=1360 data-nosnippet>1360</a>    <span class="doccomment">/// The local screen share's ENCODE geometry `(width, height)` while sharing —
+<a href=#1361 id=1361 data-nosnippet>1361</a>    /// the self screen tile's stream key is `"screen:{self_peer}"`, an id the
+<a href=#1362 id=1362 data-nosnippet>1362</a>    /// snapshot doesn't key its outbound sections by, so it crosses as its own field.
+<a href=#1363 id=1363 data-nosnippet>1363</a>    </span><span class="kw">pub </span>self_screen: <span class="prelude-ty">Option</span>&lt;(u32, u32)&gt;,
+<a href=#1364 id=1364 data-nosnippet>1364</a>}
+<a href=#1365 id=1365 data-nosnippet>1365</a>
+<a href=#1366 id=1366 data-nosnippet>1366</a><span class="kw">fn </span>project_frame_sizes(s: <span class="kw-2">&amp;</span>hound_client::stats::StatsSnapshot) -&gt; FrameSizesDto {
+<a href=#1367 id=1367 data-nosnippet>1367</a>    <span class="kw">let </span><span class="kw-2">mut </span>streams = Vec::new();
+<a href=#1368 id=1368 data-nosnippet>1368</a>    <span class="kw">let </span><span class="kw-2">mut </span>push = |key: String, w: u32, h: u32| {
+<a href=#1369 id=1369 data-nosnippet>1369</a>        <span class="kw">if </span>w &gt; <span class="number">0 </span>&amp;&amp; h &gt; <span class="number">0 </span>{
+<a href=#1370 id=1370 data-nosnippet>1370</a>            streams.push((key, w, h));
+<a href=#1371 id=1371 data-nosnippet>1371</a>        }
+<a href=#1372 id=1372 data-nosnippet>1372</a>    };
+<a href=#1373 id=1373 data-nosnippet>1373</a>    <span class="kw">let </span>ov = <span class="kw-2">&amp;</span>s.outbound_video;
+<a href=#1374 id=1374 data-nosnippet>1374</a>    <span class="comment">// Capture geometry when known, else the encode geometry (pre-first-frame).
+<a href=#1375 id=1375 data-nosnippet>1375</a>    </span><span class="kw">if </span>ov.capture_width &gt; <span class="number">0 </span>&amp;&amp; ov.capture_height &gt; <span class="number">0 </span>{
+<a href=#1376 id=1376 data-nosnippet>1376</a>        push(<span class="string">"self"</span>.into(), ov.capture_width, ov.capture_height);
+<a href=#1377 id=1377 data-nosnippet>1377</a>    } <span class="kw">else </span>{
+<a href=#1378 id=1378 data-nosnippet>1378</a>        push(<span class="string">"self"</span>.into(), ov.width, ov.height);
+<a href=#1379 id=1379 data-nosnippet>1379</a>    }
+<a href=#1380 id=1380 data-nosnippet>1380</a>    <span class="kw">for </span>p <span class="kw">in </span><span class="kw-2">&amp;</span>s.inbound {
+<a href=#1381 id=1381 data-nosnippet>1381</a>        push(<span class="macro">format!</span>(<span class="string">"cam:{}"</span>, p.peer_id), p.video.width, p.video.height);
+<a href=#1382 id=1382 data-nosnippet>1382</a>        push(
+<a href=#1383 id=1383 data-nosnippet>1383</a>            <span class="macro">format!</span>(<span class="string">"screen:{}"</span>, p.peer_id),
+<a href=#1384 id=1384 data-nosnippet>1384</a>            p.screen_video.width,
+<a href=#1385 id=1385 data-nosnippet>1385</a>            p.screen_video.height,
+<a href=#1386 id=1386 data-nosnippet>1386</a>        );
+<a href=#1387 id=1387 data-nosnippet>1387</a>    }
+<a href=#1388 id=1388 data-nosnippet>1388</a>    <span class="kw">let </span>os = <span class="kw-2">&amp;</span>s.outbound_screen;
+<a href=#1389 id=1389 data-nosnippet>1389</a>    <span class="kw">let </span>self_screen = (os.width &gt; <span class="number">0 </span>&amp;&amp; os.height &gt; <span class="number">0</span>).then_some((os.width, os.height));
+<a href=#1390 id=1390 data-nosnippet>1390</a>    FrameSizesDto {
+<a href=#1391 id=1391 data-nosnippet>1391</a>        streams,
+<a href=#1392 id=1392 data-nosnippet>1392</a>        self_screen,
+<a href=#1393 id=1393 data-nosnippet>1393</a>    }
+<a href=#1394 id=1394 data-nosnippet>1394</a>}
+<a href=#1395 id=1395 data-nosnippet>1395</a>
+<a href=#1396 id=1396 data-nosnippet>1396</a><span class="comment">// ─── Observable streams (watch → StreamSink forwarders) ────────────────────────
+<a href=#1397 id=1397 data-nosnippet>1397</a>//
+<a href=#1398 id=1398 data-nosnippet>1398</a>// Each subscribes a `watch::Receiver` and forwards the INITIAL value plus every
+<a href=#1399 id=1399 data-nosnippet>1399</a>// change onto the sink. The forward loop ends (closing the Dart stream) when the sink
+<a href=#1400 id=1400 data-nosnippet>1400</a>// is dropped on the Dart side (`sink.add` returns Err) or the channel closes.
+<a href=#1401 id=1401 data-nosnippet>1401</a>
+<a href=#1402 id=1402 data-nosnippet>1402</a>// The forward loops are inlined per stream rather than shared through a generic
+<a href=#1403 id=1403 data-nosnippet>1403</a>// helper: `StreamSink::add` requires the FRB-private `SseEncode` bound, which can't
+<a href=#1404 id=1404 data-nosnippet>1404</a>// be named in a generic signature — but it IS satisfied for each concrete DTO once
+<a href=#1405 id=1405 data-nosnippet>1405</a>// codegen emits the impls. Each loop emits the latest value immediately (so a fresh
+<a href=#1406 id=1406 data-nosnippet>1406</a>// subscriber renders without waiting), then forwards every change until either side
+<a href=#1407 id=1407 data-nosnippet>1407</a>// closes; `sink.add` returning `Err` means the Dart side dropped the stream.
+<a href=#1408 id=1408 data-nosnippet>1408</a>
+<a href=#1409 id=1409 data-nosnippet>1409</a></span><span class="doccomment">/// Stream of auth-state snapshots (initial value + every transition).
+<a href=#1410 id=1410 data-nosnippet>1410</a></span><span class="kw">pub async fn </span>watch_auth_state(sink: StreamSink&lt;AuthState&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1411 id=1411 data-nosnippet>1411</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_auth();
+<a href=#1412 id=1412 data-nosnippet>1412</a>    <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
+<a href=#1413 id=1413 data-nosnippet>1413</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_auth_state: dart sink closed, exiting"</span>);
 <a href=#1414 id=1414 data-nosnippet>1414</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#1415 id=1415 data-nosnippet>1415</a>    }
 <a href=#1416 id=1416 data-nosnippet>1416</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
-<a href=#1417 id=1417 data-nosnippet>1417</a>        <span class="kw">if </span>sink.add(project_tree(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
-<a href=#1418 id=1418 data-nosnippet>1418</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_communities: dart sink closed, exiting"</span>);
+<a href=#1417 id=1417 data-nosnippet>1417</a>        <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
+<a href=#1418 id=1418 data-nosnippet>1418</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_auth_state: dart sink closed, exiting"</span>);
 <a href=#1419 id=1419 data-nosnippet>1419</a>            <span class="kw">break</span>;
 <a href=#1420 id=1420 data-nosnippet>1420</a>        }
 <a href=#1421 id=1421 data-nosnippet>1421</a>    }
 <a href=#1422 id=1422 data-nosnippet>1422</a>    <span class="prelude-val">Ok</span>(())
 <a href=#1423 id=1423 data-nosnippet>1423</a>}
 <a href=#1424 id=1424 data-nosnippet>1424</a>
-<a href=#1425 id=1425 data-nosnippet>1425</a><span class="doccomment">/// Stream of roster snapshots (display identities the UI joins messages/peers against).
-<a href=#1426 id=1426 data-nosnippet>1426</a></span><span class="kw">pub async fn </span>watch_roster(sink: StreamSink&lt;Vec&lt;Member&gt;&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1427 id=1427 data-nosnippet>1427</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_roster();
-<a href=#1428 id=1428 data-nosnippet>1428</a>    <span class="kw">if </span>sink
-<a href=#1429 id=1429 data-nosnippet>1429</a>        .add(rx.borrow().iter().cloned().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;())
-<a href=#1430 id=1430 data-nosnippet>1430</a>        .is_err()
-<a href=#1431 id=1431 data-nosnippet>1431</a>    {
-<a href=#1432 id=1432 data-nosnippet>1432</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_roster: dart sink closed, exiting"</span>);
-<a href=#1433 id=1433 data-nosnippet>1433</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#1434 id=1434 data-nosnippet>1434</a>    }
-<a href=#1435 id=1435 data-nosnippet>1435</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
-<a href=#1436 id=1436 data-nosnippet>1436</a>        <span class="kw">if </span>sink
-<a href=#1437 id=1437 data-nosnippet>1437</a>            .add(rx.borrow().iter().cloned().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;())
-<a href=#1438 id=1438 data-nosnippet>1438</a>            .is_err()
-<a href=#1439 id=1439 data-nosnippet>1439</a>        {
-<a href=#1440 id=1440 data-nosnippet>1440</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_roster: dart sink closed, exiting"</span>);
-<a href=#1441 id=1441 data-nosnippet>1441</a>            <span class="kw">break</span>;
-<a href=#1442 id=1442 data-nosnippet>1442</a>        }
-<a href=#1443 id=1443 data-nosnippet>1443</a>    }
-<a href=#1444 id=1444 data-nosnippet>1444</a>    <span class="prelude-val">Ok</span>(())
-<a href=#1445 id=1445 data-nosnippet>1445</a>}
-<a href=#1446 id=1446 data-nosnippet>1446</a>
-<a href=#1447 id=1447 data-nosnippet>1447</a><span class="doccomment">/// Stream of a space's message list (ordered, oldest first).
-<a href=#1448 id=1448 data-nosnippet>1448</a></span><span class="kw">pub async fn </span>watch_messages(
-<a href=#1449 id=1449 data-nosnippet>1449</a>    space_id: Uuid,
-<a href=#1450 id=1450 data-nosnippet>1450</a>    sink: StreamSink&lt;Vec&lt;Message&gt;&gt;,
-<a href=#1451 id=1451 data-nosnippet>1451</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1452 id=1452 data-nosnippet>1452</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_messages(space_id).<span class="kw">await</span>;
-<a href=#1453 id=1453 data-nosnippet>1453</a>    <span class="kw">if </span>sink.add(rx.borrow().messages().to_vec()).is_err() {
-<a href=#1454 id=1454 data-nosnippet>1454</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_messages: dart sink closed, exiting"</span>);
-<a href=#1455 id=1455 data-nosnippet>1455</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#1456 id=1456 data-nosnippet>1456</a>    }
-<a href=#1457 id=1457 data-nosnippet>1457</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
-<a href=#1458 id=1458 data-nosnippet>1458</a>        <span class="kw">if </span>sink.add(rx.borrow().messages().to_vec()).is_err() {
-<a href=#1459 id=1459 data-nosnippet>1459</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_messages: dart sink closed, exiting"</span>);
-<a href=#1460 id=1460 data-nosnippet>1460</a>            <span class="kw">break</span>;
-<a href=#1461 id=1461 data-nosnippet>1461</a>        }
-<a href=#1462 id=1462 data-nosnippet>1462</a>    }
-<a href=#1463 id=1463 data-nosnippet>1463</a>    <span class="prelude-val">Ok</span>(())
-<a href=#1464 id=1464 data-nosnippet>1464</a>}
-<a href=#1465 id=1465 data-nosnippet>1465</a>
-<a href=#1466 id=1466 data-nosnippet>1466</a><span class="doccomment">/// Stream of call roster/track snapshots (self id, peers, tracks). Empty when not
-<a href=#1467 id=1467 data-nosnippet>1467</a>/// in a call.
-<a href=#1468 id=1468 data-nosnippet>1468</a></span><span class="kw">pub async fn </span>watch_call_state(sink: StreamSink&lt;CallView&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1469 id=1469 data-nosnippet>1469</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_call();
-<a href=#1470 id=1470 data-nosnippet>1470</a>    <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
-<a href=#1471 id=1471 data-nosnippet>1471</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_call_state: dart sink closed, exiting"</span>);
+<a href=#1425 id=1425 data-nosnippet>1425</a><span class="doccomment">/// Stream of community-tree snapshots (the sidebar): a flat list of communities, each
+<a href=#1426 id=1426 data-nosnippet>1426</a>/// with its spaces.
+<a href=#1427 id=1427 data-nosnippet>1427</a></span><span class="kw">pub async fn </span>watch_communities(sink: StreamSink&lt;Vec&lt;CommunityNode&gt;&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1428 id=1428 data-nosnippet>1428</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_community_tree();
+<a href=#1429 id=1429 data-nosnippet>1429</a>    <span class="kw">if </span>sink.add(project_tree(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
+<a href=#1430 id=1430 data-nosnippet>1430</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_communities: dart sink closed, exiting"</span>);
+<a href=#1431 id=1431 data-nosnippet>1431</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#1432 id=1432 data-nosnippet>1432</a>    }
+<a href=#1433 id=1433 data-nosnippet>1433</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
+<a href=#1434 id=1434 data-nosnippet>1434</a>        <span class="kw">if </span>sink.add(project_tree(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
+<a href=#1435 id=1435 data-nosnippet>1435</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_communities: dart sink closed, exiting"</span>);
+<a href=#1436 id=1436 data-nosnippet>1436</a>            <span class="kw">break</span>;
+<a href=#1437 id=1437 data-nosnippet>1437</a>        }
+<a href=#1438 id=1438 data-nosnippet>1438</a>    }
+<a href=#1439 id=1439 data-nosnippet>1439</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1440 id=1440 data-nosnippet>1440</a>}
+<a href=#1441 id=1441 data-nosnippet>1441</a>
+<a href=#1442 id=1442 data-nosnippet>1442</a><span class="doccomment">/// Stream of roster snapshots (display identities the UI joins messages/peers against).
+<a href=#1443 id=1443 data-nosnippet>1443</a></span><span class="kw">pub async fn </span>watch_roster(sink: StreamSink&lt;Vec&lt;Member&gt;&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1444 id=1444 data-nosnippet>1444</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_roster();
+<a href=#1445 id=1445 data-nosnippet>1445</a>    <span class="kw">if </span>sink
+<a href=#1446 id=1446 data-nosnippet>1446</a>        .add(rx.borrow().iter().cloned().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;())
+<a href=#1447 id=1447 data-nosnippet>1447</a>        .is_err()
+<a href=#1448 id=1448 data-nosnippet>1448</a>    {
+<a href=#1449 id=1449 data-nosnippet>1449</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_roster: dart sink closed, exiting"</span>);
+<a href=#1450 id=1450 data-nosnippet>1450</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#1451 id=1451 data-nosnippet>1451</a>    }
+<a href=#1452 id=1452 data-nosnippet>1452</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
+<a href=#1453 id=1453 data-nosnippet>1453</a>        <span class="kw">if </span>sink
+<a href=#1454 id=1454 data-nosnippet>1454</a>            .add(rx.borrow().iter().cloned().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;())
+<a href=#1455 id=1455 data-nosnippet>1455</a>            .is_err()
+<a href=#1456 id=1456 data-nosnippet>1456</a>        {
+<a href=#1457 id=1457 data-nosnippet>1457</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_roster: dart sink closed, exiting"</span>);
+<a href=#1458 id=1458 data-nosnippet>1458</a>            <span class="kw">break</span>;
+<a href=#1459 id=1459 data-nosnippet>1459</a>        }
+<a href=#1460 id=1460 data-nosnippet>1460</a>    }
+<a href=#1461 id=1461 data-nosnippet>1461</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1462 id=1462 data-nosnippet>1462</a>}
+<a href=#1463 id=1463 data-nosnippet>1463</a>
+<a href=#1464 id=1464 data-nosnippet>1464</a><span class="doccomment">/// Stream of a space's message list (ordered, oldest first).
+<a href=#1465 id=1465 data-nosnippet>1465</a></span><span class="kw">pub async fn </span>watch_messages(
+<a href=#1466 id=1466 data-nosnippet>1466</a>    space_id: Uuid,
+<a href=#1467 id=1467 data-nosnippet>1467</a>    sink: StreamSink&lt;Vec&lt;Message&gt;&gt;,
+<a href=#1468 id=1468 data-nosnippet>1468</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1469 id=1469 data-nosnippet>1469</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_messages(space_id).<span class="kw">await</span>;
+<a href=#1470 id=1470 data-nosnippet>1470</a>    <span class="kw">if </span>sink.add(rx.borrow().messages().to_vec()).is_err() {
+<a href=#1471 id=1471 data-nosnippet>1471</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_messages: dart sink closed, exiting"</span>);
 <a href=#1472 id=1472 data-nosnippet>1472</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#1473 id=1473 data-nosnippet>1473</a>    }
 <a href=#1474 id=1474 data-nosnippet>1474</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
-<a href=#1475 id=1475 data-nosnippet>1475</a>        <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
-<a href=#1476 id=1476 data-nosnippet>1476</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_call_state: dart sink closed, exiting"</span>);
+<a href=#1475 id=1475 data-nosnippet>1475</a>        <span class="kw">if </span>sink.add(rx.borrow().messages().to_vec()).is_err() {
+<a href=#1476 id=1476 data-nosnippet>1476</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_messages: dart sink closed, exiting"</span>);
 <a href=#1477 id=1477 data-nosnippet>1477</a>            <span class="kw">break</span>;
 <a href=#1478 id=1478 data-nosnippet>1478</a>        }
 <a href=#1479 id=1479 data-nosnippet>1479</a>    }
 <a href=#1480 id=1480 data-nosnippet>1480</a>    <span class="prelude-val">Ok</span>(())
 <a href=#1481 id=1481 data-nosnippet>1481</a>}
 <a href=#1482 id=1482 data-nosnippet>1482</a>
-<a href=#1483 id=1483 data-nosnippet>1483</a><span class="doccomment">/// Stream of call connection-state snapshots (idle/connecting/connected/…).
-<a href=#1484 id=1484 data-nosnippet>1484</a></span><span class="kw">pub async fn </span>watch_connection(sink: StreamSink&lt;ConnectionState&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1485 id=1485 data-nosnippet>1485</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_connection();
-<a href=#1486 id=1486 data-nosnippet>1486</a>    <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
-<a href=#1487 id=1487 data-nosnippet>1487</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_connection: dart sink closed, exiting"</span>);
-<a href=#1488 id=1488 data-nosnippet>1488</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#1489 id=1489 data-nosnippet>1489</a>    }
-<a href=#1490 id=1490 data-nosnippet>1490</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
-<a href=#1491 id=1491 data-nosnippet>1491</a>        <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
-<a href=#1492 id=1492 data-nosnippet>1492</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_connection: dart sink closed, exiting"</span>);
-<a href=#1493 id=1493 data-nosnippet>1493</a>            <span class="kw">break</span>;
-<a href=#1494 id=1494 data-nosnippet>1494</a>        }
-<a href=#1495 id=1495 data-nosnippet>1495</a>    }
-<a href=#1496 id=1496 data-nosnippet>1496</a>    <span class="prelude-val">Ok</span>(())
-<a href=#1497 id=1497 data-nosnippet>1497</a>}
-<a href=#1498 id=1498 data-nosnippet>1498</a>
-<a href=#1499 id=1499 data-nosnippet>1499</a><span class="doccomment">/// Stream of speaking-level snapshots (mic + per-peer, `0.0..=1.0`).
-<a href=#1500 id=1500 data-nosnippet>1500</a>///
-<a href=#1501 id=1501 data-nosnippet>1501</a>/// The core updates levels at audio cadence (~50–100 Hz: one `send` per captured mic
-<a href=#1502 id=1502 data-nosnippet>1502</a>/// frame, plus per-peer). A meter only needs ~20 Hz, and each delivery serializes a
-<a href=#1503 id=1503 data-nosnippet>1503</a>/// DTO across FRB and rebuilds on Dart's main thread — forwarding at audio cadence
-<a href=#1504 id=1504 data-nosnippet>1504</a>/// burns idle-call CPU for nothing. Coalesce to one update per ~50 ms: the `watch`
-<a href=#1505 id=1505 data-nosnippet>1505</a>/// keeps only the latest value, so after the throttle sleep the next `changed()`
-<a href=#1506 id=1506 data-nosnippet>1506</a>/// yields the freshest snapshot (no lag beyond the interval, mute→0 lands within it).
-<a href=#1507 id=1507 data-nosnippet>1507</a></span><span class="kw">pub async fn </span>watch_levels(sink: StreamSink&lt;LevelsDto&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1508 id=1508 data-nosnippet>1508</a>    <span class="kw">const </span>MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(<span class="number">50</span>);
-<a href=#1509 id=1509 data-nosnippet>1509</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_levels();
-<a href=#1510 id=1510 data-nosnippet>1510</a>    <span class="kw">if </span>sink.add(project_levels(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
-<a href=#1511 id=1511 data-nosnippet>1511</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_levels: dart sink closed, exiting"</span>);
-<a href=#1512 id=1512 data-nosnippet>1512</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#1513 id=1513 data-nosnippet>1513</a>    }
-<a href=#1514 id=1514 data-nosnippet>1514</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
-<a href=#1515 id=1515 data-nosnippet>1515</a>        <span class="kw">if </span>sink.add(project_levels(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
-<a href=#1516 id=1516 data-nosnippet>1516</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_levels: dart sink closed, exiting"</span>);
-<a href=#1517 id=1517 data-nosnippet>1517</a>            <span class="kw">break</span>;
-<a href=#1518 id=1518 data-nosnippet>1518</a>        }
-<a href=#1519 id=1519 data-nosnippet>1519</a>        tokio::time::sleep(MIN_INTERVAL).<span class="kw">await</span>;
-<a href=#1520 id=1520 data-nosnippet>1520</a>    }
-<a href=#1521 id=1521 data-nosnippet>1521</a>    <span class="prelude-val">Ok</span>(())
-<a href=#1522 id=1522 data-nosnippet>1522</a>}
-<a href=#1523 id=1523 data-nosnippet>1523</a>
-<a href=#1524 id=1524 data-nosnippet>1524</a><span class="doccomment">/// Stream of 1 Hz RTC debug-stats snapshots, serialized to JSON: the ~12 nested
-<a href=#1525 id=1525 data-nosnippet>1525</a>/// stat structs cross as one JSON string (the Flutter debug panel + per-tile
-<a href=#1526 id=1526 data-nosnippet>1526</a>/// overlay parse it) rather than being mirrored individually through FRB.
-<a href=#1527 id=1527 data-nosnippet>1527</a>/// Default/empty snapshot between calls.
-<a href=#1528 id=1528 data-nosnippet>1528</a></span><span class="kw">pub async fn </span>watch_stats(sink: StreamSink&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1529 id=1529 data-nosnippet>1529</a>    <span class="kw">fn </span>to_json(snap: <span class="kw-2">&amp;</span>hound_client::stats::StatsSnapshot) -&gt; String {
-<a href=#1530 id=1530 data-nosnippet>1530</a>        serde_json::to_string(snap).unwrap_or_default()
-<a href=#1531 id=1531 data-nosnippet>1531</a>    }
-<a href=#1532 id=1532 data-nosnippet>1532</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_stats();
-<a href=#1533 id=1533 data-nosnippet>1533</a>    <span class="kw">if </span>sink.add(to_json(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
-<a href=#1534 id=1534 data-nosnippet>1534</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_stats: dart sink closed, exiting"</span>);
-<a href=#1535 id=1535 data-nosnippet>1535</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#1536 id=1536 data-nosnippet>1536</a>    }
-<a href=#1537 id=1537 data-nosnippet>1537</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
-<a href=#1538 id=1538 data-nosnippet>1538</a>        <span class="kw">if </span>sink.add(to_json(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
-<a href=#1539 id=1539 data-nosnippet>1539</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_stats: dart sink closed, exiting"</span>);
-<a href=#1540 id=1540 data-nosnippet>1540</a>            <span class="kw">break</span>;
-<a href=#1541 id=1541 data-nosnippet>1541</a>        }
-<a href=#1542 id=1542 data-nosnippet>1542</a>    }
-<a href=#1543 id=1543 data-nosnippet>1543</a>    <span class="prelude-val">Ok</span>(())
-<a href=#1544 id=1544 data-nosnippet>1544</a>}
-<a href=#1545 id=1545 data-nosnippet>1545</a>
-<a href=#1546 id=1546 data-nosnippet>1546</a><span class="doccomment">/// Stream of typed per-stream frame geometry ([`FrameSizesDto`]) for texture sizing.
-<a href=#1547 id=1547 data-nosnippet>1547</a>///
-<a href=#1548 id=1548 data-nosnippet>1548</a>/// Fed by TWO sources, because neither alone is both complete and prompt:
-<a href=#1549 id=1549 data-nosnippet>1549</a>///  * the 1 Hz stats watcher [`watch_stats`] (no second engine subscription)
-<a href=#1550 id=1550 data-nosnippet>1550</a>///    decides **membership** and carries the geometry only it knows (self capture,
-<a href=#1551 id=1551 data-nosnippet>1551</a>///    self screen encode); and
-<a href=#1552 id=1552 data-nosnippet>1552</a>///  * the decode→render sink's change detector
-<a href=#1553 id=1553 data-nosnippet>1553</a>///    ([`crate::frame_size`]) fires the instant a stream's DECODED size moves, so a
-<a href=#1554 id=1554 data-nosnippet>1554</a>///    simulcast layer switch resizes the texture immediately instead of rendering
-<a href=#1555 id=1555 data-nosnippet>1555</a>///    the sharp new layer scaled into the old texture for up to a second.
-<a href=#1556 id=1556 data-nosnippet>1556</a>///
-<a href=#1557 id=1557 data-nosnippet>1557</a>/// Either wake re-projects and the result is forwarded only when it differs, so the
-<a href=#1558 id=1558 data-nosnippet>1558</a>/// stream stays near-silent in steady state (both sources are quiet: the snapshot
-<a href=#1559 id=1559 data-nosnippet>1559</a>/// repeats itself, the detector says nothing).
-<a href=#1560 id=1560 data-nosnippet>1560</a></span><span class="kw">pub async fn </span>watch_frame_sizes(sink: StreamSink&lt;FrameSizesDto&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#1561 id=1561 data-nosnippet>1561</a>    <span class="kw">fn </span>current(
-<a href=#1562 id=1562 data-nosnippet>1562</a>        rx: <span class="kw-2">&amp;</span>tokio::sync::watch::Receiver&lt;hound_client::stats::StatsSnapshot&gt;,
-<a href=#1563 id=1563 data-nosnippet>1563</a>    ) -&gt; FrameSizesDto {
-<a href=#1564 id=1564 data-nosnippet>1564</a>        <span class="kw">let </span><span class="kw-2">mut </span>dto = project_frame_sizes(<span class="kw-2">&amp;</span>rx.borrow());
-<a href=#1565 id=1565 data-nosnippet>1565</a>        <span class="kw">crate</span>::frame_size::geometry().overlay(<span class="kw-2">&amp;mut </span>dto.streams);
-<a href=#1566 id=1566 data-nosnippet>1566</a>        dto
-<a href=#1567 id=1567 data-nosnippet>1567</a>    }
-<a href=#1568 id=1568 data-nosnippet>1568</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_stats();
-<a href=#1569 id=1569 data-nosnippet>1569</a>    <span class="kw">let </span><span class="kw-2">mut </span>sizes = <span class="kw">crate</span>::frame_size::geometry().subscribe();
-<a href=#1570 id=1570 data-nosnippet>1570</a>    <span class="kw">let </span><span class="kw-2">mut </span>last = current(<span class="kw-2">&amp;</span>rx);
-<a href=#1571 id=1571 data-nosnippet>1571</a>    <span class="kw">if </span>sink.add(last.clone()).is_err() {
-<a href=#1572 id=1572 data-nosnippet>1572</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_frame_sizes: dart sink closed, exiting"</span>);
-<a href=#1573 id=1573 data-nosnippet>1573</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#1574 id=1574 data-nosnippet>1574</a>    }
-<a href=#1575 id=1575 data-nosnippet>1575</a>    <span class="kw">loop </span>{
-<a href=#1576 id=1576 data-nosnippet>1576</a>        <span class="comment">// The geometry tick is a process-wide global, so its sender never drops —
-<a href=#1577 id=1577 data-nosnippet>1577</a>        // only the stats watcher (the client going away) ends this loop.
-<a href=#1578 id=1578 data-nosnippet>1578</a>        </span><span class="macro">tokio::select!</span> {
-<a href=#1579 id=1579 data-nosnippet>1579</a>            r = rx.changed() =&gt; <span class="kw">if </span>r.is_err() { <span class="kw">break </span>},
-<a href=#1580 id=1580 data-nosnippet>1580</a>            r = sizes.changed() =&gt; <span class="kw">if </span>r.is_err() { <span class="kw">break </span>},
-<a href=#1581 id=1581 data-nosnippet>1581</a>        }
-<a href=#1582 id=1582 data-nosnippet>1582</a>        <span class="kw">let </span>next = current(<span class="kw-2">&amp;</span>rx);
-<a href=#1583 id=1583 data-nosnippet>1583</a>        <span class="kw">if </span>next == last {
-<a href=#1584 id=1584 data-nosnippet>1584</a>            <span class="kw">continue</span>;
-<a href=#1585 id=1585 data-nosnippet>1585</a>        }
-<a href=#1586 id=1586 data-nosnippet>1586</a>        <span class="kw">if </span>sink.add(next.clone()).is_err() {
-<a href=#1587 id=1587 data-nosnippet>1587</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_frame_sizes: dart sink closed, exiting"</span>);
-<a href=#1588 id=1588 data-nosnippet>1588</a>            <span class="kw">break</span>;
-<a href=#1589 id=1589 data-nosnippet>1589</a>        }
-<a href=#1590 id=1590 data-nosnippet>1590</a>        last = next;
+<a href=#1483 id=1483 data-nosnippet>1483</a><span class="doccomment">/// Stream of call roster/track snapshots (self id, peers, tracks). Empty when not
+<a href=#1484 id=1484 data-nosnippet>1484</a>/// in a call.
+<a href=#1485 id=1485 data-nosnippet>1485</a></span><span class="kw">pub async fn </span>watch_call_state(sink: StreamSink&lt;CallView&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1486 id=1486 data-nosnippet>1486</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_call();
+<a href=#1487 id=1487 data-nosnippet>1487</a>    <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
+<a href=#1488 id=1488 data-nosnippet>1488</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_call_state: dart sink closed, exiting"</span>);
+<a href=#1489 id=1489 data-nosnippet>1489</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#1490 id=1490 data-nosnippet>1490</a>    }
+<a href=#1491 id=1491 data-nosnippet>1491</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
+<a href=#1492 id=1492 data-nosnippet>1492</a>        <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
+<a href=#1493 id=1493 data-nosnippet>1493</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_call_state: dart sink closed, exiting"</span>);
+<a href=#1494 id=1494 data-nosnippet>1494</a>            <span class="kw">break</span>;
+<a href=#1495 id=1495 data-nosnippet>1495</a>        }
+<a href=#1496 id=1496 data-nosnippet>1496</a>    }
+<a href=#1497 id=1497 data-nosnippet>1497</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1498 id=1498 data-nosnippet>1498</a>}
+<a href=#1499 id=1499 data-nosnippet>1499</a>
+<a href=#1500 id=1500 data-nosnippet>1500</a><span class="doccomment">/// Stream of call connection-state snapshots (idle/connecting/connected/…).
+<a href=#1501 id=1501 data-nosnippet>1501</a></span><span class="kw">pub async fn </span>watch_connection(sink: StreamSink&lt;ConnectionState&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1502 id=1502 data-nosnippet>1502</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_connection();
+<a href=#1503 id=1503 data-nosnippet>1503</a>    <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
+<a href=#1504 id=1504 data-nosnippet>1504</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_connection: dart sink closed, exiting"</span>);
+<a href=#1505 id=1505 data-nosnippet>1505</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#1506 id=1506 data-nosnippet>1506</a>    }
+<a href=#1507 id=1507 data-nosnippet>1507</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
+<a href=#1508 id=1508 data-nosnippet>1508</a>        <span class="kw">if </span>sink.add(rx.borrow().clone()).is_err() {
+<a href=#1509 id=1509 data-nosnippet>1509</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_connection: dart sink closed, exiting"</span>);
+<a href=#1510 id=1510 data-nosnippet>1510</a>            <span class="kw">break</span>;
+<a href=#1511 id=1511 data-nosnippet>1511</a>        }
+<a href=#1512 id=1512 data-nosnippet>1512</a>    }
+<a href=#1513 id=1513 data-nosnippet>1513</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1514 id=1514 data-nosnippet>1514</a>}
+<a href=#1515 id=1515 data-nosnippet>1515</a>
+<a href=#1516 id=1516 data-nosnippet>1516</a><span class="doccomment">/// Stream of speaking-level snapshots (mic + per-peer, `0.0..=1.0`).
+<a href=#1517 id=1517 data-nosnippet>1517</a>///
+<a href=#1518 id=1518 data-nosnippet>1518</a>/// The core updates levels at audio cadence (~50–100 Hz: one `send` per captured mic
+<a href=#1519 id=1519 data-nosnippet>1519</a>/// frame, plus per-peer). A meter only needs ~20 Hz, and each delivery serializes a
+<a href=#1520 id=1520 data-nosnippet>1520</a>/// DTO across FRB and rebuilds on Dart's main thread — forwarding at audio cadence
+<a href=#1521 id=1521 data-nosnippet>1521</a>/// burns idle-call CPU for nothing. Coalesce to one update per ~50 ms: the `watch`
+<a href=#1522 id=1522 data-nosnippet>1522</a>/// keeps only the latest value, so after the throttle sleep the next `changed()`
+<a href=#1523 id=1523 data-nosnippet>1523</a>/// yields the freshest snapshot (no lag beyond the interval, mute→0 lands within it).
+<a href=#1524 id=1524 data-nosnippet>1524</a></span><span class="kw">pub async fn </span>watch_levels(sink: StreamSink&lt;LevelsDto&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1525 id=1525 data-nosnippet>1525</a>    <span class="kw">const </span>MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(<span class="number">50</span>);
+<a href=#1526 id=1526 data-nosnippet>1526</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_levels();
+<a href=#1527 id=1527 data-nosnippet>1527</a>    <span class="kw">if </span>sink.add(project_levels(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
+<a href=#1528 id=1528 data-nosnippet>1528</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_levels: dart sink closed, exiting"</span>);
+<a href=#1529 id=1529 data-nosnippet>1529</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#1530 id=1530 data-nosnippet>1530</a>    }
+<a href=#1531 id=1531 data-nosnippet>1531</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
+<a href=#1532 id=1532 data-nosnippet>1532</a>        <span class="kw">if </span>sink.add(project_levels(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
+<a href=#1533 id=1533 data-nosnippet>1533</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_levels: dart sink closed, exiting"</span>);
+<a href=#1534 id=1534 data-nosnippet>1534</a>            <span class="kw">break</span>;
+<a href=#1535 id=1535 data-nosnippet>1535</a>        }
+<a href=#1536 id=1536 data-nosnippet>1536</a>        tokio::time::sleep(MIN_INTERVAL).<span class="kw">await</span>;
+<a href=#1537 id=1537 data-nosnippet>1537</a>    }
+<a href=#1538 id=1538 data-nosnippet>1538</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1539 id=1539 data-nosnippet>1539</a>}
+<a href=#1540 id=1540 data-nosnippet>1540</a>
+<a href=#1541 id=1541 data-nosnippet>1541</a><span class="doccomment">/// Stream of 1 Hz RTC debug-stats snapshots, serialized to JSON: the ~12 nested
+<a href=#1542 id=1542 data-nosnippet>1542</a>/// stat structs cross as one JSON string (the Flutter debug panel + per-tile
+<a href=#1543 id=1543 data-nosnippet>1543</a>/// overlay parse it) rather than being mirrored individually through FRB.
+<a href=#1544 id=1544 data-nosnippet>1544</a>/// Default/empty snapshot between calls.
+<a href=#1545 id=1545 data-nosnippet>1545</a></span><span class="kw">pub async fn </span>watch_stats(sink: StreamSink&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1546 id=1546 data-nosnippet>1546</a>    <span class="kw">fn </span>to_json(snap: <span class="kw-2">&amp;</span>hound_client::stats::StatsSnapshot) -&gt; String {
+<a href=#1547 id=1547 data-nosnippet>1547</a>        serde_json::to_string(snap).unwrap_or_default()
+<a href=#1548 id=1548 data-nosnippet>1548</a>    }
+<a href=#1549 id=1549 data-nosnippet>1549</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_stats();
+<a href=#1550 id=1550 data-nosnippet>1550</a>    <span class="kw">if </span>sink.add(to_json(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
+<a href=#1551 id=1551 data-nosnippet>1551</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_stats: dart sink closed, exiting"</span>);
+<a href=#1552 id=1552 data-nosnippet>1552</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#1553 id=1553 data-nosnippet>1553</a>    }
+<a href=#1554 id=1554 data-nosnippet>1554</a>    <span class="kw">while </span>rx.changed().<span class="kw">await</span>.is_ok() {
+<a href=#1555 id=1555 data-nosnippet>1555</a>        <span class="kw">if </span>sink.add(to_json(<span class="kw-2">&amp;</span>rx.borrow())).is_err() {
+<a href=#1556 id=1556 data-nosnippet>1556</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_stats: dart sink closed, exiting"</span>);
+<a href=#1557 id=1557 data-nosnippet>1557</a>            <span class="kw">break</span>;
+<a href=#1558 id=1558 data-nosnippet>1558</a>        }
+<a href=#1559 id=1559 data-nosnippet>1559</a>    }
+<a href=#1560 id=1560 data-nosnippet>1560</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1561 id=1561 data-nosnippet>1561</a>}
+<a href=#1562 id=1562 data-nosnippet>1562</a>
+<a href=#1563 id=1563 data-nosnippet>1563</a><span class="doccomment">/// Stream of typed per-stream frame geometry ([`FrameSizesDto`]) for texture sizing.
+<a href=#1564 id=1564 data-nosnippet>1564</a>///
+<a href=#1565 id=1565 data-nosnippet>1565</a>/// Fed by TWO sources, because neither alone is both complete and prompt:
+<a href=#1566 id=1566 data-nosnippet>1566</a>///  * the 1 Hz stats watcher [`watch_stats`] (no second engine subscription)
+<a href=#1567 id=1567 data-nosnippet>1567</a>///    decides **membership** and carries the geometry only it knows (self capture,
+<a href=#1568 id=1568 data-nosnippet>1568</a>///    self screen encode); and
+<a href=#1569 id=1569 data-nosnippet>1569</a>///  * the decode→render sink's change detector
+<a href=#1570 id=1570 data-nosnippet>1570</a>///    ([`crate::frame_size`]) fires the instant a stream's DECODED size moves, so a
+<a href=#1571 id=1571 data-nosnippet>1571</a>///    simulcast layer switch resizes the texture immediately instead of rendering
+<a href=#1572 id=1572 data-nosnippet>1572</a>///    the sharp new layer scaled into the old texture for up to a second.
+<a href=#1573 id=1573 data-nosnippet>1573</a>///
+<a href=#1574 id=1574 data-nosnippet>1574</a>/// Either wake re-projects and the result is forwarded only when it differs, so the
+<a href=#1575 id=1575 data-nosnippet>1575</a>/// stream stays near-silent in steady state (both sources are quiet: the snapshot
+<a href=#1576 id=1576 data-nosnippet>1576</a>/// repeats itself, the detector says nothing).
+<a href=#1577 id=1577 data-nosnippet>1577</a></span><span class="kw">pub async fn </span>watch_frame_sizes(sink: StreamSink&lt;FrameSizesDto&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#1578 id=1578 data-nosnippet>1578</a>    <span class="kw">fn </span>current(
+<a href=#1579 id=1579 data-nosnippet>1579</a>        rx: <span class="kw-2">&amp;</span>tokio::sync::watch::Receiver&lt;hound_client::stats::StatsSnapshot&gt;,
+<a href=#1580 id=1580 data-nosnippet>1580</a>    ) -&gt; FrameSizesDto {
+<a href=#1581 id=1581 data-nosnippet>1581</a>        <span class="kw">let </span><span class="kw-2">mut </span>dto = project_frame_sizes(<span class="kw-2">&amp;</span>rx.borrow());
+<a href=#1582 id=1582 data-nosnippet>1582</a>        <span class="kw">crate</span>::frame_size::geometry().overlay(<span class="kw-2">&amp;mut </span>dto.streams);
+<a href=#1583 id=1583 data-nosnippet>1583</a>        dto
+<a href=#1584 id=1584 data-nosnippet>1584</a>    }
+<a href=#1585 id=1585 data-nosnippet>1585</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = client()<span class="question-mark">?</span>.watch_stats();
+<a href=#1586 id=1586 data-nosnippet>1586</a>    <span class="kw">let </span><span class="kw-2">mut </span>sizes = <span class="kw">crate</span>::frame_size::geometry().subscribe();
+<a href=#1587 id=1587 data-nosnippet>1587</a>    <span class="kw">let </span><span class="kw-2">mut </span>last = current(<span class="kw-2">&amp;</span>rx);
+<a href=#1588 id=1588 data-nosnippet>1588</a>    <span class="kw">if </span>sink.add(last.clone()).is_err() {
+<a href=#1589 id=1589 data-nosnippet>1589</a>        <span class="macro">tracing::debug!</span>(<span class="string">"watch_frame_sizes: dart sink closed, exiting"</span>);
+<a href=#1590 id=1590 data-nosnippet>1590</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#1591 id=1591 data-nosnippet>1591</a>    }
-<a href=#1592 id=1592 data-nosnippet>1592</a>    <span class="prelude-val">Ok</span>(())
-<a href=#1593 id=1593 data-nosnippet>1593</a>}
-<a href=#1594 id=1594 data-nosnippet>1594</a>
-<a href=#1595 id=1595 data-nosnippet>1595</a><span class="comment">// ─── Wire DTOs (FRB-owned; flat, id-as-Uuid projections of the snapshots) ──────
-<a href=#1596 id=1596 data-nosnippet>1596</a>
-<a href=#1597 id=1597 data-nosnippet>1597</a></span><span class="doccomment">/// `register/start` result: provisional user id + opaque WebAuthn options JSON.
-<a href=#1598 id=1598 data-nosnippet>1598</a></span><span class="attr">#[derive(Clone, Debug)]
-<a href=#1599 id=1599 data-nosnippet>1599</a></span><span class="kw">pub struct </span>RegisterStartDto {
-<a href=#1600 id=1600 data-nosnippet>1600</a>    <span class="kw">pub </span>user_id: Uuid,
-<a href=#1601 id=1601 data-nosnippet>1601</a>    <span class="kw">pub </span>options_json: String,
-<a href=#1602 id=1602 data-nosnippet>1602</a>}
-<a href=#1603 id=1603 data-nosnippet>1603</a>
-<a href=#1604 id=1604 data-nosnippet>1604</a><span class="doccomment">/// `login/start` result: user id + opaque WebAuthn request options JSON.
-<a href=#1605 id=1605 data-nosnippet>1605</a></span><span class="attr">#[derive(Clone, Debug)]
-<a href=#1606 id=1606 data-nosnippet>1606</a></span><span class="kw">pub struct </span>LoginStartDto {
-<a href=#1607 id=1607 data-nosnippet>1607</a>    <span class="kw">pub </span>user_id: Uuid,
-<a href=#1608 id=1608 data-nosnippet>1608</a>    <span class="kw">pub </span>options_json: String,
-<a href=#1609 id=1609 data-nosnippet>1609</a>}
-<a href=#1610 id=1610 data-nosnippet>1610</a>
-<a href=#1611 id=1611 data-nosnippet>1611</a><span class="doccomment">/// One node of the sidebar tree: a [`Community`] joined with its [`Space`]s. A
-<a href=#1612 id=1612 data-nosnippet>1612</a>/// *composed* reshape (the core keeps community/space lists separately) built from
-<a href=#1613 id=1613 data-nosnippet>1613</a>/// the mirrored types — so there is no field duplication, only the join.
-<a href=#1614 id=1614 data-nosnippet>1614</a></span><span class="kw">pub struct </span>CommunityNode {
-<a href=#1615 id=1615 data-nosnippet>1615</a>    <span class="kw">pub </span>community: Community,
-<a href=#1616 id=1616 data-nosnippet>1616</a>    <span class="kw">pub </span>spaces: Vec&lt;Space&gt;,
-<a href=#1617 id=1617 data-nosnippet>1617</a>}
-<a href=#1618 id=1618 data-nosnippet>1618</a>
-<a href=#1619 id=1619 data-nosnippet>1619</a><span class="kw">fn </span>project_tree(tree: <span class="kw-2">&amp;</span>hound_client::CommunityTree) -&gt; Vec&lt;CommunityNode&gt; {
-<a href=#1620 id=1620 data-nosnippet>1620</a>    tree.communities()
-<a href=#1621 id=1621 data-nosnippet>1621</a>        .map(|c| CommunityNode {
-<a href=#1622 id=1622 data-nosnippet>1622</a>            community: c.clone(),
-<a href=#1623 id=1623 data-nosnippet>1623</a>            spaces: tree.spaces(c.id).to_vec(),
-<a href=#1624 id=1624 data-nosnippet>1624</a>        })
-<a href=#1625 id=1625 data-nosnippet>1625</a>        .collect()
+<a href=#1592 id=1592 data-nosnippet>1592</a>    <span class="kw">loop </span>{
+<a href=#1593 id=1593 data-nosnippet>1593</a>        <span class="comment">// The geometry tick is a process-wide global, so its sender never drops —
+<a href=#1594 id=1594 data-nosnippet>1594</a>        // only the stats watcher (the client going away) ends this loop.
+<a href=#1595 id=1595 data-nosnippet>1595</a>        </span><span class="macro">tokio::select!</span> {
+<a href=#1596 id=1596 data-nosnippet>1596</a>            r = rx.changed() =&gt; <span class="kw">if </span>r.is_err() { <span class="kw">break </span>},
+<a href=#1597 id=1597 data-nosnippet>1597</a>            r = sizes.changed() =&gt; <span class="kw">if </span>r.is_err() { <span class="kw">break </span>},
+<a href=#1598 id=1598 data-nosnippet>1598</a>        }
+<a href=#1599 id=1599 data-nosnippet>1599</a>        <span class="kw">let </span>next = current(<span class="kw-2">&amp;</span>rx);
+<a href=#1600 id=1600 data-nosnippet>1600</a>        <span class="kw">if </span>next == last {
+<a href=#1601 id=1601 data-nosnippet>1601</a>            <span class="kw">continue</span>;
+<a href=#1602 id=1602 data-nosnippet>1602</a>        }
+<a href=#1603 id=1603 data-nosnippet>1603</a>        <span class="kw">if </span>sink.add(next.clone()).is_err() {
+<a href=#1604 id=1604 data-nosnippet>1604</a>            <span class="macro">tracing::debug!</span>(<span class="string">"watch_frame_sizes: dart sink closed, exiting"</span>);
+<a href=#1605 id=1605 data-nosnippet>1605</a>            <span class="kw">break</span>;
+<a href=#1606 id=1606 data-nosnippet>1606</a>        }
+<a href=#1607 id=1607 data-nosnippet>1607</a>        last = next;
+<a href=#1608 id=1608 data-nosnippet>1608</a>    }
+<a href=#1609 id=1609 data-nosnippet>1609</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1610 id=1610 data-nosnippet>1610</a>}
+<a href=#1611 id=1611 data-nosnippet>1611</a>
+<a href=#1612 id=1612 data-nosnippet>1612</a><span class="comment">// ─── Wire DTOs (FRB-owned; flat, id-as-Uuid projections of the snapshots) ──────
+<a href=#1613 id=1613 data-nosnippet>1613</a>
+<a href=#1614 id=1614 data-nosnippet>1614</a></span><span class="doccomment">/// `register/start` result: provisional user id + opaque WebAuthn options JSON.
+<a href=#1615 id=1615 data-nosnippet>1615</a></span><span class="attr">#[derive(Clone, Debug)]
+<a href=#1616 id=1616 data-nosnippet>1616</a></span><span class="kw">pub struct </span>RegisterStartDto {
+<a href=#1617 id=1617 data-nosnippet>1617</a>    <span class="kw">pub </span>user_id: Uuid,
+<a href=#1618 id=1618 data-nosnippet>1618</a>    <span class="kw">pub </span>options_json: String,
+<a href=#1619 id=1619 data-nosnippet>1619</a>}
+<a href=#1620 id=1620 data-nosnippet>1620</a>
+<a href=#1621 id=1621 data-nosnippet>1621</a><span class="doccomment">/// `login/start` result: user id + opaque WebAuthn request options JSON.
+<a href=#1622 id=1622 data-nosnippet>1622</a></span><span class="attr">#[derive(Clone, Debug)]
+<a href=#1623 id=1623 data-nosnippet>1623</a></span><span class="kw">pub struct </span>LoginStartDto {
+<a href=#1624 id=1624 data-nosnippet>1624</a>    <span class="kw">pub </span>user_id: Uuid,
+<a href=#1625 id=1625 data-nosnippet>1625</a>    <span class="kw">pub </span>options_json: String,
 <a href=#1626 id=1626 data-nosnippet>1626</a>}
 <a href=#1627 id=1627 data-nosnippet>1627</a>
-<a href=#1628 id=1628 data-nosnippet>1628</a><span class="doccomment">/// Parse a Dart-supplied WebAuthn credential/assertion JSON string into the typed
-<a href=#1629 id=1629 data-nosnippet>1629</a>/// `hound-passkey` type the client expects. The Dart `passkeys` package produces
-<a href=#1630 id=1630 data-nosnippet>1630</a>/// these as JSON, so this seam owns the JSON→typed conversion (the Dart-facing
-<a href=#1631 id=1631 data-nosnippet>1631</a>/// API stays JSON strings).
-<a href=#1632 id=1632 data-nosnippet>1632</a></span><span class="kw">fn </span>parse_credential&lt;T: serde::de::DeserializeOwned&gt;(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;T, HoundError&gt; {
-<a href=#1633 id=1633 data-nosnippet>1633</a>    serde_json::from_str(s).map_err(|e| {
-<a href=#1634 id=1634 data-nosnippet>1634</a>        HoundError::decode(
-<a href=#1635 id=1635 data-nosnippet>1635</a>            DecodeCode::CredentialJson,
-<a href=#1636 id=1636 data-nosnippet>1636</a>            <span class="macro">format!</span>(<span class="string">"invalid credential json: {e}"</span>),
-<a href=#1637 id=1637 data-nosnippet>1637</a>        )
-<a href=#1638 id=1638 data-nosnippet>1638</a>    })
-<a href=#1639 id=1639 data-nosnippet>1639</a>}
-<a href=#1640 id=1640 data-nosnippet>1640</a>
-<a href=#1641 id=1641 data-nosnippet>1641</a><span class="doccomment">/// Serialise a typed WebAuthn options value back to a JSON string for the Dart side.
-<a href=#1642 id=1642 data-nosnippet>1642</a></span><span class="kw">fn </span>to_json&lt;T: serde::Serialize&gt;(value: <span class="kw-2">&amp;</span>T) -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
-<a href=#1643 id=1643 data-nosnippet>1643</a>    serde_json::to_string(value).map_err(|e| {
-<a href=#1644 id=1644 data-nosnippet>1644</a>        HoundError::decode(
-<a href=#1645 id=1645 data-nosnippet>1645</a>            DecodeCode::OptionsJson,
-<a href=#1646 id=1646 data-nosnippet>1646</a>            <span class="macro">format!</span>(<span class="string">"failed to serialise options: {e}"</span>),
-<a href=#1647 id=1647 data-nosnippet>1647</a>        )
-<a href=#1648 id=1648 data-nosnippet>1648</a>    })
-<a href=#1649 id=1649 data-nosnippet>1649</a>}
-<a href=#1650 id=1650 data-nosnippet>1650</a>
-<a href=#1651 id=1651 data-nosnippet>1651</a><span class="comment">// ─── Bridge sanity check ───────────────────────────────────────────────────────
-<a href=#1652 id=1652 data-nosnippet>1652</a>
-<a href=#1653 id=1653 data-nosnippet>1653</a></span><span class="doccomment">/// Bridge sanity check — first thing the Flutter app calls to prove the FFI
-<a href=#1654 id=1654 data-nosnippet>1654</a>/// round-trips end to end (Dart → generated glue → this fn → back).
-<a href=#1655 id=1655 data-nosnippet>1655</a></span><span class="kw">pub fn </span>engine_version() -&gt; String {
-<a href=#1656 id=1656 data-nosnippet>1656</a>    <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>).to_owned()
-<a href=#1657 id=1657 data-nosnippet>1657</a>}
-<a href=#1658 id=1658 data-nosnippet>1658</a>
-<a href=#1659 id=1659 data-nosnippet>1659</a><span class="comment">// ─── Zero-copy video texture handshake ──────────────────────────────────────────
-<a href=#1660 id=1660 data-nosnippet>1660</a>//
-<a href=#1661 id=1661 data-nosnippet>1661</a>// Flutter side registers a platform GPU texture (IOSurface-backed Metal texture
-<a href=#1662 id=1662 data-nosnippet>1662</a>// on Apple) with its TextureRegistry, gets a `texture_id` for the `Texture`
-<a href=#1663 id=1663 data-nosnippet>1663</a>// widget, and passes the NATIVE texture handle down here. Rust renders decoded
-<a href=#1664 id=1664 data-nosnippet>1664</a>// frames into that texture (reusing the wgpu I420→RGB pipeline) and signals
-<a href=#1665 id=1665 data-nosnippet>1665</a>// "frame ready" so Flutter composites it — NO frame bytes cross the FFI.
-<a href=#1666 id=1666 data-nosnippet>1666</a>
-<a href=#1667 id=1667 data-nosnippet>1667</a></span><span class="doccomment">/// Attach a stream key (e.g. "cam:42", "self", "screen:7") to a native GPU
-<a href=#1668 id=1668 data-nosnippet>1668</a>/// texture handle the Flutter plugin registered, sized `width`×`height`.
-<a href=#1669 id=1669 data-nosnippet>1669</a>/// `native_texture` is an opaque pointer (an `IOSurfaceRef` / `id&lt;MTLTexture&gt;` on
-<a href=#1670 id=1670 data-nosnippet>1670</a>/// Apple) the Rust renderer will draw into. `texture_id` is the Flutter texture id
-<a href=#1671 id=1671 data-nosnippet>1671</a>/// the same `createTexture` returned: macOS's shared render loop marks it "dirty"
-<a href=#1672 id=1672 data-nosnippet>1672</a>/// once it draws a new frame, and the plugin's ONE shared `CVDisplayLink` re-pulls
-<a href=#1673 id=1673 data-nosnippet>1673</a>/// only dirty ids (so `copyPixelBuffer` runs at video-fps, not display refresh). The
-<a href=#1674 id=1674 data-nosnippet>1674</a>/// plugin allocates the buffer at this SAME `width`×`height` (the decoded frame's
-<a href=#1675 id=1675 data-nosnippet>1675</a>/// size, so the render target matches the source aspect with no crop/stretch); Dart
-<a href=#1676 id=1676 data-nosnippet>1676</a>/// recreates + re-attaches at a new size when the decoded resolution changes. Returns
-<a href=#1677 id=1677 data-nosnippet>1677</a>/// once the render target is bound.
-<a href=#1678 id=1678 data-nosnippet>1678</a></span><span class="kw">pub fn </span>attach_video_texture(
-<a href=#1679 id=1679 data-nosnippet>1679</a>    stream_key: String,
-<a href=#1680 id=1680 data-nosnippet>1680</a>    native_texture: usize,
-<a href=#1681 id=1681 data-nosnippet>1681</a>    texture_id: i64,
-<a href=#1682 id=1682 data-nosnippet>1682</a>    width: u32,
-<a href=#1683 id=1683 data-nosnippet>1683</a>    height: u32,
-<a href=#1684 id=1684 data-nosnippet>1684</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
-<a href=#1685 id=1685 data-nosnippet>1685</a>    <span class="comment">// One path per platform behind the uniform `hound-render` facade: macOS wraps
-<a href=#1686 id=1686 data-nosnippet>1686</a>    // the CVPixelBuffer's IOSurface as a wgpu texture (zero-copy GPU render), reads
-<a href=#1687 id=1687 data-nosnippet>1687</a>    // the target geometry off the buffer (so `width`/`height` are advisory there),
-<a href=#1688 id=1688 data-nosnippet>1688</a>    // and uses `texture_id` to drive the dirty-set repaint; Windows/Linux take the
-<a href=#1689 id=1689 data-nosnippet>1689</a>    // plugin's RGBA pixel-buffer pointer + the size (the raw buffer can't be
-<a href=#1690 id=1690 data-nosnippet>1690</a>    // introspected) and CPU-convert into it (`texture_id` is unused there today).
-<a href=#1691 id=1691 data-nosnippet>1691</a>    // `native_texture` is the IOSurface-backed CVPixelBufferRef on macOS, the RGBA
-<a href=#1692 id=1692 data-nosnippet>1692</a>    // buffer pointer elsewhere.
-<a href=#1693 id=1693 data-nosnippet>1693</a>    </span>hound_render::attach(stream_key, native_texture, texture_id, width, height)
-<a href=#1694 id=1694 data-nosnippet>1694</a>}
-<a href=#1695 id=1695 data-nosnippet>1695</a>
-<a href=#1696 id=1696 data-nosnippet>1696</a><span class="doccomment">/// Detach a stream's texture (tile unmounted / peer left). Stops + joins the render
-<a href=#1697 id=1697 data-nosnippet>1697</a>/// thread (which then no longer touches the native texture/buffer) so the plugin can
-<a href=#1698 id=1698 data-nosnippet>1698</a>/// release it.
-<a href=#1699 id=1699 data-nosnippet>1699</a></span><span class="kw">pub fn </span>detach_video_texture(stream_key: String) {
-<a href=#1700 id=1700 data-nosnippet>1700</a>    hound_render::detach(<span class="kw-2">&amp;</span>stream_key);
-<a href=#1701 id=1701 data-nosnippet>1701</a>}
-<a href=#1702 id=1702 data-nosnippet>1702</a>
-<a href=#1703 id=1703 data-nosnippet>1703</a><span class="doccomment">/// How long a texture swap will hold the OLD texture on screen waiting for the new
-<a href=#1704 id=1704 data-nosnippet>1704</a>/// one's first frame. A layer switch delivers an immediate IDR and the renderer
-<a href=#1705 id=1705 data-nosnippet>1705</a>/// draws on arrival, so this is normally satisfied within one frame interval; the
-<a href=#1706 id=1706 data-nosnippet>1706</a>/// deadline only covers a stream that stops producing mid-swap, where showing the
-<a href=#1707 id=1707 data-nosnippet>1707</a>/// (black) new texture is no worse than the frozen old one.
-<a href=#1708 id=1708 data-nosnippet>1708</a></span><span class="kw">const </span>TEXTURE_READY_DEADLINE: std::time::Duration = std::time::Duration::from_millis(<span class="number">500</span>);
-<a href=#1709 id=1709 data-nosnippet>1709</a>
-<a href=#1710 id=1710 data-nosnippet>1710</a><span class="doccomment">/// Resolves once a real decoded frame has been drawn into `texture_id` — the signal
-<a href=#1711 id=1711 data-nosnippet>1711</a>/// Dart's make-before-break texture swap flips on. A freshly allocated
-<a href=#1712 id=1712 data-nosnippet>1712</a>/// `CVPixelBuffer` is zero-filled, so showing it before this would flash black;
-<a href=#1713 id=1713 data-nosnippet>1713</a>/// meanwhile the OLD texture keeps compositing its last frame, so the tile never
-<a href=#1714 id=1714 data-nosnippet>1714</a>/// goes blank either.
-<a href=#1715 id=1715 data-nosnippet>1715</a>///
-<a href=#1716 id=1716 data-nosnippet>1716</a>/// Returns `false` if the texture was detached/replaced first, if the deadline
-<a href=#1717 id=1717 data-nosnippet>1717</a>/// ([`TEXTURE_READY_DEADLINE`]) passed, or on a platform with no observable
-<a href=#1718 id=1718 data-nosnippet>1718</a>/// first-frame edge — every one of which means "stop waiting and flip".
-<a href=#1719 id=1719 data-nosnippet>1719</a></span><span class="kw">pub async fn </span>video_texture_ready(texture_id: i64) -&gt; bool {
-<a href=#1720 id=1720 data-nosnippet>1720</a>    <span class="kw">let </span>(tx, rx) = tokio::sync::oneshot::channel();
-<a href=#1721 id=1721 data-nosnippet>1721</a>    hound_render::notify_on_draw(
-<a href=#1722 id=1722 data-nosnippet>1722</a>        texture_id,
-<a href=#1723 id=1723 data-nosnippet>1723</a>        Box::new(<span class="kw">move </span>|| {
-<a href=#1724 id=1724 data-nosnippet>1724</a>            <span class="kw">let _ </span>= tx.send(());
-<a href=#1725 id=1725 data-nosnippet>1725</a>        }),
-<a href=#1726 id=1726 data-nosnippet>1726</a>    );
-<a href=#1727 id=1727 data-nosnippet>1727</a>    <span class="comment">// A dropped sender (detached/replaced texture) resolves `rx` with `Err`
-<a href=#1728 id=1728 data-nosnippet>1728</a>    // immediately — that is the "never drawn" path, not a deadline wait.
-<a href=#1729 id=1729 data-nosnippet>1729</a>    </span><span class="macro">matches!</span>(
-<a href=#1730 id=1730 data-nosnippet>1730</a>        tokio::time::timeout(TEXTURE_READY_DEADLINE, rx).<span class="kw">await</span>,
-<a href=#1731 id=1731 data-nosnippet>1731</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(()))
-<a href=#1732 id=1732 data-nosnippet>1732</a>    )
-<a href=#1733 id=1733 data-nosnippet>1733</a>}
-<a href=#1734 id=1734 data-nosnippet>1734</a>
-<a href=#1735 id=1735 data-nosnippet>1735</a><span class="attr">#[cfg(test)]
-<a href=#1736 id=1736 data-nosnippet>1736</a></span><span class="kw">mod </span>tests {
-<a href=#1737 id=1737 data-nosnippet>1737</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#1738 id=1738 data-nosnippet>1738</a>    <span class="kw">use </span>hound_client::stats::StatsSnapshot;
-<a href=#1739 id=1739 data-nosnippet>1739</a>
-<a href=#1740 id=1740 data-nosnippet>1740</a>    <span class="doccomment">/// The smoke's log-marker contract: a runner-role process mirrors engine
-<a href=#1741 id=1741 data-nosnippet>1741</a>    /// logs to stderr; a user's never does. Regression guard for the nightly
-<a href=#1742 id=1742 data-nosnippet>1742</a>    /// launch gate going blind on release builds (where the Dart relay's
-<a href=#1743 id=1743 data-nosnippet>1743</a>    /// delivery is an embedder detail).
-<a href=#1744 id=1744 data-nosnippet>1744</a>    </span><span class="attr">#[test]
-<a href=#1745 id=1745 data-nosnippet>1745</a>    </span><span class="kw">fn </span>only_the_ci_smoke_role_mirrors_logs_to_stderr() {
-<a href=#1746 id=1746 data-nosnippet>1746</a>        <span class="macro">assert!</span>(mirrors_logs_to_stderr(<span class="string">"ci-smoke"</span>));
-<a href=#1747 id=1747 data-nosnippet>1747</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">"user"</span>));
-<a href=#1748 id=1748 data-nosnippet>1748</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">""</span>));
-<a href=#1749 id=1749 data-nosnippet>1749</a>    }
-<a href=#1750 id=1750 data-nosnippet>1750</a>
-<a href=#1751 id=1751 data-nosnippet>1751</a>    <span class="doccomment">/// Pins the frame-sizes projection the Flutter render path sizes textures by:
-<a href=#1752 id=1752 data-nosnippet>1752</a>    /// stream-key naming, the capture-over-encode preference for self, zero-size
-<a href=#1753 id=1753 data-nosnippet>1753</a>    /// omission, and the self-screen side channel.
-<a href=#1754 id=1754 data-nosnippet>1754</a>    </span><span class="attr">#[test]
-<a href=#1755 id=1755 data-nosnippet>1755</a>    </span><span class="kw">fn </span>frame_sizes_project_stream_keys_and_geometry() {
-<a href=#1756 id=1756 data-nosnippet>1756</a>        <span class="kw">let </span><span class="kw-2">mut </span>snap = StatsSnapshot::default();
-<a href=#1757 id=1757 data-nosnippet>1757</a>        snap.outbound_video.capture_width = <span class="number">1920</span>;
-<a href=#1758 id=1758 data-nosnippet>1758</a>        snap.outbound_video.capture_height = <span class="number">1080</span>;
-<a href=#1759 id=1759 data-nosnippet>1759</a>        <span class="comment">// Encode geometry differs (BWE downscale) — capture must win for "self".
-<a href=#1760 id=1760 data-nosnippet>1760</a>        </span>snap.outbound_video.width = <span class="number">1280</span>;
-<a href=#1761 id=1761 data-nosnippet>1761</a>        snap.outbound_video.height = <span class="number">720</span>;
-<a href=#1762 id=1762 data-nosnippet>1762</a>        snap.outbound_screen.width = <span class="number">2560</span>;
-<a href=#1763 id=1763 data-nosnippet>1763</a>        snap.outbound_screen.height = <span class="number">1440</span>;
-<a href=#1764 id=1764 data-nosnippet>1764</a>        snap.inbound = <span class="macro">vec!</span>[
-<a href=#1765 id=1765 data-nosnippet>1765</a>            {
-<a href=#1766 id=1766 data-nosnippet>1766</a>                <span class="kw">let </span><span class="kw-2">mut </span>p = hound_client::stats::InboundSnapshot {
-<a href=#1767 id=1767 data-nosnippet>1767</a>                    peer_id: <span class="number">7</span>,
-<a href=#1768 id=1768 data-nosnippet>1768</a>                    ..Default::default()
-<a href=#1769 id=1769 data-nosnippet>1769</a>                };
-<a href=#1770 id=1770 data-nosnippet>1770</a>                p.video.width = <span class="number">640</span>;
-<a href=#1771 id=1771 data-nosnippet>1771</a>                p.video.height = <span class="number">360</span>;
-<a href=#1772 id=1772 data-nosnippet>1772</a>                p.screen_video.width = <span class="number">1728</span>;
-<a href=#1773 id=1773 data-nosnippet>1773</a>                p.screen_video.height = <span class="number">1080</span>;
-<a href=#1774 id=1774 data-nosnippet>1774</a>                p
-<a href=#1775 id=1775 data-nosnippet>1775</a>            },
-<a href=#1776 id=1776 data-nosnippet>1776</a>            {
-<a href=#1777 id=1777 data-nosnippet>1777</a>                <span class="comment">// Audio-only peer: no geometry ⇒ no entries at all.
-<a href=#1778 id=1778 data-nosnippet>1778</a>                </span>hound_client::stats::InboundSnapshot {
-<a href=#1779 id=1779 data-nosnippet>1779</a>                    peer_id: <span class="number">9</span>,
-<a href=#1780 id=1780 data-nosnippet>1780</a>                    ..Default::default()
-<a href=#1781 id=1781 data-nosnippet>1781</a>                }
-<a href=#1782 id=1782 data-nosnippet>1782</a>            },
-<a href=#1783 id=1783 data-nosnippet>1783</a>        ];
-<a href=#1784 id=1784 data-nosnippet>1784</a>
-<a href=#1785 id=1785 data-nosnippet>1785</a>        <span class="kw">let </span>dto = project_frame_sizes(<span class="kw-2">&amp;</span>snap);
-<a href=#1786 id=1786 data-nosnippet>1786</a>        <span class="macro">assert_eq!</span>(
-<a href=#1787 id=1787 data-nosnippet>1787</a>            dto.streams,
-<a href=#1788 id=1788 data-nosnippet>1788</a>            <span class="macro">vec!</span>[
-<a href=#1789 id=1789 data-nosnippet>1789</a>                (<span class="string">"self"</span>.to_owned(), <span class="number">1920</span>, <span class="number">1080</span>),
-<a href=#1790 id=1790 data-nosnippet>1790</a>                (<span class="string">"cam:7"</span>.to_owned(), <span class="number">640</span>, <span class="number">360</span>),
-<a href=#1791 id=1791 data-nosnippet>1791</a>                (<span class="string">"screen:7"</span>.to_owned(), <span class="number">1728</span>, <span class="number">1080</span>),
-<a href=#1792 id=1792 data-nosnippet>1792</a>            ]
-<a href=#1793 id=1793 data-nosnippet>1793</a>        );
-<a href=#1794 id=1794 data-nosnippet>1794</a>        <span class="macro">assert_eq!</span>(dto.self_screen, <span class="prelude-val">Some</span>((<span class="number">2560</span>, <span class="number">1440</span>)));
-<a href=#1795 id=1795 data-nosnippet>1795</a>    }
-<a href=#1796 id=1796 data-nosnippet>1796</a>
-<a href=#1797 id=1797 data-nosnippet>1797</a>    <span class="doccomment">/// Before the first capture frame the capture geometry is 0×0 — the encode
-<a href=#1798 id=1798 data-nosnippet>1798</a>    /// geometry stands in so the self tile still gets a real aspect.
-<a href=#1799 id=1799 data-nosnippet>1799</a>    </span><span class="attr">#[test]
-<a href=#1800 id=1800 data-nosnippet>1800</a>    </span><span class="kw">fn </span>frame_sizes_fall_back_to_encode_geometry_before_first_capture() {
-<a href=#1801 id=1801 data-nosnippet>1801</a>        <span class="kw">let </span><span class="kw-2">mut </span>snap = StatsSnapshot::default();
-<a href=#1802 id=1802 data-nosnippet>1802</a>        snap.outbound_video.width = <span class="number">1280</span>;
-<a href=#1803 id=1803 data-nosnippet>1803</a>        snap.outbound_video.height = <span class="number">720</span>;
-<a href=#1804 id=1804 data-nosnippet>1804</a>        <span class="kw">let </span>dto = project_frame_sizes(<span class="kw-2">&amp;</span>snap);
-<a href=#1805 id=1805 data-nosnippet>1805</a>        <span class="macro">assert_eq!</span>(dto.streams, <span class="macro">vec!</span>[(<span class="string">"self"</span>.to_owned(), <span class="number">1280</span>, <span class="number">720</span>)]);
-<a href=#1806 id=1806 data-nosnippet>1806</a>        <span class="macro">assert_eq!</span>(dto.self_screen, <span class="prelude-val">None</span>);
-<a href=#1807 id=1807 data-nosnippet>1807</a>    }
-<a href=#1808 id=1808 data-nosnippet>1808</a>
-<a href=#1809 id=1809 data-nosnippet>1809</a>    <span class="doccomment">/// The idle snapshot (between calls) projects to the empty DTO — the change
-<a href=#1810 id=1810 data-nosnippet>1810</a>    /// dedup in `watch_frame_sizes` then keeps the stream silent out of call.
-<a href=#1811 id=1811 data-nosnippet>1811</a>    </span><span class="attr">#[test]
-<a href=#1812 id=1812 data-nosnippet>1812</a>    </span><span class="kw">fn </span>frame_sizes_empty_between_calls() {
-<a href=#1813 id=1813 data-nosnippet>1813</a>        <span class="macro">assert_eq!</span>(
-<a href=#1814 id=1814 data-nosnippet>1814</a>            project_frame_sizes(<span class="kw-2">&amp;</span>StatsSnapshot::default()),
-<a href=#1815 id=1815 data-nosnippet>1815</a>            FrameSizesDto::default()
-<a href=#1816 id=1816 data-nosnippet>1816</a>        );
-<a href=#1817 id=1817 data-nosnippet>1817</a>    }
-<a href=#1818 id=1818 data-nosnippet>1818</a>
-<a href=#1819 id=1819 data-nosnippet>1819</a>    <span class="doccomment">/// The wire tokens `HoundClient` parses back into `hound_control::Source`.
-<a href=#1820 id=1820 data-nosnippet>1820</a>    /// Changing these silently turns tile-quality / stream-volume calls into no-ops.
-<a href=#1821 id=1821 data-nosnippet>1821</a>    </span><span class="attr">#[test]
-<a href=#1822 id=1822 data-nosnippet>1822</a>    </span><span class="kw">fn </span>source_wire_tokens_match_client_parsers() {
-<a href=#1823 id=1823 data-nosnippet>1823</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Microphone), <span class="string">"mic"</span>);
-<a href=#1824 id=1824 data-nosnippet>1824</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Camera), <span class="string">"camera"</span>);
-<a href=#1825 id=1825 data-nosnippet>1825</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Screen), <span class="string">"screen"</span>);
-<a href=#1826 id=1826 data-nosnippet>1826</a>    }
-<a href=#1827 id=1827 data-nosnippet>1827</a>
-<a href=#1828 id=1828 data-nosnippet>1828</a>    <span class="comment">// ── The mirror↔registry contract, enforced ───────────────────────────────
-<a href=#1829 id=1829 data-nosnippet>1829</a>    //
-<a href=#1830 id=1830 data-nosnippet>1830</a>    // Dart renders an error code as `PREFIX + (index + 1)`: the code string never
-<a href=#1831 id=1831 data-nosnippet>1831</a>    // crosses the bridge, only the variant's ORDINAL does. So a mirror that is
-<a href=#1832 id=1832 data-nosnippet>1832</a>    // shorter than its registry is not a cosmetic drift — the generated glue hits
-<a href=#1833 id=1833 data-nosnippet>1833</a>    // `unimplemented!()` and Dart throws a RangeError on an ordinal it has no name
-<a href=#1834 id=1834 data-nosnippet>1834</a>    // for. That is a crash on the error path, i.e. exactly when something has
-<a href=#1835 id=1835 data-nosnippet>1835</a>    // already gone wrong. It has happened once (four `MEDIA0xx` codes were added
-<a href=#1836 id=1836 data-nosnippet>1836</a>    // without mirroring them), which is why these tests exist.
-<a href=#1837 id=1837 data-nosnippet>1837</a>
-<a href=#1838 id=1838 data-nosnippet>1838</a>    </span><span class="doccomment">/// Map every registry code to its mirror variant. The `match` is exhaustive
-<a href=#1839 id=1839 data-nosnippet>1839</a>    /// and the mirror variants are named, so this **fails to compile** if a code
-<a href=#1840 id=1840 data-nosnippet>1840</a>    /// is added to `hound_client::error::MediaCode` and not mirrored above (or
-<a href=#1841 id=1841 data-nosnippet>1841</a>    /// vice-versa) — the drift is caught at build time, not by remembering to run
-<a href=#1842 id=1842 data-nosnippet>1842</a>    /// a test. The cast then pins the ORDINAL, which is the thing Dart actually
-<a href=#1843 id=1843 data-nosnippet>1843</a>    /// reads.
-<a href=#1844 id=1844 data-nosnippet>1844</a>    </span><span class="kw">fn </span>media_mirror_ordinal(code: MediaCode) -&gt; usize {
-<a href=#1845 id=1845 data-nosnippet>1845</a>        (<span class="kw">match </span>code {
-<a href=#1846 id=1846 data-nosnippet>1846</a>            MediaCode::ControlBaseScheme =&gt; _MediaCode::ControlBaseScheme,
-<a href=#1847 id=1847 data-nosnippet>1847</a>            MediaCode::ControlClosedBeforeWelcome =&gt; _MediaCode::ControlClosedBeforeWelcome,
-<a href=#1848 id=1848 data-nosnippet>1848</a>            MediaCode::BadRelayUrl =&gt; _MediaCode::BadRelayUrl,
-<a href=#1849 id=1849 data-nosnippet>1849</a>            MediaCode::BadSfuNodeId =&gt; _MediaCode::BadSfuNodeId,
-<a href=#1850 id=1850 data-nosnippet>1850</a>            MediaCode::IrohBind =&gt; _MediaCode::IrohBind,
-<a href=#1851 id=1851 data-nosnippet>1851</a>            MediaCode::RelayDial =&gt; _MediaCode::RelayDial,
-<a href=#1852 id=1852 data-nosnippet>1852</a>            MediaCode::ScreenSourceEnumeration =&gt; _MediaCode::ScreenSourceEnumeration,
-<a href=#1853 id=1853 data-nosnippet>1853</a>            MediaCode::ScreenThumbnail =&gt; _MediaCode::ScreenThumbnail,
-<a href=#1854 id=1854 data-nosnippet>1854</a>            MediaCode::MalformedScreenToken =&gt; _MediaCode::MalformedScreenToken,
-<a href=#1855 id=1855 data-nosnippet>1855</a>            MediaCode::UnknownScreenSourceKind =&gt; _MediaCode::UnknownScreenSourceKind,
-<a href=#1856 id=1856 data-nosnippet>1856</a>            MediaCode::ScreenPermissionDenied =&gt; _MediaCode::ScreenPermissionDenied,
-<a href=#1857 id=1857 data-nosnippet>1857</a>            MediaCode::ScreenCaptureOpen =&gt; _MediaCode::ScreenCaptureOpen,
-<a href=#1858 id=1858 data-nosnippet>1858</a>            MediaCode::ScreenCaptureThreadExited =&gt; _MediaCode::ScreenCaptureThreadExited,
-<a href=#1859 id=1859 data-nosnippet>1859</a>            MediaCode::ControlClosedBeforePublish =&gt; _MediaCode::ControlClosedBeforePublish,
-<a href=#1860 id=1860 data-nosnippet>1860</a>            MediaCode::NoVideoEncoder =&gt; _MediaCode::NoVideoEncoder,
-<a href=#1861 id=1861 data-nosnippet>1861</a>            MediaCode::NoSfuConfigured =&gt; _MediaCode::NoSfuConfigured,
-<a href=#1862 id=1862 data-nosnippet>1862</a>            MediaCode::WelcomeTimeout =&gt; _MediaCode::WelcomeTimeout,
-<a href=#1863 id=1863 data-nosnippet>1863</a>            MediaCode::RelayHandshake =&gt; _MediaCode::RelayHandshake,
-<a href=#1864 id=1864 data-nosnippet>1864</a>            MediaCode::DevicePermissionDenied =&gt; _MediaCode::DevicePermissionDenied,
-<a href=#1865 id=1865 data-nosnippet>1865</a>            MediaCode::Openh264Unsupported =&gt; _MediaCode::Openh264Unsupported,
-<a href=#1866 id=1866 data-nosnippet>1866</a>            MediaCode::Openh264Download =&gt; _MediaCode::Openh264Download,
-<a href=#1867 id=1867 data-nosnippet>1867</a>            MediaCode::Openh264Verify =&gt; _MediaCode::Openh264Verify,
-<a href=#1868 id=1868 data-nosnippet>1868</a>            MediaCode::Openh264Install =&gt; _MediaCode::Openh264Install,
-<a href=#1869 id=1869 data-nosnippet>1869</a>        }) <span class="kw">as </span>usize
-<a href=#1870 id=1870 data-nosnippet>1870</a>    }
-<a href=#1871 id=1871 data-nosnippet>1871</a>
-<a href=#1872 id=1872 data-nosnippet>1872</a>    <span class="doccomment">/// Declaration order is the wire format: the mirror's ordinal must equal the
-<a href=#1873 id=1873 data-nosnippet>1873</a>    /// registry's index for every code, or Dart renders the wrong `MEDIA0xx`
-<a href=#1874 id=1874 data-nosnippet>1874</a>    /// string for a real failure. Catches a REORDER, which the exhaustive match
-<a href=#1875 id=1875 data-nosnippet>1875</a>    /// above cannot.
-<a href=#1876 id=1876 data-nosnippet>1876</a>    </span><span class="attr">#[test]
-<a href=#1877 id=1877 data-nosnippet>1877</a>    </span><span class="kw">fn </span>media_code_mirror_preserves_registry_order() {
-<a href=#1878 id=1878 data-nosnippet>1878</a>        <span class="kw">for </span>(index, code) <span class="kw">in </span>MediaCode::ALL.iter().enumerate() {
-<a href=#1879 id=1879 data-nosnippet>1879</a>            <span class="macro">assert_eq!</span>(
-<a href=#1880 id=1880 data-nosnippet>1880</a>                media_mirror_ordinal(<span class="kw-2">*</span>code),
-<a href=#1881 id=1881 data-nosnippet>1881</a>                index,
-<a href=#1882 id=1882 data-nosnippet>1882</a>                <span class="string">"mirror ordinal for {code} does not match its registry index — Dart \
-<a href=#1883 id=1883 data-nosnippet>1883</a>                 would render the wrong code string; fix the order of `_MediaCode`"
-<a href=#1884 id=1884 data-nosnippet>1884</a>            </span>);
-<a href=#1885 id=1885 data-nosnippet>1885</a>        }
-<a href=#1886 id=1886 data-nosnippet>1886</a>    }
-<a href=#1887 id=1887 data-nosnippet>1887</a>
-<a href=#1888 id=1888 data-nosnippet>1888</a>    <span class="doccomment">/// Length parity for EVERY category, cheaply: each mirror's last variant must
-<a href=#1889 id=1889 data-nosnippet>1889</a>    /// sit at `ALL.len() - 1`. Appending to a registry without mirroring it (or
-<a href=#1890 id=1890 data-nosnippet>1890</a>    /// the reverse) moves that boundary and fails here — which is the whole bug
-<a href=#1891 id=1891 data-nosnippet>1891</a>    /// class, for the eight categories that have no exhaustive map of their own.
-<a href=#1892 id=1892 data-nosnippet>1892</a>    ///
-<a href=#1893 id=1893 data-nosnippet>1893</a>    /// Adding a code therefore means updating the name below too. That is the
-<a href=#1894 id=1894 data-nosnippet>1894</a>    /// point: it is one line, and it is the line that proves the mirror grew.
-<a href=#1895 id=1895 data-nosnippet>1895</a>    </span><span class="attr">#[test]
-<a href=#1896 id=1896 data-nosnippet>1896</a>    </span><span class="kw">fn </span>every_mirror_is_the_same_length_as_its_registry() {
-<a href=#1897 id=1897 data-nosnippet>1897</a>        <span class="kw">for </span>(category, mirror_last, registry_len) <span class="kw">in </span>[
-<a href=#1898 id=1898 data-nosnippet>1898</a>            (
-<a href=#1899 id=1899 data-nosnippet>1899</a>                <span class="string">"NetCode"</span>,
-<a href=#1900 id=1900 data-nosnippet>1900</a>                _NetCode::RelayConnectionClosed <span class="kw">as </span>usize,
-<a href=#1901 id=1901 data-nosnippet>1901</a>                NetCode::ALL.len(),
-<a href=#1902 id=1902 data-nosnippet>1902</a>            ),
-<a href=#1903 id=1903 data-nosnippet>1903</a>            (
-<a href=#1904 id=1904 data-nosnippet>1904</a>                <span class="string">"AuthCode"</span>,
-<a href=#1905 id=1905 data-nosnippet>1905</a>                _AuthCode::SteamworksFailure <span class="kw">as </span>usize,
-<a href=#1906 id=1906 data-nosnippet>1906</a>                AuthCode::ALL.len(),
-<a href=#1907 id=1907 data-nosnippet>1907</a>            ),
-<a href=#1908 id=1908 data-nosnippet>1908</a>            (
-<a href=#1909 id=1909 data-nosnippet>1909</a>                <span class="string">"NotFoundCode"</span>,
-<a href=#1910 id=1910 data-nosnippet>1910</a>                _NotFoundCode::Resource <span class="kw">as </span>usize,
-<a href=#1911 id=1911 data-nosnippet>1911</a>                NotFoundCode::ALL.len(),
-<a href=#1912 id=1912 data-nosnippet>1912</a>            ),
-<a href=#1913 id=1913 data-nosnippet>1913</a>            (
-<a href=#1914 id=1914 data-nosnippet>1914</a>                <span class="string">"DecodeCode"</span>,
-<a href=#1915 id=1915 data-nosnippet>1915</a>                _DecodeCode::OptionsJson <span class="kw">as </span>usize,
-<a href=#1916 id=1916 data-nosnippet>1916</a>                DecodeCode::ALL.len(),
-<a href=#1917 id=1917 data-nosnippet>1917</a>            ),
-<a href=#1918 id=1918 data-nosnippet>1918</a>            (
-<a href=#1919 id=1919 data-nosnippet>1919</a>                <span class="string">"RealtimeCode"</span>,
-<a href=#1920 id=1920 data-nosnippet>1920</a>                _RealtimeCode::ControlWsDropped <span class="kw">as </span>usize,
-<a href=#1921 id=1921 data-nosnippet>1921</a>                RealtimeCode::ALL.len(),
-<a href=#1922 id=1922 data-nosnippet>1922</a>            ),
-<a href=#1923 id=1923 data-nosnippet>1923</a>            (
-<a href=#1924 id=1924 data-nosnippet>1924</a>                <span class="string">"MediaCode"</span>,
-<a href=#1925 id=1925 data-nosnippet>1925</a>                _MediaCode::Openh264Install <span class="kw">as </span>usize,
-<a href=#1926 id=1926 data-nosnippet>1926</a>                MediaCode::ALL.len(),
-<a href=#1927 id=1927 data-nosnippet>1927</a>            ),
-<a href=#1928 id=1928 data-nosnippet>1928</a>            (
-<a href=#1929 id=1929 data-nosnippet>1929</a>                <span class="string">"StateCode"</span>,
-<a href=#1930 id=1930 data-nosnippet>1930</a>                _StateCode::UnknownDeviceKind <span class="kw">as </span>usize,
-<a href=#1931 id=1931 data-nosnippet>1931</a>                StateCode::ALL.len(),
-<a href=#1932 id=1932 data-nosnippet>1932</a>            ),
-<a href=#1933 id=1933 data-nosnippet>1933</a>            (
-<a href=#1934 id=1934 data-nosnippet>1934</a>                <span class="string">"InternalCode"</span>,
-<a href=#1935 id=1935 data-nosnippet>1935</a>                _InternalCode::CredentialStore <span class="kw">as </span>usize,
-<a href=#1936 id=1936 data-nosnippet>1936</a>                InternalCode::ALL.len(),
-<a href=#1937 id=1937 data-nosnippet>1937</a>            ),
-<a href=#1938 id=1938 data-nosnippet>1938</a>        ] {
-<a href=#1939 id=1939 data-nosnippet>1939</a>            <span class="macro">assert_eq!</span>(
-<a href=#1940 id=1940 data-nosnippet>1940</a>                mirror_last + <span class="number">1</span>,
-<a href=#1941 id=1941 data-nosnippet>1941</a>                registry_len,
-<a href=#1942 id=1942 data-nosnippet>1942</a>                <span class="string">"{category}: the FRB mirror has {} variants but the registry has \
-<a href=#1943 id=1943 data-nosnippet>1943</a>                 {registry_len} — a code crossing the bridge with an unmirrored \
-<a href=#1944 id=1944 data-nosnippet>1944</a>                 ordinal panics in the generated glue and throws a RangeError in Dart"</span>,
-<a href=#1945 id=1945 data-nosnippet>1945</a>                mirror_last + <span class="number">1
-<a href=#1946 id=1946 data-nosnippet>1946</a>            </span>);
-<a href=#1947 id=1947 data-nosnippet>1947</a>        }
-<a href=#1948 id=1948 data-nosnippet>1948</a>    }
-<a href=#1949 id=1949 data-nosnippet>1949</a>}
+<a href=#1628 id=1628 data-nosnippet>1628</a><span class="doccomment">/// One node of the sidebar tree: a [`Community`] joined with its [`Space`]s. A
+<a href=#1629 id=1629 data-nosnippet>1629</a>/// *composed* reshape (the core keeps community/space lists separately) built from
+<a href=#1630 id=1630 data-nosnippet>1630</a>/// the mirrored types — so there is no field duplication, only the join.
+<a href=#1631 id=1631 data-nosnippet>1631</a></span><span class="kw">pub struct </span>CommunityNode {
+<a href=#1632 id=1632 data-nosnippet>1632</a>    <span class="kw">pub </span>community: Community,
+<a href=#1633 id=1633 data-nosnippet>1633</a>    <span class="kw">pub </span>spaces: Vec&lt;Space&gt;,
+<a href=#1634 id=1634 data-nosnippet>1634</a>}
+<a href=#1635 id=1635 data-nosnippet>1635</a>
+<a href=#1636 id=1636 data-nosnippet>1636</a><span class="kw">fn </span>project_tree(tree: <span class="kw-2">&amp;</span>hound_client::CommunityTree) -&gt; Vec&lt;CommunityNode&gt; {
+<a href=#1637 id=1637 data-nosnippet>1637</a>    tree.communities()
+<a href=#1638 id=1638 data-nosnippet>1638</a>        .map(|c| CommunityNode {
+<a href=#1639 id=1639 data-nosnippet>1639</a>            community: c.clone(),
+<a href=#1640 id=1640 data-nosnippet>1640</a>            spaces: tree.spaces(c.id).to_vec(),
+<a href=#1641 id=1641 data-nosnippet>1641</a>        })
+<a href=#1642 id=1642 data-nosnippet>1642</a>        .collect()
+<a href=#1643 id=1643 data-nosnippet>1643</a>}
+<a href=#1644 id=1644 data-nosnippet>1644</a>
+<a href=#1645 id=1645 data-nosnippet>1645</a><span class="doccomment">/// Parse a Dart-supplied WebAuthn credential/assertion JSON string into the typed
+<a href=#1646 id=1646 data-nosnippet>1646</a>/// `hound-passkey` type the client expects. The Dart `passkeys` package produces
+<a href=#1647 id=1647 data-nosnippet>1647</a>/// these as JSON, so this seam owns the JSON→typed conversion (the Dart-facing
+<a href=#1648 id=1648 data-nosnippet>1648</a>/// API stays JSON strings).
+<a href=#1649 id=1649 data-nosnippet>1649</a></span><span class="kw">fn </span>parse_credential&lt;T: serde::de::DeserializeOwned&gt;(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;T, HoundError&gt; {
+<a href=#1650 id=1650 data-nosnippet>1650</a>    serde_json::from_str(s).map_err(|e| {
+<a href=#1651 id=1651 data-nosnippet>1651</a>        HoundError::decode(
+<a href=#1652 id=1652 data-nosnippet>1652</a>            DecodeCode::CredentialJson,
+<a href=#1653 id=1653 data-nosnippet>1653</a>            <span class="macro">format!</span>(<span class="string">"invalid credential json: {e}"</span>),
+<a href=#1654 id=1654 data-nosnippet>1654</a>        )
+<a href=#1655 id=1655 data-nosnippet>1655</a>    })
+<a href=#1656 id=1656 data-nosnippet>1656</a>}
+<a href=#1657 id=1657 data-nosnippet>1657</a>
+<a href=#1658 id=1658 data-nosnippet>1658</a><span class="doccomment">/// Serialise a typed WebAuthn options value back to a JSON string for the Dart side.
+<a href=#1659 id=1659 data-nosnippet>1659</a></span><span class="kw">fn </span>to_json&lt;T: serde::Serialize&gt;(value: <span class="kw-2">&amp;</span>T) -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
+<a href=#1660 id=1660 data-nosnippet>1660</a>    serde_json::to_string(value).map_err(|e| {
+<a href=#1661 id=1661 data-nosnippet>1661</a>        HoundError::decode(
+<a href=#1662 id=1662 data-nosnippet>1662</a>            DecodeCode::OptionsJson,
+<a href=#1663 id=1663 data-nosnippet>1663</a>            <span class="macro">format!</span>(<span class="string">"failed to serialise options: {e}"</span>),
+<a href=#1664 id=1664 data-nosnippet>1664</a>        )
+<a href=#1665 id=1665 data-nosnippet>1665</a>    })
+<a href=#1666 id=1666 data-nosnippet>1666</a>}
+<a href=#1667 id=1667 data-nosnippet>1667</a>
+<a href=#1668 id=1668 data-nosnippet>1668</a><span class="comment">// ─── Bridge sanity check ───────────────────────────────────────────────────────
+<a href=#1669 id=1669 data-nosnippet>1669</a>
+<a href=#1670 id=1670 data-nosnippet>1670</a></span><span class="doccomment">/// Bridge sanity check — first thing the Flutter app calls to prove the FFI
+<a href=#1671 id=1671 data-nosnippet>1671</a>/// round-trips end to end (Dart → generated glue → this fn → back).
+<a href=#1672 id=1672 data-nosnippet>1672</a></span><span class="kw">pub fn </span>engine_version() -&gt; String {
+<a href=#1673 id=1673 data-nosnippet>1673</a>    <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>).to_owned()
+<a href=#1674 id=1674 data-nosnippet>1674</a>}
+<a href=#1675 id=1675 data-nosnippet>1675</a>
+<a href=#1676 id=1676 data-nosnippet>1676</a><span class="comment">// ─── Zero-copy video texture handshake ──────────────────────────────────────────
+<a href=#1677 id=1677 data-nosnippet>1677</a>//
+<a href=#1678 id=1678 data-nosnippet>1678</a>// Flutter side registers a platform GPU texture (IOSurface-backed Metal texture
+<a href=#1679 id=1679 data-nosnippet>1679</a>// on Apple) with its TextureRegistry, gets a `texture_id` for the `Texture`
+<a href=#1680 id=1680 data-nosnippet>1680</a>// widget, and passes the NATIVE texture handle down here. Rust renders decoded
+<a href=#1681 id=1681 data-nosnippet>1681</a>// frames into that texture (reusing the wgpu I420→RGB pipeline) and signals
+<a href=#1682 id=1682 data-nosnippet>1682</a>// "frame ready" so Flutter composites it — NO frame bytes cross the FFI.
+<a href=#1683 id=1683 data-nosnippet>1683</a>
+<a href=#1684 id=1684 data-nosnippet>1684</a></span><span class="doccomment">/// Attach a stream key (e.g. "cam:42", "self", "screen:7") to a native GPU
+<a href=#1685 id=1685 data-nosnippet>1685</a>/// texture handle the Flutter plugin registered, sized `width`×`height`.
+<a href=#1686 id=1686 data-nosnippet>1686</a>/// `native_texture` is an opaque pointer (an `IOSurfaceRef` / `id&lt;MTLTexture&gt;` on
+<a href=#1687 id=1687 data-nosnippet>1687</a>/// Apple) the Rust renderer will draw into. `texture_id` is the Flutter texture id
+<a href=#1688 id=1688 data-nosnippet>1688</a>/// the same `createTexture` returned: macOS's shared render loop marks it "dirty"
+<a href=#1689 id=1689 data-nosnippet>1689</a>/// once it draws a new frame, and the plugin's ONE shared `CVDisplayLink` re-pulls
+<a href=#1690 id=1690 data-nosnippet>1690</a>/// only dirty ids (so `copyPixelBuffer` runs at video-fps, not display refresh). The
+<a href=#1691 id=1691 data-nosnippet>1691</a>/// plugin allocates the buffer at this SAME `width`×`height` (the decoded frame's
+<a href=#1692 id=1692 data-nosnippet>1692</a>/// size, so the render target matches the source aspect with no crop/stretch); Dart
+<a href=#1693 id=1693 data-nosnippet>1693</a>/// recreates + re-attaches at a new size when the decoded resolution changes. Returns
+<a href=#1694 id=1694 data-nosnippet>1694</a>/// once the render target is bound.
+<a href=#1695 id=1695 data-nosnippet>1695</a></span><span class="kw">pub fn </span>attach_video_texture(
+<a href=#1696 id=1696 data-nosnippet>1696</a>    stream_key: String,
+<a href=#1697 id=1697 data-nosnippet>1697</a>    native_texture: usize,
+<a href=#1698 id=1698 data-nosnippet>1698</a>    texture_id: i64,
+<a href=#1699 id=1699 data-nosnippet>1699</a>    width: u32,
+<a href=#1700 id=1700 data-nosnippet>1700</a>    height: u32,
+<a href=#1701 id=1701 data-nosnippet>1701</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), String&gt; {
+<a href=#1702 id=1702 data-nosnippet>1702</a>    <span class="comment">// One path per platform behind the uniform `hound-render` facade: macOS wraps
+<a href=#1703 id=1703 data-nosnippet>1703</a>    // the CVPixelBuffer's IOSurface as a wgpu texture (zero-copy GPU render), reads
+<a href=#1704 id=1704 data-nosnippet>1704</a>    // the target geometry off the buffer (so `width`/`height` are advisory there),
+<a href=#1705 id=1705 data-nosnippet>1705</a>    // and uses `texture_id` to drive the dirty-set repaint; Windows/Linux take the
+<a href=#1706 id=1706 data-nosnippet>1706</a>    // plugin's RGBA pixel-buffer pointer + the size (the raw buffer can't be
+<a href=#1707 id=1707 data-nosnippet>1707</a>    // introspected) and CPU-convert into it (`texture_id` is unused there today).
+<a href=#1708 id=1708 data-nosnippet>1708</a>    // `native_texture` is the IOSurface-backed CVPixelBufferRef on macOS, the RGBA
+<a href=#1709 id=1709 data-nosnippet>1709</a>    // buffer pointer elsewhere.
+<a href=#1710 id=1710 data-nosnippet>1710</a>    </span>hound_render::attach(stream_key, native_texture, texture_id, width, height)
+<a href=#1711 id=1711 data-nosnippet>1711</a>}
+<a href=#1712 id=1712 data-nosnippet>1712</a>
+<a href=#1713 id=1713 data-nosnippet>1713</a><span class="doccomment">/// Detach a stream's texture (tile unmounted / peer left). Stops + joins the render
+<a href=#1714 id=1714 data-nosnippet>1714</a>/// thread (which then no longer touches the native texture/buffer) so the plugin can
+<a href=#1715 id=1715 data-nosnippet>1715</a>/// release it.
+<a href=#1716 id=1716 data-nosnippet>1716</a></span><span class="kw">pub fn </span>detach_video_texture(stream_key: String) {
+<a href=#1717 id=1717 data-nosnippet>1717</a>    hound_render::detach(<span class="kw-2">&amp;</span>stream_key);
+<a href=#1718 id=1718 data-nosnippet>1718</a>}
+<a href=#1719 id=1719 data-nosnippet>1719</a>
+<a href=#1720 id=1720 data-nosnippet>1720</a><span class="doccomment">/// How long a texture swap will hold the OLD texture on screen waiting for the new
+<a href=#1721 id=1721 data-nosnippet>1721</a>/// one's first frame. A layer switch delivers an immediate IDR and the renderer
+<a href=#1722 id=1722 data-nosnippet>1722</a>/// draws on arrival, so this is normally satisfied within one frame interval; the
+<a href=#1723 id=1723 data-nosnippet>1723</a>/// deadline only covers a stream that stops producing mid-swap, where showing the
+<a href=#1724 id=1724 data-nosnippet>1724</a>/// (black) new texture is no worse than the frozen old one.
+<a href=#1725 id=1725 data-nosnippet>1725</a></span><span class="kw">const </span>TEXTURE_READY_DEADLINE: std::time::Duration = std::time::Duration::from_millis(<span class="number">500</span>);
+<a href=#1726 id=1726 data-nosnippet>1726</a>
+<a href=#1727 id=1727 data-nosnippet>1727</a><span class="doccomment">/// Resolves once a real decoded frame has been drawn into `texture_id` — the signal
+<a href=#1728 id=1728 data-nosnippet>1728</a>/// Dart's make-before-break texture swap flips on. A freshly allocated
+<a href=#1729 id=1729 data-nosnippet>1729</a>/// `CVPixelBuffer` is zero-filled, so showing it before this would flash black;
+<a href=#1730 id=1730 data-nosnippet>1730</a>/// meanwhile the OLD texture keeps compositing its last frame, so the tile never
+<a href=#1731 id=1731 data-nosnippet>1731</a>/// goes blank either.
+<a href=#1732 id=1732 data-nosnippet>1732</a>///
+<a href=#1733 id=1733 data-nosnippet>1733</a>/// Returns `false` if the texture was detached/replaced first, if the deadline
+<a href=#1734 id=1734 data-nosnippet>1734</a>/// ([`TEXTURE_READY_DEADLINE`]) passed, or on a platform with no observable
+<a href=#1735 id=1735 data-nosnippet>1735</a>/// first-frame edge — every one of which means "stop waiting and flip".
+<a href=#1736 id=1736 data-nosnippet>1736</a></span><span class="kw">pub async fn </span>video_texture_ready(texture_id: i64) -&gt; bool {
+<a href=#1737 id=1737 data-nosnippet>1737</a>    <span class="kw">let </span>(tx, rx) = tokio::sync::oneshot::channel();
+<a href=#1738 id=1738 data-nosnippet>1738</a>    hound_render::notify_on_draw(
+<a href=#1739 id=1739 data-nosnippet>1739</a>        texture_id,
+<a href=#1740 id=1740 data-nosnippet>1740</a>        Box::new(<span class="kw">move </span>|| {
+<a href=#1741 id=1741 data-nosnippet>1741</a>            <span class="kw">let _ </span>= tx.send(());
+<a href=#1742 id=1742 data-nosnippet>1742</a>        }),
+<a href=#1743 id=1743 data-nosnippet>1743</a>    );
+<a href=#1744 id=1744 data-nosnippet>1744</a>    <span class="comment">// A dropped sender (detached/replaced texture) resolves `rx` with `Err`
+<a href=#1745 id=1745 data-nosnippet>1745</a>    // immediately — that is the "never drawn" path, not a deadline wait.
+<a href=#1746 id=1746 data-nosnippet>1746</a>    </span><span class="macro">matches!</span>(
+<a href=#1747 id=1747 data-nosnippet>1747</a>        tokio::time::timeout(TEXTURE_READY_DEADLINE, rx).<span class="kw">await</span>,
+<a href=#1748 id=1748 data-nosnippet>1748</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(()))
+<a href=#1749 id=1749 data-nosnippet>1749</a>    )
+<a href=#1750 id=1750 data-nosnippet>1750</a>}
+<a href=#1751 id=1751 data-nosnippet>1751</a>
+<a href=#1752 id=1752 data-nosnippet>1752</a><span class="attr">#[cfg(test)]
+<a href=#1753 id=1753 data-nosnippet>1753</a></span><span class="kw">mod </span>tests {
+<a href=#1754 id=1754 data-nosnippet>1754</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#1755 id=1755 data-nosnippet>1755</a>    <span class="kw">use </span>hound_client::stats::StatsSnapshot;
+<a href=#1756 id=1756 data-nosnippet>1756</a>
+<a href=#1757 id=1757 data-nosnippet>1757</a>    <span class="doccomment">/// The smoke's log-marker contract: a runner-role process mirrors engine
+<a href=#1758 id=1758 data-nosnippet>1758</a>    /// logs to stderr; a user's never does. Regression guard for the nightly
+<a href=#1759 id=1759 data-nosnippet>1759</a>    /// launch gate going blind on release builds (where the Dart relay's
+<a href=#1760 id=1760 data-nosnippet>1760</a>    /// delivery is an embedder detail).
+<a href=#1761 id=1761 data-nosnippet>1761</a>    </span><span class="attr">#[test]
+<a href=#1762 id=1762 data-nosnippet>1762</a>    </span><span class="kw">fn </span>only_the_ci_smoke_role_mirrors_logs_to_stderr() {
+<a href=#1763 id=1763 data-nosnippet>1763</a>        <span class="macro">assert!</span>(mirrors_logs_to_stderr(<span class="string">"ci-smoke"</span>));
+<a href=#1764 id=1764 data-nosnippet>1764</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">"user"</span>));
+<a href=#1765 id=1765 data-nosnippet>1765</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">""</span>));
+<a href=#1766 id=1766 data-nosnippet>1766</a>    }
+<a href=#1767 id=1767 data-nosnippet>1767</a>
+<a href=#1768 id=1768 data-nosnippet>1768</a>    <span class="doccomment">/// Pins the frame-sizes projection the Flutter render path sizes textures by:
+<a href=#1769 id=1769 data-nosnippet>1769</a>    /// stream-key naming, the capture-over-encode preference for self, zero-size
+<a href=#1770 id=1770 data-nosnippet>1770</a>    /// omission, and the self-screen side channel.
+<a href=#1771 id=1771 data-nosnippet>1771</a>    </span><span class="attr">#[test]
+<a href=#1772 id=1772 data-nosnippet>1772</a>    </span><span class="kw">fn </span>frame_sizes_project_stream_keys_and_geometry() {
+<a href=#1773 id=1773 data-nosnippet>1773</a>        <span class="kw">let </span><span class="kw-2">mut </span>snap = StatsSnapshot::default();
+<a href=#1774 id=1774 data-nosnippet>1774</a>        snap.outbound_video.capture_width = <span class="number">1920</span>;
+<a href=#1775 id=1775 data-nosnippet>1775</a>        snap.outbound_video.capture_height = <span class="number">1080</span>;
+<a href=#1776 id=1776 data-nosnippet>1776</a>        <span class="comment">// Encode geometry differs (BWE downscale) — capture must win for "self".
+<a href=#1777 id=1777 data-nosnippet>1777</a>        </span>snap.outbound_video.width = <span class="number">1280</span>;
+<a href=#1778 id=1778 data-nosnippet>1778</a>        snap.outbound_video.height = <span class="number">720</span>;
+<a href=#1779 id=1779 data-nosnippet>1779</a>        snap.outbound_screen.width = <span class="number">2560</span>;
+<a href=#1780 id=1780 data-nosnippet>1780</a>        snap.outbound_screen.height = <span class="number">1440</span>;
+<a href=#1781 id=1781 data-nosnippet>1781</a>        snap.inbound = <span class="macro">vec!</span>[
+<a href=#1782 id=1782 data-nosnippet>1782</a>            {
+<a href=#1783 id=1783 data-nosnippet>1783</a>                <span class="kw">let </span><span class="kw-2">mut </span>p = hound_client::stats::InboundSnapshot {
+<a href=#1784 id=1784 data-nosnippet>1784</a>                    peer_id: <span class="number">7</span>,
+<a href=#1785 id=1785 data-nosnippet>1785</a>                    ..Default::default()
+<a href=#1786 id=1786 data-nosnippet>1786</a>                };
+<a href=#1787 id=1787 data-nosnippet>1787</a>                p.video.width = <span class="number">640</span>;
+<a href=#1788 id=1788 data-nosnippet>1788</a>                p.video.height = <span class="number">360</span>;
+<a href=#1789 id=1789 data-nosnippet>1789</a>                p.screen_video.width = <span class="number">1728</span>;
+<a href=#1790 id=1790 data-nosnippet>1790</a>                p.screen_video.height = <span class="number">1080</span>;
+<a href=#1791 id=1791 data-nosnippet>1791</a>                p
+<a href=#1792 id=1792 data-nosnippet>1792</a>            },
+<a href=#1793 id=1793 data-nosnippet>1793</a>            {
+<a href=#1794 id=1794 data-nosnippet>1794</a>                <span class="comment">// Audio-only peer: no geometry ⇒ no entries at all.
+<a href=#1795 id=1795 data-nosnippet>1795</a>                </span>hound_client::stats::InboundSnapshot {
+<a href=#1796 id=1796 data-nosnippet>1796</a>                    peer_id: <span class="number">9</span>,
+<a href=#1797 id=1797 data-nosnippet>1797</a>                    ..Default::default()
+<a href=#1798 id=1798 data-nosnippet>1798</a>                }
+<a href=#1799 id=1799 data-nosnippet>1799</a>            },
+<a href=#1800 id=1800 data-nosnippet>1800</a>        ];
+<a href=#1801 id=1801 data-nosnippet>1801</a>
+<a href=#1802 id=1802 data-nosnippet>1802</a>        <span class="kw">let </span>dto = project_frame_sizes(<span class="kw-2">&amp;</span>snap);
+<a href=#1803 id=1803 data-nosnippet>1803</a>        <span class="macro">assert_eq!</span>(
+<a href=#1804 id=1804 data-nosnippet>1804</a>            dto.streams,
+<a href=#1805 id=1805 data-nosnippet>1805</a>            <span class="macro">vec!</span>[
+<a href=#1806 id=1806 data-nosnippet>1806</a>                (<span class="string">"self"</span>.to_owned(), <span class="number">1920</span>, <span class="number">1080</span>),
+<a href=#1807 id=1807 data-nosnippet>1807</a>                (<span class="string">"cam:7"</span>.to_owned(), <span class="number">640</span>, <span class="number">360</span>),
+<a href=#1808 id=1808 data-nosnippet>1808</a>                (<span class="string">"screen:7"</span>.to_owned(), <span class="number">1728</span>, <span class="number">1080</span>),
+<a href=#1809 id=1809 data-nosnippet>1809</a>            ]
+<a href=#1810 id=1810 data-nosnippet>1810</a>        );
+<a href=#1811 id=1811 data-nosnippet>1811</a>        <span class="macro">assert_eq!</span>(dto.self_screen, <span class="prelude-val">Some</span>((<span class="number">2560</span>, <span class="number">1440</span>)));
+<a href=#1812 id=1812 data-nosnippet>1812</a>    }
+<a href=#1813 id=1813 data-nosnippet>1813</a>
+<a href=#1814 id=1814 data-nosnippet>1814</a>    <span class="doccomment">/// Before the first capture frame the capture geometry is 0×0 — the encode
+<a href=#1815 id=1815 data-nosnippet>1815</a>    /// geometry stands in so the self tile still gets a real aspect.
+<a href=#1816 id=1816 data-nosnippet>1816</a>    </span><span class="attr">#[test]
+<a href=#1817 id=1817 data-nosnippet>1817</a>    </span><span class="kw">fn </span>frame_sizes_fall_back_to_encode_geometry_before_first_capture() {
+<a href=#1818 id=1818 data-nosnippet>1818</a>        <span class="kw">let </span><span class="kw-2">mut </span>snap = StatsSnapshot::default();
+<a href=#1819 id=1819 data-nosnippet>1819</a>        snap.outbound_video.width = <span class="number">1280</span>;
+<a href=#1820 id=1820 data-nosnippet>1820</a>        snap.outbound_video.height = <span class="number">720</span>;
+<a href=#1821 id=1821 data-nosnippet>1821</a>        <span class="kw">let </span>dto = project_frame_sizes(<span class="kw-2">&amp;</span>snap);
+<a href=#1822 id=1822 data-nosnippet>1822</a>        <span class="macro">assert_eq!</span>(dto.streams, <span class="macro">vec!</span>[(<span class="string">"self"</span>.to_owned(), <span class="number">1280</span>, <span class="number">720</span>)]);
+<a href=#1823 id=1823 data-nosnippet>1823</a>        <span class="macro">assert_eq!</span>(dto.self_screen, <span class="prelude-val">None</span>);
+<a href=#1824 id=1824 data-nosnippet>1824</a>    }
+<a href=#1825 id=1825 data-nosnippet>1825</a>
+<a href=#1826 id=1826 data-nosnippet>1826</a>    <span class="doccomment">/// The idle snapshot (between calls) projects to the empty DTO — the change
+<a href=#1827 id=1827 data-nosnippet>1827</a>    /// dedup in `watch_frame_sizes` then keeps the stream silent out of call.
+<a href=#1828 id=1828 data-nosnippet>1828</a>    </span><span class="attr">#[test]
+<a href=#1829 id=1829 data-nosnippet>1829</a>    </span><span class="kw">fn </span>frame_sizes_empty_between_calls() {
+<a href=#1830 id=1830 data-nosnippet>1830</a>        <span class="macro">assert_eq!</span>(
+<a href=#1831 id=1831 data-nosnippet>1831</a>            project_frame_sizes(<span class="kw-2">&amp;</span>StatsSnapshot::default()),
+<a href=#1832 id=1832 data-nosnippet>1832</a>            FrameSizesDto::default()
+<a href=#1833 id=1833 data-nosnippet>1833</a>        );
+<a href=#1834 id=1834 data-nosnippet>1834</a>    }
+<a href=#1835 id=1835 data-nosnippet>1835</a>
+<a href=#1836 id=1836 data-nosnippet>1836</a>    <span class="doccomment">/// The wire tokens `HoundClient` parses back into `hound_control::Source`.
+<a href=#1837 id=1837 data-nosnippet>1837</a>    /// Changing these silently turns tile-quality / stream-volume calls into no-ops.
+<a href=#1838 id=1838 data-nosnippet>1838</a>    </span><span class="attr">#[test]
+<a href=#1839 id=1839 data-nosnippet>1839</a>    </span><span class="kw">fn </span>source_wire_tokens_match_client_parsers() {
+<a href=#1840 id=1840 data-nosnippet>1840</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Microphone), <span class="string">"mic"</span>);
+<a href=#1841 id=1841 data-nosnippet>1841</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Camera), <span class="string">"camera"</span>);
+<a href=#1842 id=1842 data-nosnippet>1842</a>        <span class="macro">assert_eq!</span>(source_wire(Source::Screen), <span class="string">"screen"</span>);
+<a href=#1843 id=1843 data-nosnippet>1843</a>    }
+<a href=#1844 id=1844 data-nosnippet>1844</a>
+<a href=#1845 id=1845 data-nosnippet>1845</a>    <span class="comment">// ── The mirror↔registry contract, enforced ───────────────────────────────
+<a href=#1846 id=1846 data-nosnippet>1846</a>    //
+<a href=#1847 id=1847 data-nosnippet>1847</a>    // Dart renders an error code as `PREFIX + (index + 1)`: the code string never
+<a href=#1848 id=1848 data-nosnippet>1848</a>    // crosses the bridge, only the variant's ORDINAL does. So a mirror that is
+<a href=#1849 id=1849 data-nosnippet>1849</a>    // shorter than its registry is not a cosmetic drift — the generated glue hits
+<a href=#1850 id=1850 data-nosnippet>1850</a>    // `unimplemented!()` and Dart throws a RangeError on an ordinal it has no name
+<a href=#1851 id=1851 data-nosnippet>1851</a>    // for. That is a crash on the error path, i.e. exactly when something has
+<a href=#1852 id=1852 data-nosnippet>1852</a>    // already gone wrong. It has happened once (four `MEDIA0xx` codes were added
+<a href=#1853 id=1853 data-nosnippet>1853</a>    // without mirroring them), which is why these tests exist.
+<a href=#1854 id=1854 data-nosnippet>1854</a>
+<a href=#1855 id=1855 data-nosnippet>1855</a>    </span><span class="doccomment">/// Map every registry code to its mirror variant. The `match` is exhaustive
+<a href=#1856 id=1856 data-nosnippet>1856</a>    /// and the mirror variants are named, so this **fails to compile** if a code
+<a href=#1857 id=1857 data-nosnippet>1857</a>    /// is added to `hound_client::error::MediaCode` and not mirrored above (or
+<a href=#1858 id=1858 data-nosnippet>1858</a>    /// vice-versa) — the drift is caught at build time, not by remembering to run
+<a href=#1859 id=1859 data-nosnippet>1859</a>    /// a test. The cast then pins the ORDINAL, which is the thing Dart actually
+<a href=#1860 id=1860 data-nosnippet>1860</a>    /// reads.
+<a href=#1861 id=1861 data-nosnippet>1861</a>    </span><span class="kw">fn </span>media_mirror_ordinal(code: MediaCode) -&gt; usize {
+<a href=#1862 id=1862 data-nosnippet>1862</a>        (<span class="kw">match </span>code {
+<a href=#1863 id=1863 data-nosnippet>1863</a>            MediaCode::ControlBaseScheme =&gt; _MediaCode::ControlBaseScheme,
+<a href=#1864 id=1864 data-nosnippet>1864</a>            MediaCode::ControlClosedBeforeWelcome =&gt; _MediaCode::ControlClosedBeforeWelcome,
+<a href=#1865 id=1865 data-nosnippet>1865</a>            MediaCode::BadRelayUrl =&gt; _MediaCode::BadRelayUrl,
+<a href=#1866 id=1866 data-nosnippet>1866</a>            MediaCode::BadSfuNodeId =&gt; _MediaCode::BadSfuNodeId,
+<a href=#1867 id=1867 data-nosnippet>1867</a>            MediaCode::IrohBind =&gt; _MediaCode::IrohBind,
+<a href=#1868 id=1868 data-nosnippet>1868</a>            MediaCode::RelayDial =&gt; _MediaCode::RelayDial,
+<a href=#1869 id=1869 data-nosnippet>1869</a>            MediaCode::ScreenSourceEnumeration =&gt; _MediaCode::ScreenSourceEnumeration,
+<a href=#1870 id=1870 data-nosnippet>1870</a>            MediaCode::ScreenThumbnail =&gt; _MediaCode::ScreenThumbnail,
+<a href=#1871 id=1871 data-nosnippet>1871</a>            MediaCode::MalformedScreenToken =&gt; _MediaCode::MalformedScreenToken,
+<a href=#1872 id=1872 data-nosnippet>1872</a>            MediaCode::UnknownScreenSourceKind =&gt; _MediaCode::UnknownScreenSourceKind,
+<a href=#1873 id=1873 data-nosnippet>1873</a>            MediaCode::ScreenPermissionDenied =&gt; _MediaCode::ScreenPermissionDenied,
+<a href=#1874 id=1874 data-nosnippet>1874</a>            MediaCode::ScreenCaptureOpen =&gt; _MediaCode::ScreenCaptureOpen,
+<a href=#1875 id=1875 data-nosnippet>1875</a>            MediaCode::ScreenCaptureThreadExited =&gt; _MediaCode::ScreenCaptureThreadExited,
+<a href=#1876 id=1876 data-nosnippet>1876</a>            MediaCode::ControlClosedBeforePublish =&gt; _MediaCode::ControlClosedBeforePublish,
+<a href=#1877 id=1877 data-nosnippet>1877</a>            MediaCode::NoVideoEncoder =&gt; _MediaCode::NoVideoEncoder,
+<a href=#1878 id=1878 data-nosnippet>1878</a>            MediaCode::NoSfuConfigured =&gt; _MediaCode::NoSfuConfigured,
+<a href=#1879 id=1879 data-nosnippet>1879</a>            MediaCode::WelcomeTimeout =&gt; _MediaCode::WelcomeTimeout,
+<a href=#1880 id=1880 data-nosnippet>1880</a>            MediaCode::RelayHandshake =&gt; _MediaCode::RelayHandshake,
+<a href=#1881 id=1881 data-nosnippet>1881</a>            MediaCode::DevicePermissionDenied =&gt; _MediaCode::DevicePermissionDenied,
+<a href=#1882 id=1882 data-nosnippet>1882</a>            MediaCode::Openh264Unsupported =&gt; _MediaCode::Openh264Unsupported,
+<a href=#1883 id=1883 data-nosnippet>1883</a>            MediaCode::Openh264Download =&gt; _MediaCode::Openh264Download,
+<a href=#1884 id=1884 data-nosnippet>1884</a>            MediaCode::Openh264Verify =&gt; _MediaCode::Openh264Verify,
+<a href=#1885 id=1885 data-nosnippet>1885</a>            MediaCode::Openh264Install =&gt; _MediaCode::Openh264Install,
+<a href=#1886 id=1886 data-nosnippet>1886</a>        }) <span class="kw">as </span>usize
+<a href=#1887 id=1887 data-nosnippet>1887</a>    }
+<a href=#1888 id=1888 data-nosnippet>1888</a>
+<a href=#1889 id=1889 data-nosnippet>1889</a>    <span class="doccomment">/// Declaration order is the wire format: the mirror's ordinal must equal the
+<a href=#1890 id=1890 data-nosnippet>1890</a>    /// registry's index for every code, or Dart renders the wrong `MEDIA0xx`
+<a href=#1891 id=1891 data-nosnippet>1891</a>    /// string for a real failure. Catches a REORDER, which the exhaustive match
+<a href=#1892 id=1892 data-nosnippet>1892</a>    /// above cannot.
+<a href=#1893 id=1893 data-nosnippet>1893</a>    </span><span class="attr">#[test]
+<a href=#1894 id=1894 data-nosnippet>1894</a>    </span><span class="kw">fn </span>media_code_mirror_preserves_registry_order() {
+<a href=#1895 id=1895 data-nosnippet>1895</a>        <span class="kw">for </span>(index, code) <span class="kw">in </span>MediaCode::ALL.iter().enumerate() {
+<a href=#1896 id=1896 data-nosnippet>1896</a>            <span class="macro">assert_eq!</span>(
+<a href=#1897 id=1897 data-nosnippet>1897</a>                media_mirror_ordinal(<span class="kw-2">*</span>code),
+<a href=#1898 id=1898 data-nosnippet>1898</a>                index,
+<a href=#1899 id=1899 data-nosnippet>1899</a>                <span class="string">"mirror ordinal for {code} does not match its registry index — Dart \
+<a href=#1900 id=1900 data-nosnippet>1900</a>                 would render the wrong code string; fix the order of `_MediaCode`"
+<a href=#1901 id=1901 data-nosnippet>1901</a>            </span>);
+<a href=#1902 id=1902 data-nosnippet>1902</a>        }
+<a href=#1903 id=1903 data-nosnippet>1903</a>    }
+<a href=#1904 id=1904 data-nosnippet>1904</a>
+<a href=#1905 id=1905 data-nosnippet>1905</a>    <span class="doccomment">/// Length parity for EVERY category, cheaply: each mirror's last variant must
+<a href=#1906 id=1906 data-nosnippet>1906</a>    /// sit at `ALL.len() - 1`. Appending to a registry without mirroring it (or
+<a href=#1907 id=1907 data-nosnippet>1907</a>    /// the reverse) moves that boundary and fails here — which is the whole bug
+<a href=#1908 id=1908 data-nosnippet>1908</a>    /// class, for the eight categories that have no exhaustive map of their own.
+<a href=#1909 id=1909 data-nosnippet>1909</a>    ///
+<a href=#1910 id=1910 data-nosnippet>1910</a>    /// Adding a code therefore means updating the name below too. That is the
+<a href=#1911 id=1911 data-nosnippet>1911</a>    /// point: it is one line, and it is the line that proves the mirror grew.
+<a href=#1912 id=1912 data-nosnippet>1912</a>    </span><span class="attr">#[test]
+<a href=#1913 id=1913 data-nosnippet>1913</a>    </span><span class="kw">fn </span>every_mirror_is_the_same_length_as_its_registry() {
+<a href=#1914 id=1914 data-nosnippet>1914</a>        <span class="kw">for </span>(category, mirror_last, registry_len) <span class="kw">in </span>[
+<a href=#1915 id=1915 data-nosnippet>1915</a>            (
+<a href=#1916 id=1916 data-nosnippet>1916</a>                <span class="string">"NetCode"</span>,
+<a href=#1917 id=1917 data-nosnippet>1917</a>                _NetCode::RelayConnectionClosed <span class="kw">as </span>usize,
+<a href=#1918 id=1918 data-nosnippet>1918</a>                NetCode::ALL.len(),
+<a href=#1919 id=1919 data-nosnippet>1919</a>            ),
+<a href=#1920 id=1920 data-nosnippet>1920</a>            (
+<a href=#1921 id=1921 data-nosnippet>1921</a>                <span class="string">"AuthCode"</span>,
+<a href=#1922 id=1922 data-nosnippet>1922</a>                _AuthCode::SteamworksFailure <span class="kw">as </span>usize,
+<a href=#1923 id=1923 data-nosnippet>1923</a>                AuthCode::ALL.len(),
+<a href=#1924 id=1924 data-nosnippet>1924</a>            ),
+<a href=#1925 id=1925 data-nosnippet>1925</a>            (
+<a href=#1926 id=1926 data-nosnippet>1926</a>                <span class="string">"NotFoundCode"</span>,
+<a href=#1927 id=1927 data-nosnippet>1927</a>                _NotFoundCode::Resource <span class="kw">as </span>usize,
+<a href=#1928 id=1928 data-nosnippet>1928</a>                NotFoundCode::ALL.len(),
+<a href=#1929 id=1929 data-nosnippet>1929</a>            ),
+<a href=#1930 id=1930 data-nosnippet>1930</a>            (
+<a href=#1931 id=1931 data-nosnippet>1931</a>                <span class="string">"DecodeCode"</span>,
+<a href=#1932 id=1932 data-nosnippet>1932</a>                _DecodeCode::OptionsJson <span class="kw">as </span>usize,
+<a href=#1933 id=1933 data-nosnippet>1933</a>                DecodeCode::ALL.len(),
+<a href=#1934 id=1934 data-nosnippet>1934</a>            ),
+<a href=#1935 id=1935 data-nosnippet>1935</a>            (
+<a href=#1936 id=1936 data-nosnippet>1936</a>                <span class="string">"RealtimeCode"</span>,
+<a href=#1937 id=1937 data-nosnippet>1937</a>                _RealtimeCode::ControlWsDropped <span class="kw">as </span>usize,
+<a href=#1938 id=1938 data-nosnippet>1938</a>                RealtimeCode::ALL.len(),
+<a href=#1939 id=1939 data-nosnippet>1939</a>            ),
+<a href=#1940 id=1940 data-nosnippet>1940</a>            (
+<a href=#1941 id=1941 data-nosnippet>1941</a>                <span class="string">"MediaCode"</span>,
+<a href=#1942 id=1942 data-nosnippet>1942</a>                _MediaCode::Openh264Install <span class="kw">as </span>usize,
+<a href=#1943 id=1943 data-nosnippet>1943</a>                MediaCode::ALL.len(),
+<a href=#1944 id=1944 data-nosnippet>1944</a>            ),
+<a href=#1945 id=1945 data-nosnippet>1945</a>            (
+<a href=#1946 id=1946 data-nosnippet>1946</a>                <span class="string">"StateCode"</span>,
+<a href=#1947 id=1947 data-nosnippet>1947</a>                _StateCode::UnknownDeviceKind <span class="kw">as </span>usize,
+<a href=#1948 id=1948 data-nosnippet>1948</a>                StateCode::ALL.len(),
+<a href=#1949 id=1949 data-nosnippet>1949</a>            ),
+<a href=#1950 id=1950 data-nosnippet>1950</a>            (
+<a href=#1951 id=1951 data-nosnippet>1951</a>                <span class="string">"InternalCode"</span>,
+<a href=#1952 id=1952 data-nosnippet>1952</a>                _InternalCode::CredentialStore <span class="kw">as </span>usize,
+<a href=#1953 id=1953 data-nosnippet>1953</a>                InternalCode::ALL.len(),
+<a href=#1954 id=1954 data-nosnippet>1954</a>            ),
+<a href=#1955 id=1955 data-nosnippet>1955</a>        ] {
+<a href=#1956 id=1956 data-nosnippet>1956</a>            <span class="macro">assert_eq!</span>(
+<a href=#1957 id=1957 data-nosnippet>1957</a>                mirror_last + <span class="number">1</span>,
+<a href=#1958 id=1958 data-nosnippet>1958</a>                registry_len,
+<a href=#1959 id=1959 data-nosnippet>1959</a>                <span class="string">"{category}: the FRB mirror has {} variants but the registry has \
+<a href=#1960 id=1960 data-nosnippet>1960</a>                 {registry_len} — a code crossing the bridge with an unmirrored \
+<a href=#1961 id=1961 data-nosnippet>1961</a>                 ordinal panics in the generated glue and throws a RangeError in Dart"</span>,
+<a href=#1962 id=1962 data-nosnippet>1962</a>                mirror_last + <span class="number">1
+<a href=#1963 id=1963 data-nosnippet>1963</a>            </span>);
+<a href=#1964 id=1964 data-nosnippet>1964</a>        }
+<a href=#1965 id=1965 data-nosnippet>1965</a>    }
+<a href=#1966 id=1966 data-nosnippet>1966</a>}
 </code></pre></div></section></main></body></html>

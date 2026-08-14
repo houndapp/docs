@@ -25,463 +25,502 @@
 <a href=#25 id=25 data-nosnippet>25</a>    self_user_id: Uuid,
 <a href=#26 id=26 data-nosnippet>26</a>    self_id: PeerId,
 <a href=#27 id=27 data-nosnippet>27</a>    clock: CaptureClock,
-<a href=#28 id=28 data-nosnippet>28</a>    device_rx: watch::Receiver&lt;DeviceChoice&lt;MicId&gt;&gt;,
-<a href=#29 id=29 data-nosnippet>29</a>    mute: Arc&lt;MuteFlags&gt;,
-<a href=#30 id=30 data-nosnippet>30</a>    levels: watch::Sender&lt;LevelsView&gt;,
-<a href=#31 id=31 data-nosnippet>31</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#32 id=32 data-nosnippet>32</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#33 id=33 data-nosnippet>33</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>capture_source: CaptureSource,
-<a href=#34 id=34 data-nosnippet>34</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>synthetic_silence: SyntheticSilence,
-<a href=#35 id=35 data-nosnippet>35</a>) -&gt; JoinHandle&lt;()&gt; {
-<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">let </span>(pcm_tx, <span class="kw-2">mut </span>pcm_rx) = tokio::sync::mpsc::channel::&lt;hound_engine::types::PcmFrame&gt;(<span class="number">8</span>);
-<a href=#37 id=37 data-nosnippet>37</a>
-<a href=#38 id=38 data-nosnippet>38</a>    <span class="comment">// Blocking capture thread (the cpal Microphone is !Send — own it on one thread).
-<a href=#39 id=39 data-nosnippet>39</a>    </span><span class="kw">let </span>capture_stop = stop.clone();
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">let </span>stats_capture = stats.clone();
-<a href=#41 id=41 data-nosnippet>41</a>    <span class="comment">// The publish task's own view of the mute flag — see the gate in its loop below.
-<a href=#42 id=42 data-nosnippet>42</a>    </span><span class="kw">let </span>mute_publish = mute.clone();
-<a href=#43 id=43 data-nosnippet>43</a>    std::thread::Builder::new()
-<a href=#44 id=44 data-nosnippet>44</a>        .name(<span class="string">"call-mic-capture"</span>.into())
-<a href=#45 id=45 data-nosnippet>45</a>        .spawn(<span class="kw">move </span>|| {
-<a href=#46 id=46 data-nosnippet>46</a>            mic_capture_loop(
-<a href=#47 id=47 data-nosnippet>47</a>                capture_stop,
-<a href=#48 id=48 data-nosnippet>48</a>                clock,
-<a href=#49 id=49 data-nosnippet>49</a>                device_rx,
-<a href=#50 id=50 data-nosnippet>50</a>                pcm_tx,
-<a href=#51 id=51 data-nosnippet>51</a>                mute,
-<a href=#52 id=52 data-nosnippet>52</a>                levels,
-<a href=#53 id=53 data-nosnippet>53</a>                stats_capture,
-<a href=#54 id=54 data-nosnippet>54</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#55 id=55 data-nosnippet>55</a>                </span>capture_source,
+<a href=#28 id=28 data-nosnippet>28</a>    apm: <span class="prelude-ty">Option</span>&lt;Arc&lt;Apm&gt;&gt;,
+<a href=#29 id=29 data-nosnippet>29</a>    device_rx: watch::Receiver&lt;DeviceChoice&lt;MicId&gt;&gt;,
+<a href=#30 id=30 data-nosnippet>30</a>    mute: Arc&lt;MuteFlags&gt;,
+<a href=#31 id=31 data-nosnippet>31</a>    levels: watch::Sender&lt;LevelsView&gt;,
+<a href=#32 id=32 data-nosnippet>32</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#33 id=33 data-nosnippet>33</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#34 id=34 data-nosnippet>34</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>capture_source: CaptureSource,
+<a href=#35 id=35 data-nosnippet>35</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>synthetic_silence: SyntheticSilence,
+<a href=#36 id=36 data-nosnippet>36</a>) -&gt; JoinHandle&lt;()&gt; {
+<a href=#37 id=37 data-nosnippet>37</a>    <span class="kw">let </span>(pcm_tx, <span class="kw-2">mut </span>pcm_rx) = tokio::sync::mpsc::channel::&lt;hound_engine::types::PcmFrame&gt;(<span class="number">8</span>);
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a>    <span class="comment">// Blocking capture thread (the cpal Microphone is !Send — own it on one thread).
+<a href=#40 id=40 data-nosnippet>40</a>    </span><span class="kw">let </span>capture_stop = stop.clone();
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">let </span>stats_capture = stats.clone();
+<a href=#42 id=42 data-nosnippet>42</a>    <span class="comment">// The publish task's own view of the mute flag — see the gate in its loop below.
+<a href=#43 id=43 data-nosnippet>43</a>    </span><span class="kw">let </span>mute_publish = mute.clone();
+<a href=#44 id=44 data-nosnippet>44</a>    std::thread::Builder::new()
+<a href=#45 id=45 data-nosnippet>45</a>        .name(<span class="string">"call-mic-capture"</span>.into())
+<a href=#46 id=46 data-nosnippet>46</a>        .spawn(<span class="kw">move </span>|| {
+<a href=#47 id=47 data-nosnippet>47</a>            mic_capture_loop(
+<a href=#48 id=48 data-nosnippet>48</a>                capture_stop,
+<a href=#49 id=49 data-nosnippet>49</a>                clock,
+<a href=#50 id=50 data-nosnippet>50</a>                apm,
+<a href=#51 id=51 data-nosnippet>51</a>                device_rx,
+<a href=#52 id=52 data-nosnippet>52</a>                pcm_tx,
+<a href=#53 id=53 data-nosnippet>53</a>                mute,
+<a href=#54 id=54 data-nosnippet>54</a>                levels,
+<a href=#55 id=55 data-nosnippet>55</a>                stats_capture,
 <a href=#56 id=56 data-nosnippet>56</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#57 id=57 data-nosnippet>57</a>                </span>synthetic_silence,
-<a href=#58 id=58 data-nosnippet>58</a>            )
-<a href=#59 id=59 data-nosnippet>59</a>        })
-<a href=#60 id=60 data-nosnippet>60</a>        .ok();
-<a href=#61 id=61 data-nosnippet>61</a>
-<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span>path = broadcast_path(space_id, self_user_id, self_id, MIC_TRACK);
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span>sender = self_id.<span class="number">0 </span><span class="kw">as </span>u16;
-<a href=#64 id=64 data-nosnippet>64</a>    <span class="comment">// Outbound voice is sacred too: encode + publish on the RT audio runtime so a
-<a href=#65 id=65 data-nosnippet>65</a>    // screenshare encode can't stall the mic and make us stutter for everyone else.
-<a href=#66 id=66 data-nosnippet>66</a>    </span>audio_runtime().spawn(<span class="kw">async move </span>{
-<a href=#67 id=67 data-nosnippet>67</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoder = <span class="kw">match </span>OpusEncoder::new(Bitrate::kbps(<span class="number">24</span>), OpusProfile::Voice) {
-<a href=#68 id=68 data-nosnippet>68</a>            <span class="prelude-val">Ok</span>(e) =&gt; e,
-<a href=#69 id=69 data-nosnippet>69</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#70 id=70 data-nosnippet>70</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"mic: failed to build Opus encoder"</span>);
-<a href=#71 id=71 data-nosnippet>71</a>                <span class="kw">return</span>;
-<a href=#72 id=72 data-nosnippet>72</a>            }
-<a href=#73 id=73 data-nosnippet>73</a>        };
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame_seq = <span class="number">0u32</span>;
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="comment">// Publisher-side silence suppression — the policy (and the whole rationale for
-<a href=#76 id=76 data-nosnippet>76</a>        // suppressing here rather than unsubscribing at the receiver) lives on
-<a href=#77 id=77 data-nosnippet>77</a>        // `SilenceGate`. Never engages for a headless/e2e client: the synthetic capture
-<a href=#78 id=78 data-nosnippet>78</a>        // source is VAD-active by construction, so its frames never come out DTX-sized.
-<a href=#79 id=79 data-nosnippet>79</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>silence = SilenceGate::default();
-<a href=#80 id=80 data-nosnippet>80</a>        <span class="kw">let </span><span class="kw-2">mut </span>publisher = <span class="kw">match </span>relay.publish_track(<span class="kw-2">&amp;</span>path, MIC_TRACK, AUDIO_PRIORITY) {
-<a href=#81 id=81 data-nosnippet>81</a>            <span class="prelude-val">Ok</span>(p) =&gt; p,
-<a href=#82 id=82 data-nosnippet>82</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#83 id=83 data-nosnippet>83</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"mic: failed to publish track"</span>);
-<a href=#84 id=84 data-nosnippet>84</a>                <span class="kw">return</span>;
-<a href=#85 id=85 data-nosnippet>85</a>            }
-<a href=#86 id=86 data-nosnippet>86</a>        };
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">if </span>publisher.wait_subscribed().<span class="kw">await</span>.is_err() {
-<a href=#88 id=88 data-nosnippet>88</a>            <span class="kw">return</span>;
-<a href=#89 id=89 data-nosnippet>89</a>        }
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(pcm) = pcm_rx.recv().<span class="kw">await </span>{
-<a href=#91 id=91 data-nosnippet>91</a>            <span class="comment">// Mute quiesces the encoder HERE as well as at capture. The capture loop
-<a href=#92 id=92 data-nosnippet>92</a>            // already drops muted frames before `pcm_tx`, but that alone leaves a
-<a href=#93 id=93 data-nosnippet>93</a>            // straggler window: up to the channel's 8 frames (~160 ms) are already
-<a href=#94 id=94 data-nosnippet>94</a>            // queued when the flag flips, and without this check every one of them is
-<a href=#95 id=95 data-nosnippet>95</a>            // still encoded and published — audio the user believes they muted.
-<a href=#96 id=96 data-nosnippet>96</a>            //
-<a href=#97 id=97 data-nosnippet>97</a>            // This is the same gate the screen-audio leg has always had (see
-<a href=#98 id=98 data-nosnippet>98</a>            // `spawn_screen_audio_publish`); the mic simply never grew one. Checking
-<a href=#99 id=99 data-nosnippet>99</a>            // at BOTH ends makes the quiesce synchronous with the flag rather than
-<a href=#100 id=100 data-nosnippet>100</a>            // with the drain: the moment mute is set, nothing further is encoded, and
-<a href=#101 id=101 data-nosnippet>101</a>            // `frame_seq` does not advance for a frame that was never sent. Receivers
-<a href=#102 id=102 data-nosnippet>102</a>            // read the resulting gap as a quiet source (their starve metric is
-<a href=#103 id=103 data-nosnippet>103</a>            // DTX-aware), and unmuting resumes instantly on this same track.
-<a href=#104 id=104 data-nosnippet>104</a>            </span><span class="kw">if </span>mute_publish.mic.load(Ordering::Relaxed) {
-<a href=#105 id=105 data-nosnippet>105</a>                <span class="comment">// Same invariant as `silence_mic_meter`, on the wire gauge instead of
-<a href=#106 id=106 data-nosnippet>106</a>                // the level: **the suppression gauge must read false whenever this loop
-<a href=#107 id=107 data-nosnippet>107</a>                // is not delivering.** It is only ever written from an encoded frame, so
-<a href=#108 id=108 data-nosnippet>108</a>                // a mute that lands while the room is quiet would otherwise leave
-<a href=#109 id=109 data-nosnippet>109</a>                // `suppressed=true` latched for the whole mute — and the audio report
-<a href=#110 id=110 data-nosnippet>110</a>                // would then attribute a muted (or dead) mic to a quiet room, which is
-<a href=#111 id=111 data-nosnippet>111</a>                // precisely the inversion this fact exists to prevent.
-<a href=#112 id=112 data-nosnippet>112</a>                </span>stats.set_audio_suppressed(<span class="bool-val">false</span>);
-<a href=#113 id=113 data-nosnippet>113</a>                <span class="kw">continue</span>;
-<a href=#114 id=114 data-nosnippet>114</a>            }
-<a href=#115 id=115 data-nosnippet>115</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(packet) = encoder.encode(<span class="kw-2">&amp;</span>pcm) <span class="kw">else </span>{
-<a href=#116 id=116 data-nosnippet>116</a>                <span class="comment">// The third non-delivering path, same invariant as the mute gate above:
-<a href=#117 id=117 data-nosnippet>117</a>                // a wedged encoder must not leave the gauge latched either.
-<a href=#118 id=118 data-nosnippet>118</a>                </span>stats.set_audio_suppressed(<span class="bool-val">false</span>);
-<a href=#119 id=119 data-nosnippet>119</a>                <span class="kw">continue</span>;
-<a href=#120 id=120 data-nosnippet>120</a>            };
-<a href=#121 id=121 data-nosnippet>121</a>            <span class="kw">let </span>bytes = packet.data.len();
-<a href=#122 id=122 data-nosnippet>122</a>            <span class="comment">// Silence suppression. The encoder's own DTX verdict (a 1–2 byte payload)
-<a href=#123 id=123 data-nosnippet>123</a>            // is the input; timestamps and the encoder's state are untouched, so the
-<a href=#124 id=124 data-nosnippet>124</a>            // first voiced frame publishes on this same warm subscription with no
-<a href=#125 id=125 data-nosnippet>125</a>            // added latency.
-<a href=#126 id=126 data-nosnippet>126</a>            </span><span class="kw">let </span>publish = silence.publish(bytes, Instant::now());
-<a href=#127 id=127 data-nosnippet>127</a>            stats.set_audio_suppressed(silence.suppressed());
-<a href=#128 id=128 data-nosnippet>128</a>            <span class="kw">if </span>!publish {
-<a href=#129 id=129 data-nosnippet>129</a>                stats.audio_frame_suppressed();
-<a href=#130 id=130 data-nosnippet>130</a>                <span class="kw">continue</span>;
-<a href=#131 id=131 data-nosnippet>131</a>            }
-<a href=#132 id=132 data-nosnippet>132</a>            <span class="kw">let </span>frame = WireFrame {
-<a href=#133 id=133 data-nosnippet>133</a>                sender,
-<a href=#134 id=134 data-nosnippet>134</a>                track: TrackKind::CamAudio,
-<a href=#135 id=135 data-nosnippet>135</a>                codec: WireCodec::Opus,
-<a href=#136 id=136 data-nosnippet>136</a>                <span class="comment">// Grouping is count-driven for audio (ordered substream), not keyframe-
-<a href=#137 id=137 data-nosnippet>137</a>                // driven — every Opus frame is independently decodable, so the bit is moot.
-<a href=#138 id=138 data-nosnippet>138</a>                </span>keyframe: <span class="bool-val">false</span>,
-<a href=#139 id=139 data-nosnippet>139</a>                frame_seq,
-<a href=#140 id=140 data-nosnippet>140</a>                timestamp_us: packet.timestamp_us.micros(),
-<a href=#141 id=141 data-nosnippet>141</a>                data: packet.data,
-<a href=#142 id=142 data-nosnippet>142</a>            };
-<a href=#143 id=143 data-nosnippet>143</a>            frame_seq = frame_seq.wrapping_add(<span class="number">1</span>);
-<a href=#144 id=144 data-nosnippet>144</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = publish_audio_one(<span class="kw-2">&amp;mut </span>publisher, <span class="kw-2">&amp;</span>frame) {
-<a href=#145 id=145 data-nosnippet>145</a>                <span class="macro">tracing::warn!</span>(%e, <span class="string">"mic: publish frame failed"</span>);
-<a href=#146 id=146 data-nosnippet>146</a>            } <span class="kw">else </span>{
-<a href=#147 id=147 data-nosnippet>147</a>                <span class="comment">// RTC-debug: one Opus mic frame published (drives outbound send_kbps).
-<a href=#148 id=148 data-nosnippet>148</a>                </span>stats.audio_sent(bytes);
-<a href=#149 id=149 data-nosnippet>149</a>            }
-<a href=#150 id=150 data-nosnippet>150</a>        }
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="comment">// The capture channel closed: capture died, or the call is tearing down. Either
-<a href=#152 id=152 data-nosnippet>152</a>        // way nothing further is encoded, so the gauge must not stay latched — a dead
-<a href=#153 id=153 data-nosnippet>153</a>        // capture path reading `suppressed` is the report blaming a quiet room for a
-<a href=#154 id=154 data-nosnippet>154</a>        // broken mic. (`silence_mic_meter` holds the identical invariant for the level.)
-<a href=#155 id=155 data-nosnippet>155</a>        </span>stats.set_audio_suppressed(<span class="bool-val">false</span>);
-<a href=#156 id=156 data-nosnippet>156</a>    })
-<a href=#157 id=157 data-nosnippet>157</a>}
-<a href=#158 id=158 data-nosnippet>158</a>
-<a href=#159 id=159 data-nosnippet>159</a><span class="doccomment">/// Publish one AUDIO frame via the ordered-substream path (count-rolled groups), so
-<a href=#160 id=160 data-nosnippet>160</a>/// successive Opus frames ride one in-order QUIC stream instead of one stream per frame
-<a href=#161 id=161 data-nosnippet>161</a>/// (the source of the cross-stream reordering). Use for mic + screen-audio.
-<a href=#162 id=162 data-nosnippet>162</a></span><span class="kw">fn </span>publish_audio_one(
-<a href=#163 id=163 data-nosnippet>163</a>    publisher: <span class="kw-2">&amp;mut </span>MoqTrackPublisher,
-<a href=#164 id=164 data-nosnippet>164</a>    frame: <span class="kw-2">&amp;</span>WireFrame,
-<a href=#165 id=165 data-nosnippet>165</a>) -&gt; std::result::Result&lt;(), String&gt; {
-<a href=#166 id=166 data-nosnippet>166</a>    publisher
-<a href=#167 id=167 data-nosnippet>167</a>        .publish_audio_frame(frame)
-<a href=#168 id=168 data-nosnippet>168</a>        .map_err(|e| e.to_string())
-<a href=#169 id=169 data-nosnippet>169</a>}
-<a href=#170 id=170 data-nosnippet>170</a>
-<a href=#171 id=171 data-nosnippet>171</a><span class="doccomment">/// Open the mic per `capture_source`: real hardware, or (behind `synthetic`)
-<a href=#172 id=172 data-nosnippet>172</a>/// the engine's mic-free test tone. The one seam every (re)open site in
-<a href=#173 id=173 data-nosnippet>173</a>/// [`mic_capture_loop`] routes through, so a headless build never needs its
-<a href=#174 id=174 data-nosnippet>174</a>/// own copy of the branch.
-<a href=#175 id=175 data-nosnippet>175</a>///
-<a href=#176 id=176 data-nosnippet>176</a>/// The error is PROPAGATED (it used to be `.ok()`-swallowed): a TCC-denied mic is
-<a href=#177 id=177 data-nosnippet>177</a>/// a typed [`AudioError::PermissionDenied`] the loop reports and paces off, not an
-<a href=#178 id=178 data-nosnippet>178</a>/// indistinguishable `None` that spins silently forever.
-<a href=#179 id=179 data-nosnippet>179</a></span><span class="kw">fn </span>open_mic(
-<a href=#180 id=180 data-nosnippet>180</a>    choice: <span class="kw-2">&amp;</span>DeviceChoice&lt;MicId&gt;,
-<a href=#181 id=181 data-nosnippet>181</a>    clock: CaptureClock,
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>capture_source: CaptureSource,
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>synthetic_silence: <span class="kw-2">&amp;</span>SyntheticSilence,
-<a href=#184 id=184 data-nosnippet>184</a>) -&gt; std::result::Result&lt;hound_engine::api::Microphone, hound_engine::error::AudioError&gt; {
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">if </span><span class="macro">capture_source !</span>= CaptureSource::Default {
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="comment">// The handle is shared, so a reopen (device fault, hot-swap) rejoins the same
-<a href=#188 id=188 data-nosnippet>188</a>        // live switch rather than resetting a bot to "talking" mid-scenario.
-<a href=#189 id=189 data-nosnippet>189</a>        </span><span class="kw">return </span>Engine::new().open_synthetic_microphone(clock, synthetic_silence.clone());
-<a href=#190 id=190 data-nosnippet>190</a>    }
-<a href=#191 id=191 data-nosnippet>191</a>    Engine::new().open_microphone(choice, clock)
-<a href=#192 id=192 data-nosnippet>192</a>}
-<a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a><span class="doccomment">/// Force the mic meter to silence.
-<a href=#195 id=195 data-nosnippet>195</a>///
-<a href=#196 id=196 data-nosnippet>196</a>/// THE invariant, and it is a privacy one: **the meter must read 0 whenever capture
-<a href=#197 id=197 data-nosnippet>197</a>/// is not delivering.** The speaking reporter (`call::speaking`) samples this very
-<a href=#198 id=198 data-nosnippet>198</a>/// watch and re-asserts whatever band it reads every 600 ms for as long as it is
-<a href=#199 id=199 data-nosnippet>199</a>/// non-zero — so a level left latched by a dead BT mic or a mute that raced a
-<a href=#200 id=200 data-nosnippet>200</a>/// capture stall does not merely mis-draw a bar, it makes its owner the call's
-<a href=#201 id=201 data-nosnippet>201</a>/// permanent dominant speaker and leaks their pre-mute level to every peer. Every
-<a href=#202 id=202 data-nosnippet>202</a>/// non-delivering path (mute, open failure, capture fault, no device) calls this.
-<a href=#203 id=203 data-nosnippet>203</a></span><span class="kw">fn </span>silence_mic_meter(levels: <span class="kw-2">&amp;</span>watch::Sender&lt;LevelsView&gt;, stats: <span class="kw-2">&amp;</span>CallStats) {
-<a href=#204 id=204 data-nosnippet>204</a>    levels.send_modify(|l| l.mic = <span class="number">0.0</span>);
-<a href=#205 id=205 data-nosnippet>205</a>    stats.set_self_level(<span class="number">0.0</span>);
-<a href=#206 id=206 data-nosnippet>206</a>}
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a><span class="doccomment">/// The mic capture loop: pull PCM, gate on mute, meter the level, forward to the
-<a href=#209 id=209 data-nosnippet>209</a>/// encoder. Hot-swaps the device when `device_rx` changes; re-opens on error.
-<a href=#210 id=210 data-nosnippet>210</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">fn </span>mic_capture_loop(
-<a href=#212 id=212 data-nosnippet>212</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#213 id=213 data-nosnippet>213</a>    clock: CaptureClock,
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw-2">mut </span>device_rx: watch::Receiver&lt;DeviceChoice&lt;MicId&gt;&gt;,
-<a href=#215 id=215 data-nosnippet>215</a>    pcm_tx: tokio::sync::mpsc::Sender&lt;hound_engine::types::PcmFrame&gt;,
-<a href=#216 id=216 data-nosnippet>216</a>    mute: Arc&lt;MuteFlags&gt;,
-<a href=#217 id=217 data-nosnippet>217</a>    levels: watch::Sender&lt;LevelsView&gt;,
-<a href=#218 id=218 data-nosnippet>218</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>capture_source: CaptureSource,
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>synthetic_silence: SyntheticSilence,
-<a href=#221 id=221 data-nosnippet>221</a>) {
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">use </span>hound_engine::api::level_from_rms;
-<a href=#223 id=223 data-nosnippet>223</a>
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">let </span><span class="kw-2">mut </span>choice = device_rx.borrow_and_update().clone();
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="comment">// The device is opened from ONE place (top of the loop), so every open — first,
-<a href=#226 id=226 data-nosnippet>226</a>    // hot-swap, warmup, post-fault — reports and paces through the same policy.
-<a href=#227 id=227 data-nosnippet>227</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>mic: <span class="prelude-ty">Option</span>&lt;hound_engine::api::Microphone&gt; = <span class="prelude-val">None</span>;
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">let </span><span class="kw-2">mut </span>warmup = MicRouteWarmup { due: <span class="prelude-val">None </span>};
-<a href=#229 id=229 data-nosnippet>229</a>    <span class="comment">// Cleared for the reopen the warmup itself triggers: one warmup per open cycle
-<a href=#230 id=230 data-nosnippet>230</a>    // (re-arming there would reopen the device every ROUTE_WARMUP_DELAY forever).
-<a href=#231 id=231 data-nosnippet>231</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>arm_warmup = <span class="bool-val">true</span>;
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="comment">// Open-failure reporting + retry cadence. A denied mic used to be swallowed by
-<a href=#233 id=233 data-nosnippet>233</a>    // `.ok()` (silent 200 ms spin, nothing in the logs or Sentry); now it reports
-<a href=#234 id=234 data-nosnippet>234</a>    // once per transition and retries slowly, since the grant can still arrive.
-<a href=#235 id=235 data-nosnippet>235</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>open_retry = OpenRetry::default();
-<a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">let </span><span class="kw-2">mut </span>silence = MicSilenceWatch::default();
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="comment">// Last capture-ring overflow total seen from the CURRENT device. The counter is
-<a href=#238 id=238 data-nosnippet>238</a>    // per-open, so a value below the last read means a reopen/hot-swap minted a fresh
-<a href=#239 id=239 data-nosnippet>239</a>    // one — count it whole rather than under-reporting until it passes the old total.
-<a href=#240 id=240 data-nosnippet>240</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>last_overflow: u64 = <span class="number">0</span>;
-<a href=#241 id=241 data-nosnippet>241</a>
-<a href=#242 id=242 data-nosnippet>242</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">if </span>device_rx.has_changed().unwrap_or(<span class="bool-val">false</span>) {
-<a href=#244 id=244 data-nosnippet>244</a>            choice = device_rx.borrow_and_update().clone();
-<a href=#245 id=245 data-nosnippet>245</a>            drop(mic.take());
-<a href=#246 id=246 data-nosnippet>246</a>            <span class="comment">// Disarm the OLD device's pending warmup: were it left due, it could
-<a href=#247 id=247 data-nosnippet>247</a>            // fire in the gap before the reopen below and burn the NEW device's
-<a href=#248 id=248 data-nosnippet>248</a>            // one warmup cycle on a device it never belonged to.
-<a href=#249 id=249 data-nosnippet>249</a>            </span>warmup = MicRouteWarmup { due: <span class="prelude-val">None </span>};
-<a href=#250 id=250 data-nosnippet>250</a>            arm_warmup = <span class="bool-val">true</span>;
-<a href=#251 id=251 data-nosnippet>251</a>        }
-<a href=#252 id=252 data-nosnippet>252</a>        <span class="comment">// BT/HFP route warmup: one reopen after the SCO link has had time to
-<a href=#253 id=253 data-nosnippet>253</a>        // settle, mirroring the playout side's warmup in the mix bus.
-<a href=#254 id=254 data-nosnippet>254</a>        </span><span class="kw">if </span>warmup.fire(Instant::now()) {
-<a href=#255 id=255 data-nosnippet>255</a>            <span class="macro">tracing::info!</span>(<span class="string">"voice: warmup reopen of non-48k (BT/HFP) mic — silent-route fix"</span>);
-<a href=#256 id=256 data-nosnippet>256</a>            drop(mic.take());
-<a href=#257 id=257 data-nosnippet>257</a>            arm_warmup = <span class="bool-val">false</span>;
-<a href=#258 id=258 data-nosnippet>258</a>        }
-<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">if </span>mic.is_none() {
-<a href=#260 id=260 data-nosnippet>260</a>            <span class="kw">match </span>open_mic(
-<a href=#261 id=261 data-nosnippet>261</a>                <span class="kw-2">&amp;</span>choice,
-<a href=#262 id=262 data-nosnippet>262</a>                clock,
-<a href=#263 id=263 data-nosnippet>263</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#264 id=264 data-nosnippet>264</a>                </span>capture_source,
-<a href=#265 id=265 data-nosnippet>265</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#266 id=266 data-nosnippet>266</a>                </span><span class="kw-2">&amp;</span>synthetic_silence,
-<a href=#267 id=267 data-nosnippet>267</a>            ) {
-<a href=#268 id=268 data-nosnippet>268</a>                <span class="prelude-val">Ok</span>(m) =&gt; {
-<a href=#269 id=269 data-nosnippet>269</a>                    <span class="comment">// The rate is the one fact that identifies which route we actually
-<a href=#270 id=270 data-nosnippet>270</a>                    // landed on after a fault/hot-swap reopen (48 k built-in vs 24 k HFP)
-<a href=#271 id=271 data-nosnippet>271</a>                    // — and it is what the capture resampler is pinned to for this open.
-<a href=#272 id=272 data-nosnippet>272</a>                    // Every open used to be silent, so a mid-call device change left no
-<a href=#273 id=273 data-nosnippet>273</a>                    // trace at all.
-<a href=#274 id=274 data-nosnippet>274</a>                    </span><span class="macro">tracing::debug!</span>(
-<a href=#275 id=275 data-nosnippet>275</a>                        track = <span class="string">"mic"</span>,
-<a href=#276 id=276 data-nosnippet>276</a>                        device_rate = m.device_rate(),
-<a href=#277 id=277 data-nosnippet>277</a>                        <span class="string">"mic: capture device opened"
-<a href=#278 id=278 data-nosnippet>278</a>                    </span>);
-<a href=#279 id=279 data-nosnippet>279</a>                    <span class="kw">if </span>arm_warmup {
-<a href=#280 id=280 data-nosnippet>280</a>                        warmup = MicRouteWarmup::arm(m.device_rate(), Instant::now());
-<a href=#281 id=281 data-nosnippet>281</a>                    }
-<a href=#282 id=282 data-nosnippet>282</a>                    arm_warmup = <span class="bool-val">true</span>;
-<a href=#283 id=283 data-nosnippet>283</a>                    mic = <span class="prelude-val">Some</span>(m);
-<a href=#284 id=284 data-nosnippet>284</a>                    open_retry.opened();
-<a href=#285 id=285 data-nosnippet>285</a>                }
-<a href=#286 id=286 data-nosnippet>286</a>                <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#287 id=287 data-nosnippet>287</a>                    <span class="comment">// Classify, then report ONCE per transition into this failure
-<a href=#288 id=288 data-nosnippet>288</a>                    // class — the Sentry bridge promotes `error!` to an event, so a
-<a href=#289 id=289 data-nosnippet>289</a>                    // sticky denial must not log per tick. Keep looping either way:
-<a href=#290 id=290 data-nosnippet>290</a>                    // the device (or the grant) can still show up.
-<a href=#291 id=291 data-nosnippet>291</a>                    </span><span class="kw">let </span>failure = OpenFailure::of_audio(<span class="kw-2">&amp;</span>e);
-<a href=#292 id=292 data-nosnippet>292</a>                    <span class="kw">let </span>(log, wait) = open_retry.failed(failure);
-<a href=#293 id=293 data-nosnippet>293</a>                    <span class="kw">if </span>log {
-<a href=#294 id=294 data-nosnippet>294</a>                        <span class="kw">match </span>failure {
-<a href=#295 id=295 data-nosnippet>295</a>                            OpenFailure::PermissionDenied =&gt; <span class="macro">tracing::error!</span>(
-<a href=#296 id=296 data-nosnippet>296</a>                                track = <span class="string">"mic"</span>,
-<a href=#297 id=297 data-nosnippet>297</a>                                %e,
-<a href=#298 id=298 data-nosnippet>298</a>                                <span class="string">"microphone permission denied — enable hound in System Settings → \
-<a href=#299 id=299 data-nosnippet>299</a>                                 Privacy &amp; Security → Microphone"
-<a href=#300 id=300 data-nosnippet>300</a>                            </span>),
-<a href=#301 id=301 data-nosnippet>301</a>                            OpenFailure::Other =&gt; <span class="macro">tracing::warn!</span>(
-<a href=#302 id=302 data-nosnippet>302</a>                                track = <span class="string">"mic"</span>,
-<a href=#303 id=303 data-nosnippet>303</a>                                %e,
-<a href=#304 id=304 data-nosnippet>304</a>                                <span class="string">"mic: microphone open failed — retrying"
-<a href=#305 id=305 data-nosnippet>305</a>                            </span>),
-<a href=#306 id=306 data-nosnippet>306</a>                        }
-<a href=#307 id=307 data-nosnippet>307</a>                    }
-<a href=#308 id=308 data-nosnippet>308</a>                    <span class="comment">// Nothing is being captured, so nothing may still be metered.
-<a href=#309 id=309 data-nosnippet>309</a>                    </span>silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
-<a href=#310 id=310 data-nosnippet>310</a>                    std::thread::sleep(wait);
-<a href=#311 id=311 data-nosnippet>311</a>                    <span class="kw">continue</span>;
-<a href=#312 id=312 data-nosnippet>312</a>                }
-<a href=#313 id=313 data-nosnippet>313</a>            }
-<a href=#314 id=314 data-nosnippet>314</a>        }
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(cap) = mic.as_mut() <span class="kw">else </span>{
-<a href=#316 id=316 data-nosnippet>316</a>            silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
-<a href=#317 id=317 data-nosnippet>317</a>            <span class="kw">continue</span>;
-<a href=#318 id=318 data-nosnippet>318</a>        };
-<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cap.next_frame()));
-<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw">match </span>pulled {
-<a href=#321 id=321 data-nosnippet>321</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(frame)) =&gt; {
-<a href=#322 id=322 data-nosnippet>322</a>                <span class="comment">// RTC-debug: one PCM frame captured from the mic device, plus any
-<a href=#323 id=323 data-nosnippet>323</a>                // samples the capture ring dropped since the last frame — the ONLY
-<a href=#324 id=324 data-nosnippet>324</a>                // local signal that the far end is hearing chopped words.
-<a href=#325 id=325 data-nosnippet>325</a>                </span>stats.audio_captured();
-<a href=#326 id=326 data-nosnippet>326</a>                <span class="kw">let </span>overflow = cap.capture_overflow_samples();
-<a href=#327 id=327 data-nosnippet>327</a>                stats.capture_overflowed(<span class="kw">if </span>overflow &gt;= last_overflow {
-<a href=#328 id=328 data-nosnippet>328</a>                    overflow - last_overflow
-<a href=#329 id=329 data-nosnippet>329</a>                } <span class="kw">else </span>{
-<a href=#330 id=330 data-nosnippet>330</a>                    overflow
-<a href=#331 id=331 data-nosnippet>331</a>                });
-<a href=#332 id=332 data-nosnippet>332</a>                last_overflow = overflow;
-<a href=#333 id=333 data-nosnippet>333</a>                <span class="kw">if </span>silence.observe(<span class="kw-2">&amp;</span>frame.samples) {
-<a href=#334 id=334 data-nosnippet>334</a>                    <span class="macro">tracing::warn!</span>(
-<a href=#335 id=335 data-nosnippet>335</a>                        device_rate = cap.device_rate(),
-<a href=#336 id=336 data-nosnippet>336</a>                        <span class="string">"voice: mic delivering PURE SILENCE (~3 s of bit-exact zeros) — \
-<a href=#337 id=337 data-nosnippet>337</a>                         dead capture route (BT/SCO not live, permission, or a silent \
-<a href=#338 id=338 data-nosnippet>338</a>                         virtual device)"
-<a href=#339 id=339 data-nosnippet>339</a>                    </span>);
-<a href=#340 id=340 data-nosnippet>340</a>                }
-<a href=#341 id=341 data-nosnippet>341</a>                <span class="kw">if </span>mute.mic.load(Ordering::Relaxed) {
-<a href=#342 id=342 data-nosnippet>342</a>                    silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
-<a href=#343 id=343 data-nosnippet>343</a>                    <span class="kw">continue</span>;
-<a href=#344 id=344 data-nosnippet>344</a>                }
-<a href=#345 id=345 data-nosnippet>345</a>                <span class="kw">let </span>level = level_from_rms(frame.rms());
-<a href=#346 id=346 data-nosnippet>346</a>                levels.send_modify(|l| l.mic = level);
-<a href=#347 id=347 data-nosnippet>347</a>                stats.set_self_level(level);
-<a href=#348 id=348 data-nosnippet>348</a>                <span class="kw">let _ </span>= pcm_tx.try_send(frame);
-<a href=#349 id=349 data-nosnippet>349</a>            }
-<a href=#350 id=350 data-nosnippet>350</a>            <span class="kw">_ </span>=&gt; {
-<a href=#351 id=351 data-nosnippet>351</a>                <span class="comment">// The capture ring stopped (the cpal input error callback fired — device
-<a href=#352 id=352 data-nosnippet>352</a>                // gone, config invalidated, or an automatic reroute) or `next_frame`
-<a href=#353 id=353 data-nosnippet>353</a>                // panicked. Rebuilding is REQUIRED: the device rate and the resampler are
-<a href=#354 id=354 data-nosnippet>354</a>                // captured at open, so a stream that silently rerouted to a 24 kHz HFP mic
-<a href=#355 id=355 data-nosnippet>355</a>                // would keep resampling as if it were still 48 k. Announce it — this path
-<a href=#356 id=356 data-nosnippet>356</a>                // used to drop the device and sleep with nothing in the log, so a mid-call
-<a href=#357 id=357 data-nosnippet>357</a>                // mic route change was invisible.
-<a href=#358 id=358 data-nosnippet>358</a>                </span><span class="macro">tracing::info!</span>(
-<a href=#359 id=359 data-nosnippet>359</a>                    track = <span class="string">"mic"</span>,
-<a href=#360 id=360 data-nosnippet>360</a>                    device_rate = mic.as_ref().map(|m| m.device_rate()).unwrap_or(<span class="number">0</span>),
-<a href=#361 id=361 data-nosnippet>361</a>                    <span class="string">"mic: capture stream ended — reopening the device"
-<a href=#362 id=362 data-nosnippet>362</a>                </span>);
-<a href=#363 id=363 data-nosnippet>363</a>                drop(mic.take());
-<a href=#364 id=364 data-nosnippet>364</a>                <span class="comment">// The route is gone; the last level it produced must not outlive it.
-<a href=#365 id=365 data-nosnippet>365</a>                </span>silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
-<a href=#366 id=366 data-nosnippet>366</a>                std::thread::sleep(std::time::Duration::from_millis(<span class="number">200</span>));
-<a href=#367 id=367 data-nosnippet>367</a>            }
-<a href=#368 id=368 data-nosnippet>368</a>        }
-<a href=#369 id=369 data-nosnippet>369</a>    }
-<a href=#370 id=370 data-nosnippet>370</a>}
-<a href=#371 id=371 data-nosnippet>371</a>
-<a href=#372 id=372 data-nosnippet>372</a><span class="doccomment">/// The `!Send` screen APP-AUDIO capture thread: block on the engine `ScreenAudio`
-<a href=#373 id=373 data-nosnippet>373</a>/// (the mic-thread analogue — no APM, no levels, no hot-swap) and forward each 20 ms
-<a href=#374 id=374 data-nosnippet>374</a>/// PCM frame to the publish task. A `next_frame` error/panic is the leg's clean end
-<a href=#375 id=375 data-nosnippet>375</a>/// (its parent screen stream stopped); drop the leg on this owning thread and exit.
-<a href=#376 id=376 data-nosnippet>376</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>screen_audio_capture_loop(
-<a href=#377 id=377 data-nosnippet>377</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#378 id=378 data-nosnippet>378</a>    <span class="kw-2">mut </span>audio: hound_engine::api::ScreenAudio,
-<a href=#379 id=379 data-nosnippet>379</a>    pcm_tx: tokio::sync::mpsc::Sender&lt;hound_engine::types::PcmFrame&gt;,
-<a href=#380 id=380 data-nosnippet>380</a>) {
-<a href=#381 id=381 data-nosnippet>381</a>    <span class="kw">let </span><span class="kw-2">mut </span>captured: u64 = <span class="number">0</span>;
-<a href=#382 id=382 data-nosnippet>382</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| audio.next_frame()));
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">match </span>pulled {
-<a href=#385 id=385 data-nosnippet>385</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(pcm)) =&gt; {
-<a href=#386 id=386 data-nosnippet>386</a>                captured += <span class="number">1</span>;
-<a href=#387 id=387 data-nosnippet>387</a>                <span class="kw">if </span>captured == <span class="number">1 </span>|| captured.is_multiple_of(<span class="number">500</span>) {
-<a href=#388 id=388 data-nosnippet>388</a>                    <span class="macro">tracing::info!</span>(captured, <span class="string">"screen: captured app-audio frames"</span>);
-<a href=#389 id=389 data-nosnippet>389</a>                }
-<a href=#390 id=390 data-nosnippet>390</a>                <span class="kw">let _ </span>= pcm_tx.try_send(pcm); <span class="comment">// drop on backpressure
-<a href=#391 id=391 data-nosnippet>391</a>            </span>}
-<a href=#392 id=392 data-nosnippet>392</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
-<a href=#393 id=393 data-nosnippet>393</a>                <span class="macro">tracing::warn!</span>(%e, captured, <span class="string">"screen: app-audio capture ended (error)"</span>);
-<a href=#394 id=394 data-nosnippet>394</a>                <span class="kw">break</span>;
-<a href=#395 id=395 data-nosnippet>395</a>            }
-<a href=#396 id=396 data-nosnippet>396</a>            <span class="prelude-val">Err</span>(_panic) =&gt; {
-<a href=#397 id=397 data-nosnippet>397</a>                <span class="macro">tracing::warn!</span>(captured, <span class="string">"screen: app-audio capture panicked"</span>);
-<a href=#398 id=398 data-nosnippet>398</a>                <span class="kw">break</span>;
-<a href=#399 id=399 data-nosnippet>399</a>            }
-<a href=#400 id=400 data-nosnippet>400</a>        }
-<a href=#401 id=401 data-nosnippet>401</a>    }
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="macro">tracing::info!</span>(captured, <span class="string">"screen: app-audio capture loop stopped"</span>);
-<a href=#403 id=403 data-nosnippet>403</a>    drop(audio);
-<a href=#404 id=404 data-nosnippet>404</a>}
-<a href=#405 id=405 data-nosnippet>405</a>
-<a href=#406 id=406 data-nosnippet>406</a><span class="doccomment">/// The async screen AUDIO publish task: the mic publish path MINUS APM / levels /
-<a href=#407 id=407 data-nosnippet>407</a>/// hot-swap (app audio is not a mic). Opus-encodes each forwarded PCM frame and
-<a href=#408 id=408 data-nosnippet>408</a>/// publishes it on the `screen_audio` track; the receiver plays it on the shared
-<a href=#409 id=409 data-nosnippet>409</a>/// mix bus exactly like a mic.
-<a href=#410 id=410 data-nosnippet>410</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_screen_audio_publish(
-<a href=#411 id=411 data-nosnippet>411</a>    relay: Arc&lt;MoqRelaySession&gt;,
-<a href=#412 id=412 data-nosnippet>412</a>    path: String,
-<a href=#413 id=413 data-nosnippet>413</a>    sender: u16,
-<a href=#414 id=414 data-nosnippet>414</a>    <span class="kw-2">mut </span>pcm_rx: tokio::sync::mpsc::Receiver&lt;hound_engine::types::PcmFrame&gt;,
-<a href=#415 id=415 data-nosnippet>415</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#416 id=416 data-nosnippet>416</a>    mute: Arc&lt;MuteFlags&gt;,
-<a href=#417 id=417 data-nosnippet>417</a>) -&gt; JoinHandle&lt;()&gt; {
-<a href=#418 id=418 data-nosnippet>418</a>    <span class="comment">// App-audio is audio: encode + publish on the RT audio runtime, off the video pool.
-<a href=#419 id=419 data-nosnippet>419</a>    </span>audio_runtime().spawn(<span class="kw">async move </span>{
-<a href=#420 id=420 data-nosnippet>420</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoder = <span class="kw">match </span>OpusEncoder::new(SCREEN_AUDIO_BITRATE, OpusProfile::Music) {
-<a href=#421 id=421 data-nosnippet>421</a>            <span class="prelude-val">Ok</span>(e) =&gt; e,
-<a href=#422 id=422 data-nosnippet>422</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#423 id=423 data-nosnippet>423</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to build app-audio Opus encoder"</span>);
-<a href=#424 id=424 data-nosnippet>424</a>                <span class="kw">return</span>;
-<a href=#425 id=425 data-nosnippet>425</a>            }
-<a href=#426 id=426 data-nosnippet>426</a>        };
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">let </span><span class="kw-2">mut </span>publisher = <span class="kw">match </span>relay.publish_track(<span class="kw-2">&amp;</span>path, SCREEN_AUDIO_TRACK, AUDIO_PRIORITY) {
-<a href=#428 id=428 data-nosnippet>428</a>            <span class="prelude-val">Ok</span>(p) =&gt; p,
-<a href=#429 id=429 data-nosnippet>429</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#430 id=430 data-nosnippet>430</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to publish audio track"</span>);
-<a href=#431 id=431 data-nosnippet>431</a>                <span class="kw">return</span>;
-<a href=#432 id=432 data-nosnippet>432</a>            }
-<a href=#433 id=433 data-nosnippet>433</a>        };
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">if </span>publisher.wait_subscribed().<span class="kw">await</span>.is_err() {
-<a href=#435 id=435 data-nosnippet>435</a>            <span class="kw">return</span>;
-<a href=#436 id=436 data-nosnippet>436</a>        }
-<a href=#437 id=437 data-nosnippet>437</a>        <span class="macro">tracing::info!</span>(<span class="string">"screen: app-audio track subscribed — publishing"</span>);
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame_seq = <span class="number">0u32</span>;
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="kw">let </span><span class="kw-2">mut </span>sent: u64 = <span class="number">0</span>;
-<a href=#440 id=440 data-nosnippet>440</a>        <span class="comment">// The same suppression gate as the mic, and today a permanent no-op: the MUSIC
-<a href=#441 id=441 data-nosnippet>441</a>        // profile deliberately runs without DTX (`OpusProfile::dtx`), so a shared
-<a href=#442 id=442 data-nosnippet>442</a>        // track's silence is still coded at full rate and never reaches the DTX size
-<a href=#443 id=443 data-nosnippet>443</a>        // band. It is wired anyway so the two audio publish legs cannot drift — the day
-<a href=#444 id=444 data-nosnippet>444</a>        // the music profile's silence-boundary listening check lands and DTX flips on,
-<a href=#445 id=445 data-nosnippet>445</a>        // app audio inherits suppression with no further change.
-<a href=#446 id=446 data-nosnippet>446</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>silence = SilenceGate::default();
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(pcm) = pcm_rx.recv().<span class="kw">await </span>{
-<a href=#448 id=448 data-nosnippet>448</a>            <span class="comment">// The broadcaster's "share audio" toggle: drop BEFORE encode, so a muted
-<a href=#449 id=449 data-nosnippet>449</a>            // share costs zero CPU and zero wire data. Receivers read the gap as a
-<a href=#450 id=450 data-nosnippet>450</a>            // quiet source (their starve metric is DTX-aware), and un-muting resumes
-<a href=#451 id=451 data-nosnippet>451</a>            // instantly on this same track.
-<a href=#452 id=452 data-nosnippet>452</a>            </span><span class="kw">if </span>mute.screen_audio.load(Ordering::Relaxed) {
-<a href=#453 id=453 data-nosnippet>453</a>                <span class="kw">continue</span>;
-<a href=#454 id=454 data-nosnippet>454</a>            }
-<a href=#455 id=455 data-nosnippet>455</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(packet) = encoder.encode(<span class="kw-2">&amp;</span>pcm) <span class="kw">else </span>{
-<a href=#456 id=456 data-nosnippet>456</a>                <span class="kw">continue</span>;
-<a href=#457 id=457 data-nosnippet>457</a>            };
-<a href=#458 id=458 data-nosnippet>458</a>            <span class="kw">let </span>bytes = packet.data.len();
-<a href=#459 id=459 data-nosnippet>459</a>            <span class="kw">if </span>!silence.publish(bytes, Instant::now()) {
-<a href=#460 id=460 data-nosnippet>460</a>                <span class="kw">continue</span>;
-<a href=#461 id=461 data-nosnippet>461</a>            }
-<a href=#462 id=462 data-nosnippet>462</a>            <span class="kw">let </span>frame = WireFrame {
-<a href=#463 id=463 data-nosnippet>463</a>                sender,
-<a href=#464 id=464 data-nosnippet>464</a>                track: TrackKind::ScrAudio,
-<a href=#465 id=465 data-nosnippet>465</a>                codec: WireCodec::Opus,
-<a href=#466 id=466 data-nosnippet>466</a>                <span class="comment">// Count-driven grouping (ordered substream); keyframe bit is moot for audio.
-<a href=#467 id=467 data-nosnippet>467</a>                </span>keyframe: <span class="bool-val">false</span>,
-<a href=#468 id=468 data-nosnippet>468</a>                frame_seq,
-<a href=#469 id=469 data-nosnippet>469</a>                timestamp_us: packet.timestamp_us.micros(),
-<a href=#470 id=470 data-nosnippet>470</a>                data: packet.data,
-<a href=#471 id=471 data-nosnippet>471</a>            };
-<a href=#472 id=472 data-nosnippet>472</a>            frame_seq = frame_seq.wrapping_add(<span class="number">1</span>);
-<a href=#473 id=473 data-nosnippet>473</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = publish_audio_one(<span class="kw-2">&amp;mut </span>publisher, <span class="kw-2">&amp;</span>frame) {
-<a href=#474 id=474 data-nosnippet>474</a>                <span class="macro">tracing::warn!</span>(%e, <span class="string">"screen: publish audio frame failed"</span>);
-<a href=#475 id=475 data-nosnippet>475</a>            } <span class="kw">else </span>{
-<a href=#476 id=476 data-nosnippet>476</a>                <span class="comment">// RTC-debug: one screen app-audio frame published.
-<a href=#477 id=477 data-nosnippet>477</a>                </span>stats.screen_audio_sent(bytes);
-<a href=#478 id=478 data-nosnippet>478</a>                sent += <span class="number">1</span>;
-<a href=#479 id=479 data-nosnippet>479</a>                <span class="kw">if </span>sent == <span class="number">1 </span>|| sent.is_multiple_of(<span class="number">500</span>) {
-<a href=#480 id=480 data-nosnippet>480</a>                    <span class="macro">tracing::info!</span>(sent, <span class="string">"screen: published app-audio frames"</span>);
-<a href=#481 id=481 data-nosnippet>481</a>                }
-<a href=#482 id=482 data-nosnippet>482</a>            }
-<a href=#483 id=483 data-nosnippet>483</a>        }
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="macro">tracing::info!</span>(sent, <span class="string">"screen: app-audio publish ended"</span>);
-<a href=#485 id=485 data-nosnippet>485</a>    })
-<a href=#486 id=486 data-nosnippet>486</a>}
+<a href=#57 id=57 data-nosnippet>57</a>                </span>capture_source,
+<a href=#58 id=58 data-nosnippet>58</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#59 id=59 data-nosnippet>59</a>                </span>synthetic_silence,
+<a href=#60 id=60 data-nosnippet>60</a>            )
+<a href=#61 id=61 data-nosnippet>61</a>        })
+<a href=#62 id=62 data-nosnippet>62</a>        .ok();
+<a href=#63 id=63 data-nosnippet>63</a>
+<a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">let </span>path = broadcast_path(space_id, self_user_id, self_id, MIC_TRACK);
+<a href=#65 id=65 data-nosnippet>65</a>    <span class="kw">let </span>sender = self_id.<span class="number">0 </span><span class="kw">as </span>u16;
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="comment">// Outbound voice is sacred too: encode + publish on the RT audio runtime so a
+<a href=#67 id=67 data-nosnippet>67</a>    // screenshare encode can't stall the mic and make us stutter for everyone else.
+<a href=#68 id=68 data-nosnippet>68</a>    </span>audio_runtime().spawn(<span class="kw">async move </span>{
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoder = <span class="kw">match </span>OpusEncoder::new(MIC_BITRATE, OpusProfile::Voice) {
+<a href=#70 id=70 data-nosnippet>70</a>            <span class="prelude-val">Ok</span>(e) =&gt; e,
+<a href=#71 id=71 data-nosnippet>71</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#72 id=72 data-nosnippet>72</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"mic: failed to build Opus encoder"</span>);
+<a href=#73 id=73 data-nosnippet>73</a>                <span class="kw">return</span>;
+<a href=#74 id=74 data-nosnippet>74</a>            }
+<a href=#75 id=75 data-nosnippet>75</a>        };
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame_seq = <span class="number">0u32</span>;
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="comment">// Publisher-side silence suppression — the policy (and the whole rationale for
+<a href=#78 id=78 data-nosnippet>78</a>        // suppressing here rather than unsubscribing at the receiver) lives on
+<a href=#79 id=79 data-nosnippet>79</a>        // `SilenceGate`. Never engages for a headless/e2e client: the synthetic capture
+<a href=#80 id=80 data-nosnippet>80</a>        // source is VAD-active by construction, so its frames never come out DTX-sized.
+<a href=#81 id=81 data-nosnippet>81</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>silence = SilenceGate::default();
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">let </span><span class="kw-2">mut </span>publisher = <span class="kw">match </span>relay.publish_track(<span class="kw-2">&amp;</span>path, MIC_TRACK, AUDIO_PRIORITY) {
+<a href=#83 id=83 data-nosnippet>83</a>            <span class="prelude-val">Ok</span>(p) =&gt; p,
+<a href=#84 id=84 data-nosnippet>84</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#85 id=85 data-nosnippet>85</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"mic: failed to publish track"</span>);
+<a href=#86 id=86 data-nosnippet>86</a>                <span class="kw">return</span>;
+<a href=#87 id=87 data-nosnippet>87</a>            }
+<a href=#88 id=88 data-nosnippet>88</a>        };
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">if </span>publisher.wait_subscribed().<span class="kw">await</span>.is_err() {
+<a href=#90 id=90 data-nosnippet>90</a>            <span class="kw">return</span>;
+<a href=#91 id=91 data-nosnippet>91</a>        }
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(pcm) = pcm_rx.recv().<span class="kw">await </span>{
+<a href=#93 id=93 data-nosnippet>93</a>            <span class="comment">// Mute quiesces the encoder HERE as well as at capture. The capture loop
+<a href=#94 id=94 data-nosnippet>94</a>            // already drops muted frames before `pcm_tx`, but that alone leaves a
+<a href=#95 id=95 data-nosnippet>95</a>            // straggler window: up to the channel's 8 frames (~160 ms) are already
+<a href=#96 id=96 data-nosnippet>96</a>            // queued when the flag flips, and without this check every one of them is
+<a href=#97 id=97 data-nosnippet>97</a>            // still encoded and published — audio the user believes they muted.
+<a href=#98 id=98 data-nosnippet>98</a>            //
+<a href=#99 id=99 data-nosnippet>99</a>            // This is the same gate the screen-audio leg has always had (see
+<a href=#100 id=100 data-nosnippet>100</a>            // `spawn_screen_audio_publish`); the mic simply never grew one. Checking
+<a href=#101 id=101 data-nosnippet>101</a>            // at BOTH ends makes the quiesce synchronous with the flag rather than
+<a href=#102 id=102 data-nosnippet>102</a>            // with the drain: the moment mute is set, nothing further is encoded, and
+<a href=#103 id=103 data-nosnippet>103</a>            // `frame_seq` does not advance for a frame that was never sent. Receivers
+<a href=#104 id=104 data-nosnippet>104</a>            // read the resulting gap as a quiet source (their starve metric is
+<a href=#105 id=105 data-nosnippet>105</a>            // DTX-aware), and unmuting resumes instantly on this same track.
+<a href=#106 id=106 data-nosnippet>106</a>            </span><span class="kw">if </span>mute_publish.mic.load(Ordering::Relaxed) {
+<a href=#107 id=107 data-nosnippet>107</a>                <span class="comment">// Same invariant as `silence_mic_meter`, on the wire gauge instead of
+<a href=#108 id=108 data-nosnippet>108</a>                // the level: **the suppression gauge must read false whenever this loop
+<a href=#109 id=109 data-nosnippet>109</a>                // is not delivering.** It is only ever written from an encoded frame, so
+<a href=#110 id=110 data-nosnippet>110</a>                // a mute that lands while the room is quiet would otherwise leave
+<a href=#111 id=111 data-nosnippet>111</a>                // `suppressed=true` latched for the whole mute — and the audio report
+<a href=#112 id=112 data-nosnippet>112</a>                // would then attribute a muted (or dead) mic to a quiet room, which is
+<a href=#113 id=113 data-nosnippet>113</a>                // precisely the inversion this fact exists to prevent.
+<a href=#114 id=114 data-nosnippet>114</a>                </span>stats.set_audio_suppressed(<span class="bool-val">false</span>);
+<a href=#115 id=115 data-nosnippet>115</a>                <span class="kw">continue</span>;
+<a href=#116 id=116 data-nosnippet>116</a>            }
+<a href=#117 id=117 data-nosnippet>117</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(packet) = encoder.encode(<span class="kw-2">&amp;</span>pcm) <span class="kw">else </span>{
+<a href=#118 id=118 data-nosnippet>118</a>                <span class="comment">// The third non-delivering path, same invariant as the mute gate above:
+<a href=#119 id=119 data-nosnippet>119</a>                // a wedged encoder must not leave the gauge latched either.
+<a href=#120 id=120 data-nosnippet>120</a>                </span>stats.set_audio_suppressed(<span class="bool-val">false</span>);
+<a href=#121 id=121 data-nosnippet>121</a>                <span class="kw">continue</span>;
+<a href=#122 id=122 data-nosnippet>122</a>            };
+<a href=#123 id=123 data-nosnippet>123</a>            <span class="kw">let </span>bytes = packet.data.len();
+<a href=#124 id=124 data-nosnippet>124</a>            <span class="comment">// Silence suppression. The encoder's own DTX verdict (a 1–2 byte payload)
+<a href=#125 id=125 data-nosnippet>125</a>            // is the input; timestamps and the encoder's state are untouched, so the
+<a href=#126 id=126 data-nosnippet>126</a>            // first voiced frame publishes on this same warm subscription with no
+<a href=#127 id=127 data-nosnippet>127</a>            // added latency.
+<a href=#128 id=128 data-nosnippet>128</a>            </span><span class="kw">let </span>publish = silence.publish(bytes, Instant::now());
+<a href=#129 id=129 data-nosnippet>129</a>            stats.set_audio_suppressed(silence.suppressed());
+<a href=#130 id=130 data-nosnippet>130</a>            <span class="kw">if </span>!publish {
+<a href=#131 id=131 data-nosnippet>131</a>                stats.audio_frame_suppressed();
+<a href=#132 id=132 data-nosnippet>132</a>                <span class="kw">continue</span>;
+<a href=#133 id=133 data-nosnippet>133</a>            }
+<a href=#134 id=134 data-nosnippet>134</a>            <span class="kw">let </span>frame = WireFrame {
+<a href=#135 id=135 data-nosnippet>135</a>                sender,
+<a href=#136 id=136 data-nosnippet>136</a>                track: TrackKind::CamAudio,
+<a href=#137 id=137 data-nosnippet>137</a>                codec: WireCodec::Opus,
+<a href=#138 id=138 data-nosnippet>138</a>                <span class="comment">// Grouping is count-driven for audio (ordered substream), not keyframe-
+<a href=#139 id=139 data-nosnippet>139</a>                // driven — every Opus frame is independently decodable, so the bit is moot.
+<a href=#140 id=140 data-nosnippet>140</a>                </span>keyframe: <span class="bool-val">false</span>,
+<a href=#141 id=141 data-nosnippet>141</a>                frame_seq,
+<a href=#142 id=142 data-nosnippet>142</a>                timestamp_us: packet.timestamp_us.micros(),
+<a href=#143 id=143 data-nosnippet>143</a>                data: packet.data,
+<a href=#144 id=144 data-nosnippet>144</a>            };
+<a href=#145 id=145 data-nosnippet>145</a>            frame_seq = frame_seq.wrapping_add(<span class="number">1</span>);
+<a href=#146 id=146 data-nosnippet>146</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = publish_audio_one(<span class="kw-2">&amp;mut </span>publisher, <span class="kw-2">&amp;</span>frame) {
+<a href=#147 id=147 data-nosnippet>147</a>                <span class="macro">tracing::warn!</span>(%e, <span class="string">"mic: publish frame failed"</span>);
+<a href=#148 id=148 data-nosnippet>148</a>            } <span class="kw">else </span>{
+<a href=#149 id=149 data-nosnippet>149</a>                <span class="comment">// RTC-debug: one Opus mic frame published (drives outbound send_kbps).
+<a href=#150 id=150 data-nosnippet>150</a>                </span>stats.audio_sent(bytes);
+<a href=#151 id=151 data-nosnippet>151</a>            }
+<a href=#152 id=152 data-nosnippet>152</a>        }
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="comment">// The capture channel closed: capture died, or the call is tearing down. Either
+<a href=#154 id=154 data-nosnippet>154</a>        // way nothing further is encoded, so the gauge must not stay latched — a dead
+<a href=#155 id=155 data-nosnippet>155</a>        // capture path reading `suppressed` is the report blaming a quiet room for a
+<a href=#156 id=156 data-nosnippet>156</a>        // broken mic. (`silence_mic_meter` holds the identical invariant for the level.)
+<a href=#157 id=157 data-nosnippet>157</a>        </span>stats.set_audio_suppressed(<span class="bool-val">false</span>);
+<a href=#158 id=158 data-nosnippet>158</a>    })
+<a href=#159 id=159 data-nosnippet>159</a>}
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a><span class="doccomment">/// Publish one AUDIO frame via the ordered-substream path (count-rolled groups), so
+<a href=#162 id=162 data-nosnippet>162</a>/// successive Opus frames ride one in-order QUIC stream instead of one stream per frame
+<a href=#163 id=163 data-nosnippet>163</a>/// (the source of the cross-stream reordering). Use for mic + screen-audio.
+<a href=#164 id=164 data-nosnippet>164</a></span><span class="kw">fn </span>publish_audio_one(
+<a href=#165 id=165 data-nosnippet>165</a>    publisher: <span class="kw-2">&amp;mut </span>MoqTrackPublisher,
+<a href=#166 id=166 data-nosnippet>166</a>    frame: <span class="kw-2">&amp;</span>WireFrame,
+<a href=#167 id=167 data-nosnippet>167</a>) -&gt; std::result::Result&lt;(), String&gt; {
+<a href=#168 id=168 data-nosnippet>168</a>    publisher
+<a href=#169 id=169 data-nosnippet>169</a>        .publish_audio_frame(frame)
+<a href=#170 id=170 data-nosnippet>170</a>        .map_err(|e| e.to_string())
+<a href=#171 id=171 data-nosnippet>171</a>}
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a><span class="doccomment">/// Open the mic per `capture_source`: real hardware, or (behind `synthetic`)
+<a href=#174 id=174 data-nosnippet>174</a>/// the engine's mic-free test tone. The one seam every (re)open site in
+<a href=#175 id=175 data-nosnippet>175</a>/// [`mic_capture_loop`] routes through, so a headless build never needs its
+<a href=#176 id=176 data-nosnippet>176</a>/// own copy of the branch.
+<a href=#177 id=177 data-nosnippet>177</a>///
+<a href=#178 id=178 data-nosnippet>178</a>/// The error is PROPAGATED (it used to be `.ok()`-swallowed): a TCC-denied mic is
+<a href=#179 id=179 data-nosnippet>179</a>/// a typed [`AudioError::PermissionDenied`] the loop reports and paces off, not an
+<a href=#180 id=180 data-nosnippet>180</a>/// indistinguishable `None` that spins silently forever.
+<a href=#181 id=181 data-nosnippet>181</a></span><span class="kw">fn </span>open_mic(
+<a href=#182 id=182 data-nosnippet>182</a>    choice: <span class="kw-2">&amp;</span>DeviceChoice&lt;MicId&gt;,
+<a href=#183 id=183 data-nosnippet>183</a>    clock: CaptureClock,
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>capture_source: CaptureSource,
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>synthetic_silence: <span class="kw-2">&amp;</span>SyntheticSilence,
+<a href=#186 id=186 data-nosnippet>186</a>) -&gt; std::result::Result&lt;hound_engine::api::Microphone, hound_engine::error::AudioError&gt; {
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="kw">if </span><span class="macro">capture_source !</span>= CaptureSource::Default {
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="comment">// The handle is shared, so a reopen (device fault, hot-swap) rejoins the same
+<a href=#190 id=190 data-nosnippet>190</a>        // live switch rather than resetting a bot to "talking" mid-scenario.
+<a href=#191 id=191 data-nosnippet>191</a>        </span><span class="kw">return </span>Engine::new().open_synthetic_microphone(clock, synthetic_silence.clone());
+<a href=#192 id=192 data-nosnippet>192</a>    }
+<a href=#193 id=193 data-nosnippet>193</a>    Engine::new().open_microphone(choice, clock)
+<a href=#194 id=194 data-nosnippet>194</a>}
+<a href=#195 id=195 data-nosnippet>195</a>
+<a href=#196 id=196 data-nosnippet>196</a><span class="doccomment">/// Force the mic meter to silence.
+<a href=#197 id=197 data-nosnippet>197</a>///
+<a href=#198 id=198 data-nosnippet>198</a>/// THE invariant, and it is a privacy one: **the meter must read 0 whenever capture
+<a href=#199 id=199 data-nosnippet>199</a>/// is not delivering.** The speaking reporter (`call::speaking`) samples this very
+<a href=#200 id=200 data-nosnippet>200</a>/// watch and re-asserts whatever band it reads every 600 ms for as long as it is
+<a href=#201 id=201 data-nosnippet>201</a>/// non-zero — so a level left latched by a dead BT mic or a mute that raced a
+<a href=#202 id=202 data-nosnippet>202</a>/// capture stall does not merely mis-draw a bar, it makes its owner the call's
+<a href=#203 id=203 data-nosnippet>203</a>/// permanent dominant speaker and leaks their pre-mute level to every peer. Every
+<a href=#204 id=204 data-nosnippet>204</a>/// non-delivering path (mute, open failure, capture fault, no device) calls this.
+<a href=#205 id=205 data-nosnippet>205</a></span><span class="kw">fn </span>silence_mic_meter(levels: <span class="kw-2">&amp;</span>watch::Sender&lt;LevelsView&gt;, stats: <span class="kw-2">&amp;</span>CallStats) {
+<a href=#206 id=206 data-nosnippet>206</a>    levels.send_modify(|l| l.mic = <span class="number">0.0</span>);
+<a href=#207 id=207 data-nosnippet>207</a>    stats.set_self_level(<span class="number">0.0</span>);
+<a href=#208 id=208 data-nosnippet>208</a>}
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a><span class="doccomment">/// Full-scale RMS (0..1) to dBFS, for the mic-stage gauges. `-inf` on digital
+<a href=#211 id=211 data-nosnippet>211</a>/// silence is fine — the stats layer clamps it to its -100 dBFS floor.
+<a href=#212 id=212 data-nosnippet>212</a></span><span class="kw">fn </span>dbfs(rms: f32) -&gt; f32 {
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="number">20.0 </span>* rms.log10()
+<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a><span class="doccomment">/// The mic capture loop: pull PCM, process (AEC/NS/AGC), gate on mute, meter the
+<a href=#217 id=217 data-nosnippet>217</a>/// level, forward to the encoder. Hot-swaps the device when `device_rx` changes;
+<a href=#218 id=218 data-nosnippet>218</a>/// re-opens on error.
+<a href=#219 id=219 data-nosnippet>219</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#220 id=220 data-nosnippet>220</a></span><span class="kw">fn </span>mic_capture_loop(
+<a href=#221 id=221 data-nosnippet>221</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#222 id=222 data-nosnippet>222</a>    clock: CaptureClock,
+<a href=#223 id=223 data-nosnippet>223</a>    apm: <span class="prelude-ty">Option</span>&lt;Arc&lt;Apm&gt;&gt;,
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw-2">mut </span>device_rx: watch::Receiver&lt;DeviceChoice&lt;MicId&gt;&gt;,
+<a href=#225 id=225 data-nosnippet>225</a>    pcm_tx: tokio::sync::mpsc::Sender&lt;hound_engine::types::PcmFrame&gt;,
+<a href=#226 id=226 data-nosnippet>226</a>    mute: Arc&lt;MuteFlags&gt;,
+<a href=#227 id=227 data-nosnippet>227</a>    levels: watch::Sender&lt;LevelsView&gt;,
+<a href=#228 id=228 data-nosnippet>228</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>capture_source: CaptureSource,
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)] </span>synthetic_silence: SyntheticSilence,
+<a href=#231 id=231 data-nosnippet>231</a>) {
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">use </span>hound_engine::api::level_from_rms;
+<a href=#233 id=233 data-nosnippet>233</a>
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">let </span><span class="kw-2">mut </span>choice = device_rx.borrow_and_update().clone();
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="comment">// The device is opened from ONE place (top of the loop), so every open — first,
+<a href=#236 id=236 data-nosnippet>236</a>    // hot-swap, warmup, post-fault — reports and paces through the same policy.
+<a href=#237 id=237 data-nosnippet>237</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>mic: <span class="prelude-ty">Option</span>&lt;hound_engine::api::Microphone&gt; = <span class="prelude-val">None</span>;
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">let </span><span class="kw-2">mut </span>warmup = MicRouteWarmup { due: <span class="prelude-val">None </span>};
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="comment">// Cleared for the reopen the warmup itself triggers: one warmup per open cycle
+<a href=#240 id=240 data-nosnippet>240</a>    // (re-arming there would reopen the device every ROUTE_WARMUP_DELAY forever).
+<a href=#241 id=241 data-nosnippet>241</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>arm_warmup = <span class="bool-val">true</span>;
+<a href=#242 id=242 data-nosnippet>242</a>    <span class="comment">// Open-failure reporting + retry cadence. A denied mic used to be swallowed by
+<a href=#243 id=243 data-nosnippet>243</a>    // `.ok()` (silent 200 ms spin, nothing in the logs or Sentry); now it reports
+<a href=#244 id=244 data-nosnippet>244</a>    // once per transition and retries slowly, since the grant can still arrive.
+<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>open_retry = OpenRetry::default();
+<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">let </span><span class="kw-2">mut </span>silence = MicSilenceWatch::default();
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="comment">// Last capture-ring overflow total seen from the CURRENT device. The counter is
+<a href=#248 id=248 data-nosnippet>248</a>    // per-open, so a value below the last read means a reopen/hot-swap minted a fresh
+<a href=#249 id=249 data-nosnippet>249</a>    // one — count it whole rather than under-reporting until it passes the old total.
+<a href=#250 id=250 data-nosnippet>250</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>last_overflow: u64 = <span class="number">0</span>;
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="comment">// Mute-edge memory for the APM's capture-output-used hint (`None` until the
+<a href=#252 id=252 data-nosnippet>252</a>    // first frame so the initial state is always asserted).
+<a href=#253 id=253 data-nosnippet>253</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>apm_output_used: <span class="prelude-ty">Option</span>&lt;bool&gt; = <span class="prelude-val">None</span>;
+<a href=#254 id=254 data-nosnippet>254</a>
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">if </span>device_rx.has_changed().unwrap_or(<span class="bool-val">false</span>) {
+<a href=#257 id=257 data-nosnippet>257</a>            choice = device_rx.borrow_and_update().clone();
+<a href=#258 id=258 data-nosnippet>258</a>            drop(mic.take());
+<a href=#259 id=259 data-nosnippet>259</a>            <span class="comment">// Disarm the OLD device's pending warmup: were it left due, it could
+<a href=#260 id=260 data-nosnippet>260</a>            // fire in the gap before the reopen below and burn the NEW device's
+<a href=#261 id=261 data-nosnippet>261</a>            // one warmup cycle on a device it never belonged to.
+<a href=#262 id=262 data-nosnippet>262</a>            </span>warmup = MicRouteWarmup { due: <span class="prelude-val">None </span>};
+<a href=#263 id=263 data-nosnippet>263</a>            arm_warmup = <span class="bool-val">true</span>;
+<a href=#264 id=264 data-nosnippet>264</a>        }
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="comment">// BT/HFP route warmup: one reopen after the SCO link has had time to
+<a href=#266 id=266 data-nosnippet>266</a>        // settle, mirroring the playout side's warmup in the mix bus.
+<a href=#267 id=267 data-nosnippet>267</a>        </span><span class="kw">if </span>warmup.fire(Instant::now()) {
+<a href=#268 id=268 data-nosnippet>268</a>            <span class="macro">tracing::info!</span>(<span class="string">"voice: warmup reopen of non-48k (BT/HFP) mic — silent-route fix"</span>);
+<a href=#269 id=269 data-nosnippet>269</a>            drop(mic.take());
+<a href=#270 id=270 data-nosnippet>270</a>            arm_warmup = <span class="bool-val">false</span>;
+<a href=#271 id=271 data-nosnippet>271</a>        }
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">if </span>mic.is_none() {
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">match </span>open_mic(
+<a href=#274 id=274 data-nosnippet>274</a>                <span class="kw-2">&amp;</span>choice,
+<a href=#275 id=275 data-nosnippet>275</a>                clock,
+<a href=#276 id=276 data-nosnippet>276</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#277 id=277 data-nosnippet>277</a>                </span>capture_source,
+<a href=#278 id=278 data-nosnippet>278</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#279 id=279 data-nosnippet>279</a>                </span><span class="kw-2">&amp;</span>synthetic_silence,
+<a href=#280 id=280 data-nosnippet>280</a>            ) {
+<a href=#281 id=281 data-nosnippet>281</a>                <span class="prelude-val">Ok</span>(m) =&gt; {
+<a href=#282 id=282 data-nosnippet>282</a>                    <span class="comment">// The rate is the one fact that identifies which route we actually
+<a href=#283 id=283 data-nosnippet>283</a>                    // landed on after a fault/hot-swap reopen (48 k built-in vs 24 k HFP)
+<a href=#284 id=284 data-nosnippet>284</a>                    // — and it is what the capture resampler is pinned to for this open.
+<a href=#285 id=285 data-nosnippet>285</a>                    // Every open used to be silent, so a mid-call device change left no
+<a href=#286 id=286 data-nosnippet>286</a>                    // trace at all.
+<a href=#287 id=287 data-nosnippet>287</a>                    </span><span class="macro">tracing::debug!</span>(
+<a href=#288 id=288 data-nosnippet>288</a>                        track = <span class="string">"mic"</span>,
+<a href=#289 id=289 data-nosnippet>289</a>                        device_rate = m.device_rate(),
+<a href=#290 id=290 data-nosnippet>290</a>                        <span class="string">"mic: capture device opened"
+<a href=#291 id=291 data-nosnippet>291</a>                    </span>);
+<a href=#292 id=292 data-nosnippet>292</a>                    <span class="kw">if </span>arm_warmup {
+<a href=#293 id=293 data-nosnippet>293</a>                        warmup = MicRouteWarmup::arm(m.device_rate(), Instant::now());
+<a href=#294 id=294 data-nosnippet>294</a>                    }
+<a href=#295 id=295 data-nosnippet>295</a>                    arm_warmup = <span class="bool-val">true</span>;
+<a href=#296 id=296 data-nosnippet>296</a>                    mic = <span class="prelude-val">Some</span>(m);
+<a href=#297 id=297 data-nosnippet>297</a>                    open_retry.opened();
+<a href=#298 id=298 data-nosnippet>298</a>                }
+<a href=#299 id=299 data-nosnippet>299</a>                <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#300 id=300 data-nosnippet>300</a>                    <span class="comment">// Classify, then report ONCE per transition into this failure
+<a href=#301 id=301 data-nosnippet>301</a>                    // class — the Sentry bridge promotes `error!` to an event, so a
+<a href=#302 id=302 data-nosnippet>302</a>                    // sticky denial must not log per tick. Keep looping either way:
+<a href=#303 id=303 data-nosnippet>303</a>                    // the device (or the grant) can still show up.
+<a href=#304 id=304 data-nosnippet>304</a>                    </span><span class="kw">let </span>failure = OpenFailure::of_audio(<span class="kw-2">&amp;</span>e);
+<a href=#305 id=305 data-nosnippet>305</a>                    <span class="kw">let </span>(log, wait) = open_retry.failed(failure);
+<a href=#306 id=306 data-nosnippet>306</a>                    <span class="kw">if </span>log {
+<a href=#307 id=307 data-nosnippet>307</a>                        <span class="kw">match </span>failure {
+<a href=#308 id=308 data-nosnippet>308</a>                            OpenFailure::PermissionDenied =&gt; <span class="macro">tracing::error!</span>(
+<a href=#309 id=309 data-nosnippet>309</a>                                track = <span class="string">"mic"</span>,
+<a href=#310 id=310 data-nosnippet>310</a>                                %e,
+<a href=#311 id=311 data-nosnippet>311</a>                                <span class="string">"microphone permission denied — enable hound in System Settings → \
+<a href=#312 id=312 data-nosnippet>312</a>                                 Privacy &amp; Security → Microphone"
+<a href=#313 id=313 data-nosnippet>313</a>                            </span>),
+<a href=#314 id=314 data-nosnippet>314</a>                            OpenFailure::Other =&gt; <span class="macro">tracing::warn!</span>(
+<a href=#315 id=315 data-nosnippet>315</a>                                track = <span class="string">"mic"</span>,
+<a href=#316 id=316 data-nosnippet>316</a>                                %e,
+<a href=#317 id=317 data-nosnippet>317</a>                                <span class="string">"mic: microphone open failed — retrying"
+<a href=#318 id=318 data-nosnippet>318</a>                            </span>),
+<a href=#319 id=319 data-nosnippet>319</a>                        }
+<a href=#320 id=320 data-nosnippet>320</a>                    }
+<a href=#321 id=321 data-nosnippet>321</a>                    <span class="comment">// Nothing is being captured, so nothing may still be metered.
+<a href=#322 id=322 data-nosnippet>322</a>                    </span>silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
+<a href=#323 id=323 data-nosnippet>323</a>                    std::thread::sleep(wait);
+<a href=#324 id=324 data-nosnippet>324</a>                    <span class="kw">continue</span>;
+<a href=#325 id=325 data-nosnippet>325</a>                }
+<a href=#326 id=326 data-nosnippet>326</a>            }
+<a href=#327 id=327 data-nosnippet>327</a>        }
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(cap) = mic.as_mut() <span class="kw">else </span>{
+<a href=#329 id=329 data-nosnippet>329</a>            silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
+<a href=#330 id=330 data-nosnippet>330</a>            <span class="kw">continue</span>;
+<a href=#331 id=331 data-nosnippet>331</a>        };
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cap.next_frame()));
+<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">match </span>pulled {
+<a href=#334 id=334 data-nosnippet>334</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>frame)) =&gt; {
+<a href=#335 id=335 data-nosnippet>335</a>                <span class="comment">// RTC-debug: one PCM frame captured from the mic device, plus any
+<a href=#336 id=336 data-nosnippet>336</a>                // samples the capture ring dropped since the last frame — the ONLY
+<a href=#337 id=337 data-nosnippet>337</a>                // local signal that the far end is hearing chopped words.
+<a href=#338 id=338 data-nosnippet>338</a>                </span>stats.audio_captured();
+<a href=#339 id=339 data-nosnippet>339</a>                <span class="kw">let </span>overflow = cap.capture_overflow_samples();
+<a href=#340 id=340 data-nosnippet>340</a>                stats.capture_overflowed(<span class="kw">if </span>overflow &gt;= last_overflow {
+<a href=#341 id=341 data-nosnippet>341</a>                    overflow - last_overflow
+<a href=#342 id=342 data-nosnippet>342</a>                } <span class="kw">else </span>{
+<a href=#343 id=343 data-nosnippet>343</a>                    overflow
+<a href=#344 id=344 data-nosnippet>344</a>                });
+<a href=#345 id=345 data-nosnippet>345</a>                last_overflow = overflow;
+<a href=#346 id=346 data-nosnippet>346</a>                <span class="comment">// The dead-route detector reads the RAW frame — it keys on
+<a href=#347 id=347 data-nosnippet>347</a>                // bit-exact device zeros, which the APM's dither/HPF would erase.
+<a href=#348 id=348 data-nosnippet>348</a>                </span><span class="kw">if </span>silence.observe(<span class="kw-2">&amp;</span>frame.samples) {
+<a href=#349 id=349 data-nosnippet>349</a>                    <span class="macro">tracing::warn!</span>(
+<a href=#350 id=350 data-nosnippet>350</a>                        device_rate = cap.device_rate(),
+<a href=#351 id=351 data-nosnippet>351</a>                        <span class="string">"voice: mic delivering PURE SILENCE (~3 s of bit-exact zeros) — \
+<a href=#352 id=352 data-nosnippet>352</a>                         dead capture route (BT/SCO not live, permission, or a silent \
+<a href=#353 id=353 data-nosnippet>353</a>                         virtual device)"
+<a href=#354 id=354 data-nosnippet>354</a>                    </span>);
+<a href=#355 id=355 data-nosnippet>355</a>                }
+<a href=#356 id=356 data-nosnippet>356</a>                <span class="kw">let </span>muted = mute.mic.load(Ordering::Relaxed);
+<a href=#357 id=357 data-nosnippet>357</a>                <span class="comment">// Capture processing runs on EVERY frame, muted included, and
+<a href=#358 id=358 data-nosnippet>358</a>                // before the mute gate: AEC3's render swap-queue is drained by
+<a href=#359 id=359 data-nosnippet>359</a>                // capture calls and its delay tracking (and AGC2's speech-level
+<a href=#360 id=360 data-nosnippet>360</a>                // estimate) need the 10 ms cadence — skipping during mute means
+<a href=#361 id=361 data-nosnippet>361</a>                // an echo burst and wrong gain on every unmute. Muted frames are
+<a href=#362 id=362 data-nosnippet>362</a>                // still dropped below, so nothing processed ever leaves. The
+<a href=#363 id=363 data-nosnippet>363</a>                // output-used hint (on mute edges) freezes AGC2's adaptation so a
+<a href=#364 id=364 data-nosnippet>364</a>                // long mute over keyboard clatter cannot retune the speech gain.
+<a href=#365 id=365 data-nosnippet>365</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(apm) = apm.as_ref() {
+<a href=#366 id=366 data-nosnippet>366</a>                    <span class="kw">if </span><span class="macro">apm_output_used !</span>= <span class="prelude-val">Some</span>(!muted) {
+<a href=#367 id=367 data-nosnippet>367</a>                        apm.set_capture_output_used(!muted);
+<a href=#368 id=368 data-nosnippet>368</a>                        apm_output_used = <span class="prelude-val">Some</span>(!muted);
+<a href=#369 id=369 data-nosnippet>369</a>                    }
+<a href=#370 id=370 data-nosnippet>370</a>                    <span class="kw">let </span>raw_rms = frame.rms();
+<a href=#371 id=371 data-nosnippet>371</a>                    apm.process_capture(<span class="kw-2">&amp;mut </span>frame);
+<a href=#372 id=372 data-nosnippet>372</a>                    <span class="kw">let </span>clipped = frame
+<a href=#373 id=373 data-nosnippet>373</a>                        .samples
+<a href=#374 id=374 data-nosnippet>374</a>                        .iter()
+<a href=#375 id=375 data-nosnippet>375</a>                        .any(|<span class="kw-2">&amp;</span>s| s == i16::MIN || s == i16::MAX);
+<a href=#376 id=376 data-nosnippet>376</a>                    stats.set_mic_stage_levels(dbfs(raw_rms), dbfs(frame.rms()), clipped);
+<a href=#377 id=377 data-nosnippet>377</a>                }
+<a href=#378 id=378 data-nosnippet>378</a>                <span class="kw">if </span>muted {
+<a href=#379 id=379 data-nosnippet>379</a>                    silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
+<a href=#380 id=380 data-nosnippet>380</a>                    <span class="kw">continue</span>;
+<a href=#381 id=381 data-nosnippet>381</a>                }
+<a href=#382 id=382 data-nosnippet>382</a>                <span class="comment">// Metered POST-processing: the bar (and dominant-speaker ranking)
+<a href=#383 id=383 data-nosnippet>383</a>                // reflect what peers actually hear, gain included.
+<a href=#384 id=384 data-nosnippet>384</a>                </span><span class="kw">let </span>level = level_from_rms(frame.rms());
+<a href=#385 id=385 data-nosnippet>385</a>                levels.send_modify(|l| l.mic = level);
+<a href=#386 id=386 data-nosnippet>386</a>                stats.set_self_level(level);
+<a href=#387 id=387 data-nosnippet>387</a>                <span class="kw">let _ </span>= pcm_tx.try_send(frame);
+<a href=#388 id=388 data-nosnippet>388</a>            }
+<a href=#389 id=389 data-nosnippet>389</a>            <span class="kw">_ </span>=&gt; {
+<a href=#390 id=390 data-nosnippet>390</a>                <span class="comment">// The capture ring stopped (the cpal input error callback fired — device
+<a href=#391 id=391 data-nosnippet>391</a>                // gone, config invalidated, or an automatic reroute) or `next_frame`
+<a href=#392 id=392 data-nosnippet>392</a>                // panicked. Rebuilding is REQUIRED: the device rate and the resampler are
+<a href=#393 id=393 data-nosnippet>393</a>                // captured at open, so a stream that silently rerouted to a 24 kHz HFP mic
+<a href=#394 id=394 data-nosnippet>394</a>                // would keep resampling as if it were still 48 k. Announce it — this path
+<a href=#395 id=395 data-nosnippet>395</a>                // used to drop the device and sleep with nothing in the log, so a mid-call
+<a href=#396 id=396 data-nosnippet>396</a>                // mic route change was invisible.
+<a href=#397 id=397 data-nosnippet>397</a>                </span><span class="macro">tracing::info!</span>(
+<a href=#398 id=398 data-nosnippet>398</a>                    track = <span class="string">"mic"</span>,
+<a href=#399 id=399 data-nosnippet>399</a>                    device_rate = mic.as_ref().map(|m| m.device_rate()).unwrap_or(<span class="number">0</span>),
+<a href=#400 id=400 data-nosnippet>400</a>                    <span class="string">"mic: capture stream ended — reopening the device"
+<a href=#401 id=401 data-nosnippet>401</a>                </span>);
+<a href=#402 id=402 data-nosnippet>402</a>                drop(mic.take());
+<a href=#403 id=403 data-nosnippet>403</a>                <span class="comment">// The route is gone; the last level it produced must not outlive it.
+<a href=#404 id=404 data-nosnippet>404</a>                </span>silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
+<a href=#405 id=405 data-nosnippet>405</a>                std::thread::sleep(std::time::Duration::from_millis(<span class="number">200</span>));
+<a href=#406 id=406 data-nosnippet>406</a>            }
+<a href=#407 id=407 data-nosnippet>407</a>        }
+<a href=#408 id=408 data-nosnippet>408</a>    }
+<a href=#409 id=409 data-nosnippet>409</a>}
+<a href=#410 id=410 data-nosnippet>410</a>
+<a href=#411 id=411 data-nosnippet>411</a><span class="doccomment">/// The `!Send` screen APP-AUDIO capture thread: block on the engine `ScreenAudio`
+<a href=#412 id=412 data-nosnippet>412</a>/// (the mic-thread analogue — no APM, no levels, no hot-swap) and forward each 20 ms
+<a href=#413 id=413 data-nosnippet>413</a>/// PCM frame to the publish task. A `next_frame` error/panic is the leg's clean end
+<a href=#414 id=414 data-nosnippet>414</a>/// (its parent screen stream stopped); drop the leg on this owning thread and exit.
+<a href=#415 id=415 data-nosnippet>415</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>screen_audio_capture_loop(
+<a href=#416 id=416 data-nosnippet>416</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#417 id=417 data-nosnippet>417</a>    <span class="kw-2">mut </span>audio: hound_engine::api::ScreenAudio,
+<a href=#418 id=418 data-nosnippet>418</a>    pcm_tx: tokio::sync::mpsc::Sender&lt;hound_engine::types::PcmFrame&gt;,
+<a href=#419 id=419 data-nosnippet>419</a>) {
+<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">let </span><span class="kw-2">mut </span>captured: u64 = <span class="number">0</span>;
+<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| audio.next_frame()));
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">match </span>pulled {
+<a href=#424 id=424 data-nosnippet>424</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(pcm)) =&gt; {
+<a href=#425 id=425 data-nosnippet>425</a>                captured += <span class="number">1</span>;
+<a href=#426 id=426 data-nosnippet>426</a>                <span class="kw">if </span>captured == <span class="number">1 </span>|| captured.is_multiple_of(<span class="number">500</span>) {
+<a href=#427 id=427 data-nosnippet>427</a>                    <span class="macro">tracing::info!</span>(captured, <span class="string">"screen: captured app-audio frames"</span>);
+<a href=#428 id=428 data-nosnippet>428</a>                }
+<a href=#429 id=429 data-nosnippet>429</a>                <span class="kw">let _ </span>= pcm_tx.try_send(pcm); <span class="comment">// drop on backpressure
+<a href=#430 id=430 data-nosnippet>430</a>            </span>}
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
+<a href=#432 id=432 data-nosnippet>432</a>                <span class="macro">tracing::warn!</span>(%e, captured, <span class="string">"screen: app-audio capture ended (error)"</span>);
+<a href=#433 id=433 data-nosnippet>433</a>                <span class="kw">break</span>;
+<a href=#434 id=434 data-nosnippet>434</a>            }
+<a href=#435 id=435 data-nosnippet>435</a>            <span class="prelude-val">Err</span>(_panic) =&gt; {
+<a href=#436 id=436 data-nosnippet>436</a>                <span class="macro">tracing::warn!</span>(captured, <span class="string">"screen: app-audio capture panicked"</span>);
+<a href=#437 id=437 data-nosnippet>437</a>                <span class="kw">break</span>;
+<a href=#438 id=438 data-nosnippet>438</a>            }
+<a href=#439 id=439 data-nosnippet>439</a>        }
+<a href=#440 id=440 data-nosnippet>440</a>    }
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="macro">tracing::info!</span>(captured, <span class="string">"screen: app-audio capture loop stopped"</span>);
+<a href=#442 id=442 data-nosnippet>442</a>    drop(audio);
+<a href=#443 id=443 data-nosnippet>443</a>}
+<a href=#444 id=444 data-nosnippet>444</a>
+<a href=#445 id=445 data-nosnippet>445</a><span class="doccomment">/// The async screen AUDIO publish task: the mic publish path MINUS APM / levels /
+<a href=#446 id=446 data-nosnippet>446</a>/// hot-swap (app audio is not a mic). Opus-encodes each forwarded PCM frame and
+<a href=#447 id=447 data-nosnippet>447</a>/// publishes it on the `screen_audio` track; the receiver plays it on the shared
+<a href=#448 id=448 data-nosnippet>448</a>/// mix bus exactly like a mic.
+<a href=#449 id=449 data-nosnippet>449</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_screen_audio_publish(
+<a href=#450 id=450 data-nosnippet>450</a>    relay: Arc&lt;MoqRelaySession&gt;,
+<a href=#451 id=451 data-nosnippet>451</a>    path: String,
+<a href=#452 id=452 data-nosnippet>452</a>    sender: u16,
+<a href=#453 id=453 data-nosnippet>453</a>    <span class="kw-2">mut </span>pcm_rx: tokio::sync::mpsc::Receiver&lt;hound_engine::types::PcmFrame&gt;,
+<a href=#454 id=454 data-nosnippet>454</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#455 id=455 data-nosnippet>455</a>    mute: Arc&lt;MuteFlags&gt;,
+<a href=#456 id=456 data-nosnippet>456</a>) -&gt; JoinHandle&lt;()&gt; {
+<a href=#457 id=457 data-nosnippet>457</a>    <span class="comment">// App-audio is audio: encode + publish on the RT audio runtime, off the video pool.
+<a href=#458 id=458 data-nosnippet>458</a>    </span>audio_runtime().spawn(<span class="kw">async move </span>{
+<a href=#459 id=459 data-nosnippet>459</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoder = <span class="kw">match </span>OpusEncoder::new(SCREEN_AUDIO_BITRATE, OpusProfile::Music) {
+<a href=#460 id=460 data-nosnippet>460</a>            <span class="prelude-val">Ok</span>(e) =&gt; e,
+<a href=#461 id=461 data-nosnippet>461</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#462 id=462 data-nosnippet>462</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to build app-audio Opus encoder"</span>);
+<a href=#463 id=463 data-nosnippet>463</a>                <span class="kw">return</span>;
+<a href=#464 id=464 data-nosnippet>464</a>            }
+<a href=#465 id=465 data-nosnippet>465</a>        };
+<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">let </span><span class="kw-2">mut </span>publisher = <span class="kw">match </span>relay.publish_track(<span class="kw-2">&amp;</span>path, SCREEN_AUDIO_TRACK, AUDIO_PRIORITY) {
+<a href=#467 id=467 data-nosnippet>467</a>            <span class="prelude-val">Ok</span>(p) =&gt; p,
+<a href=#468 id=468 data-nosnippet>468</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#469 id=469 data-nosnippet>469</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to publish audio track"</span>);
+<a href=#470 id=470 data-nosnippet>470</a>                <span class="kw">return</span>;
+<a href=#471 id=471 data-nosnippet>471</a>            }
+<a href=#472 id=472 data-nosnippet>472</a>        };
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="kw">if </span>publisher.wait_subscribed().<span class="kw">await</span>.is_err() {
+<a href=#474 id=474 data-nosnippet>474</a>            <span class="kw">return</span>;
+<a href=#475 id=475 data-nosnippet>475</a>        }
+<a href=#476 id=476 data-nosnippet>476</a>        <span class="macro">tracing::info!</span>(<span class="string">"screen: app-audio track subscribed — publishing"</span>);
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame_seq = <span class="number">0u32</span>;
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span><span class="kw-2">mut </span>sent: u64 = <span class="number">0</span>;
+<a href=#479 id=479 data-nosnippet>479</a>        <span class="comment">// The same suppression gate as the mic, and today a permanent no-op: the MUSIC
+<a href=#480 id=480 data-nosnippet>480</a>        // profile deliberately runs without DTX (`OpusProfile::dtx`), so a shared
+<a href=#481 id=481 data-nosnippet>481</a>        // track's silence is still coded at full rate and never reaches the DTX size
+<a href=#482 id=482 data-nosnippet>482</a>        // band. It is wired anyway so the two audio publish legs cannot drift — the day
+<a href=#483 id=483 data-nosnippet>483</a>        // the music profile's silence-boundary listening check lands and DTX flips on,
+<a href=#484 id=484 data-nosnippet>484</a>        // app audio inherits suppression with no further change.
+<a href=#485 id=485 data-nosnippet>485</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>silence = SilenceGate::default();
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(pcm) = pcm_rx.recv().<span class="kw">await </span>{
+<a href=#487 id=487 data-nosnippet>487</a>            <span class="comment">// The broadcaster's "share audio" toggle: drop BEFORE encode, so a muted
+<a href=#488 id=488 data-nosnippet>488</a>            // share costs zero CPU and zero wire data. Receivers read the gap as a
+<a href=#489 id=489 data-nosnippet>489</a>            // quiet source (their starve metric is DTX-aware), and un-muting resumes
+<a href=#490 id=490 data-nosnippet>490</a>            // instantly on this same track.
+<a href=#491 id=491 data-nosnippet>491</a>            </span><span class="kw">if </span>mute.screen_audio.load(Ordering::Relaxed) {
+<a href=#492 id=492 data-nosnippet>492</a>                <span class="kw">continue</span>;
+<a href=#493 id=493 data-nosnippet>493</a>            }
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(packet) = encoder.encode(<span class="kw-2">&amp;</span>pcm) <span class="kw">else </span>{
+<a href=#495 id=495 data-nosnippet>495</a>                <span class="kw">continue</span>;
+<a href=#496 id=496 data-nosnippet>496</a>            };
+<a href=#497 id=497 data-nosnippet>497</a>            <span class="kw">let </span>bytes = packet.data.len();
+<a href=#498 id=498 data-nosnippet>498</a>            <span class="kw">if </span>!silence.publish(bytes, Instant::now()) {
+<a href=#499 id=499 data-nosnippet>499</a>                <span class="kw">continue</span>;
+<a href=#500 id=500 data-nosnippet>500</a>            }
+<a href=#501 id=501 data-nosnippet>501</a>            <span class="kw">let </span>frame = WireFrame {
+<a href=#502 id=502 data-nosnippet>502</a>                sender,
+<a href=#503 id=503 data-nosnippet>503</a>                track: TrackKind::ScrAudio,
+<a href=#504 id=504 data-nosnippet>504</a>                codec: WireCodec::Opus,
+<a href=#505 id=505 data-nosnippet>505</a>                <span class="comment">// Count-driven grouping (ordered substream); keyframe bit is moot for audio.
+<a href=#506 id=506 data-nosnippet>506</a>                </span>keyframe: <span class="bool-val">false</span>,
+<a href=#507 id=507 data-nosnippet>507</a>                frame_seq,
+<a href=#508 id=508 data-nosnippet>508</a>                timestamp_us: packet.timestamp_us.micros(),
+<a href=#509 id=509 data-nosnippet>509</a>                data: packet.data,
+<a href=#510 id=510 data-nosnippet>510</a>            };
+<a href=#511 id=511 data-nosnippet>511</a>            frame_seq = frame_seq.wrapping_add(<span class="number">1</span>);
+<a href=#512 id=512 data-nosnippet>512</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = publish_audio_one(<span class="kw-2">&amp;mut </span>publisher, <span class="kw-2">&amp;</span>frame) {
+<a href=#513 id=513 data-nosnippet>513</a>                <span class="macro">tracing::warn!</span>(%e, <span class="string">"screen: publish audio frame failed"</span>);
+<a href=#514 id=514 data-nosnippet>514</a>            } <span class="kw">else </span>{
+<a href=#515 id=515 data-nosnippet>515</a>                <span class="comment">// RTC-debug: one screen app-audio frame published.
+<a href=#516 id=516 data-nosnippet>516</a>                </span>stats.screen_audio_sent(bytes);
+<a href=#517 id=517 data-nosnippet>517</a>                sent += <span class="number">1</span>;
+<a href=#518 id=518 data-nosnippet>518</a>                <span class="kw">if </span>sent == <span class="number">1 </span>|| sent.is_multiple_of(<span class="number">500</span>) {
+<a href=#519 id=519 data-nosnippet>519</a>                    <span class="macro">tracing::info!</span>(sent, <span class="string">"screen: published app-audio frames"</span>);
+<a href=#520 id=520 data-nosnippet>520</a>                }
+<a href=#521 id=521 data-nosnippet>521</a>            }
+<a href=#522 id=522 data-nosnippet>522</a>        }
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="macro">tracing::info!</span>(sent, <span class="string">"screen: app-audio publish ended"</span>);
+<a href=#524 id=524 data-nosnippet>524</a>    })
+<a href=#525 id=525 data-nosnippet>525</a>}
 </code></pre></div></section></main></body></html>
