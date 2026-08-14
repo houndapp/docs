@@ -72,13 +72,13 @@
 <a href=#72 id=72 data-nosnippet>72</a><span class="kw">pub mod </span>speaking;
 <a href=#73 id=73 data-nosnippet>73</a>
 <a href=#74 id=74 data-nosnippet>74</a><span class="kw">pub use </span>adapt::{
-<a href=#75 id=75 data-nosnippet>75</a>    AdaptConfig, AdaptDecision, AdaptSignals, GEOMETRY_REBUILD_DWELL_US, GeometryDwell,
+<a href=#75 id=75 data-nosnippet>75</a>    AdaptConfig, AdaptDecision, AdaptSignals, GEOMETRY_REBUILD_DWELL_US, GeometryDwell, RungTarget,
 <a href=#76 id=76 data-nosnippet>76</a>    VideoAdaptation, fit_encode_area, fit_encode_dims,
 <a href=#77 id=77 data-nosnippet>77</a>};
 <a href=#78 id=78 data-nosnippet>78</a><span class="kw">pub use </span>allocate::{
 <a href=#79 id=79 data-nosnippet>79</a>    BudgetConfig, BudgetObservation, MIN_VIDEO_BUDGET_BPS, TileRequest, TrackDelivery,
 <a href=#80 id=80 data-nosnippet>80</a>    VIDEO_BUDGET_START_BPS, VIDEO_BUDGET_START_CAP_BPS, VideoBudget, allocate_video,
-<a href=#81 id=81 data-nosnippet>81</a>    below_source_cap, demand_ceiling_bps, downlink_deficient, floor_cost_bps, request_bps,
+<a href=#81 id=81 data-nosnippet>81</a>    cpu_crisis_cap, demand_ceiling_bps, downlink_deficient, floor_cost_bps, request_bps,
 <a href=#82 id=82 data-nosnippet>82</a>    served_order,
 <a href=#83 id=83 data-nosnippet>83</a>};
 <a href=#84 id=84 data-nosnippet>84</a><span class="kw">pub use </span>bwe_delay::{DelayBasedBwe, TrendlineEstimator, Usage};
@@ -95,10 +95,10 @@
 <a href=#95 id=95 data-nosnippet>95</a><span class="kw">pub use </span>keyframe::{KeyframeConfig, KeyframeRequester, KeyframeThrottle, KeyframeThrottleConfig};
 <a href=#96 id=96 data-nosnippet>96</a><span class="kw">pub use </span>latency::LatencyHistogram;
 <a href=#97 id=97 data-nosnippet>97</a><span class="kw">pub use </span>layer::{
-<a href=#98 id=98 data-nosnippet>98</a>    CAM_SOURCE_BPS, LOW_RUNG, SCREEN_LOW_RUNG, SCREEN_SOURCE_BPS, SPEAKER_DEMOTE_MIN_PEERS,
-<a href=#99 id=99 data-nosnippet>99</a>    SpatialLayer, THUMB_RUNG, TemporalLayer, VideoRung, VideoSource, low_rung_for_cap,
-<a href=#100 id=100 data-nosnippet>100</a>    most_constrained, rung_bps, source_bps, speaker_adjusted, tile_quality_request, track_kind,
-<a href=#101 id=101 data-nosnippet>101</a>    track_name,
+<a href=#98 id=98 data-nosnippet>98</a>    CAM_SOURCE_BPS, LOW_RUNG, SCREEN_LOW_RUNG, SCREEN_MID_RUNG, SCREEN_SOURCE_BPS,
+<a href=#99 id=99 data-nosnippet>99</a>    SPEAKER_DEMOTE_MIN_PEERS, SpatialLayer, THUMB_RUNG, TemporalLayer, VideoRung, VideoSource,
+<a href=#100 id=100 data-nosnippet>100</a>    low_rung_for_cap, most_constrained, rung_bps, source_bps, speaker_adjusted,
+<a href=#101 id=101 data-nosnippet>101</a>    tile_quality_request, track_kind, track_name,
 <a href=#102 id=102 data-nosnippet>102</a>};
 <a href=#103 id=103 data-nosnippet>103</a><span class="kw">pub use </span>packet::{Codec, HEADER_LEN, PROTOCOL_VERSION, PacketError, PacketHeader, TrackKind};
 <a href=#104 id=104 data-nosnippet>104</a><span class="kw">pub use </span>recovery::{NackConfig, NackGenerator, RetransmitBuffer};

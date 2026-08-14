@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GEOMETRY_REBUILD_DWELL_US"],"fn":["even_min2","fit_encode_area","fit_encode_dims"],"struct":["AdaptConfig","AdaptDecision","AdaptSignals","GeometryDwell","RttBaseline","VideoAdaptation"]};
+window.SIDEBAR_ITEMS = {"constant":["GEOMETRY_REBUILD_DWELL_US"],"enum":["RungTarget"],"fn":["even_min2","fit_encode_area","fit_encode_dims"],"struct":["AdaptConfig","AdaptDecision","AdaptSignals","GeometryDwell","RttBaseline","VideoAdaptation"]};
