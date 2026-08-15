@@ -4,7 +4,7 @@ patent grant covers <strong>their</strong> binary module, and only when it is <e
 at the time the product is installed on the user’s device</em> — a codec we
 compiled ourselves, or one we bundled into the release artifact, carries no
 grant at all. So the app fetches the blob itself, on first run, straight from
-Cisco, and hands it to the engine (<a href="../../hound_engine/api/struct.Engine.html#method.set_openh264_blob" title="method hound_engine::api::Engine::set_openh264_blob"><code>hound_engine::api::Engine::set_openh264_blob</code></a>).</p>
+Cisco, and hands it to the engine ([<code>hound_engine::api::Engine::set_openh264_blob</code>]).</p>
 <h3 id="where-it-fits-in-startup"><a class="doc-anchor" href="#where-it-fits-in-startup">§</a>Where it fits in startup</h3>
 <p><a href="fn.spawn_install.html" title="fn hound_client::openh264::spawn_install"><code>spawn_install</code></a> is fire-and-forget from <code>init_app</code>: the download must never
 be on the path to the first frame (the Dart bootstrap has a 30 s wedge

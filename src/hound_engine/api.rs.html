@@ -476,312 +476,316 @@
 <a href=#476 id=476 data-nosnippet>476</a>    }
 <a href=#477 id=477 data-nosnippet>477</a>
 <a href=#478 id=478 data-nosnippet>478</a>    <span class="doccomment">/// Build a video decoder for `codec` (by **wire codec**), preferring hardware:
-<a href=#479 id=479 data-nosnippet>479</a>    /// HW VideoToolbox on Apple (H.264/HEVC/AV1), SW openh264 (H.264 only)
-<a href=#480 id=480 data-nosnippet>480</a>    /// elsewhere. HEVC/AV1 off Apple are `Unsupported` — the receive pipeline
-<a href=#481 id=481 data-nosnippet>481</a>    /// drains-and-drops (audio still plays) rather than failing the call.
-<a href=#482 id=482 data-nosnippet>482</a>    ///
-<a href=#483 id=483 data-nosnippet>483</a>    /// Platform dispatch lives in [`crate::platform::VideoDecoderBackend`] — this
-<a href=#484 id=484 data-nosnippet>484</a>    /// is pure delegation. Not `Send`: lives on the decode thread.
-<a href=#485 id=485 data-nosnippet>485</a>    </span><span class="kw">pub fn </span>video_decoder(<span class="self">self</span>, codec: VideoCodec) -&gt; <span class="prelude-ty">Result</span>&lt;VideoDecoder, CaptureError&gt; {
-<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw">crate</span>::platform::VideoDecoderBackend::open(codec).map(VideoDecoder)
-<a href=#487 id=487 data-nosnippet>487</a>    }
-<a href=#488 id=488 data-nosnippet>488</a>}
-<a href=#489 id=489 data-nosnippet>489</a>
-<a href=#490 id=490 data-nosnippet>490</a><span class="doccomment">/// A real-time video encoder for a negotiated codec, hiding whether the hardware
-<a href=#491 id=491 data-nosnippet>491</a>/// (VideoToolbox: H.264 / HEVC / AV1) or the software (openh264, H.264 only) path
-<a href=#492 id=492 data-nosnippet>492</a>/// was selected. Obtained from [`Engine::video_encoder`] (or the H.264-specific
-<a href=#493 id=493 data-nosnippet>493</a>/// [`Engine::h264_encoder`]); query [`VideoEncode::codec`] for the wire codec.
-<a href=#494 id=494 data-nosnippet>494</a>/// Not `Send`: construct, drive, and drop on the one encode thread.
-<a href=#495 id=495 data-nosnippet>495</a>///
-<a href=#496 id=496 data-nosnippet>496</a>/// A thin newtype over the platform-selected [`crate::platform::VideoEncoderBackend`]
-<a href=#497 id=497 data-nosnippet>497</a>/// (a static-dispatch enum on Apple, the SW encoder elsewhere); every method
-<a href=#498 id=498 data-nosnippet>498</a>/// delegates, so there is no `dyn` on the per-frame hot path and no platform
-<a href=#499 id=499 data-nosnippet>499</a>/// `cfg` in this facade.
-<a href=#500 id=500 data-nosnippet>500</a></span><span class="kw">pub struct </span>VideoEncoder(<span class="kw">crate</span>::platform::VideoEncoderBackend);
-<a href=#501 id=501 data-nosnippet>501</a>
-<a href=#502 id=502 data-nosnippet>502</a><span class="kw">impl </span><span class="kw">crate</span>::backend::sealed::Sealed <span class="kw">for </span>VideoEncoder {}
+<a href=#479 id=479 data-nosnippet>479</a>    /// HW VideoToolbox on Apple (H.264/HEVC/AV1, degrading H.264 to the SW
+<a href=#480 id=480 data-nosnippet>480</a>    /// openh264 floor if a decode session cannot be created mid-stream), SW
+<a href=#481 id=481 data-nosnippet>481</a>    /// openh264 (H.264 only) elsewhere. HEVC/AV1 off Apple are `Unsupported` — the
+<a href=#482 id=482 data-nosnippet>482</a>    /// receive pipeline drains-and-drops (audio still plays) rather than failing
+<a href=#483 id=483 data-nosnippet>483</a>    /// the call.
+<a href=#484 id=484 data-nosnippet>484</a>    ///
+<a href=#485 id=485 data-nosnippet>485</a>    /// Platform dispatch lives in [`crate::platform::VideoDecoderBackend`] — this
+<a href=#486 id=486 data-nosnippet>486</a>    /// is pure delegation. Not `Send`: lives on the decode thread.
+<a href=#487 id=487 data-nosnippet>487</a>    </span><span class="kw">pub fn </span>video_decoder(<span class="self">self</span>, codec: VideoCodec) -&gt; <span class="prelude-ty">Result</span>&lt;VideoDecoder, CaptureError&gt; {
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="kw">crate</span>::platform::VideoDecoderBackend::open(codec).map(VideoDecoder)
+<a href=#489 id=489 data-nosnippet>489</a>    }
+<a href=#490 id=490 data-nosnippet>490</a>}
+<a href=#491 id=491 data-nosnippet>491</a>
+<a href=#492 id=492 data-nosnippet>492</a><span class="doccomment">/// A real-time video encoder for a negotiated codec, hiding whether the hardware
+<a href=#493 id=493 data-nosnippet>493</a>/// (VideoToolbox: H.264 / HEVC / AV1) or the software (openh264, H.264 only) path
+<a href=#494 id=494 data-nosnippet>494</a>/// was selected. Obtained from [`Engine::video_encoder`] (or the H.264-specific
+<a href=#495 id=495 data-nosnippet>495</a>/// [`Engine::h264_encoder`]); query [`VideoEncode::codec`] for the wire codec.
+<a href=#496 id=496 data-nosnippet>496</a>/// Not `Send`: construct, drive, and drop on the one encode thread.
+<a href=#497 id=497 data-nosnippet>497</a>///
+<a href=#498 id=498 data-nosnippet>498</a>/// A thin newtype over the platform-selected [`crate::platform::VideoEncoderBackend`]
+<a href=#499 id=499 data-nosnippet>499</a>/// (a static-dispatch enum on Apple, the SW encoder elsewhere); every method
+<a href=#500 id=500 data-nosnippet>500</a>/// delegates, so there is no `dyn` on the per-frame hot path and no platform
+<a href=#501 id=501 data-nosnippet>501</a>/// `cfg` in this facade.
+<a href=#502 id=502 data-nosnippet>502</a></span><span class="kw">pub struct </span>VideoEncoder(<span class="kw">crate</span>::platform::VideoEncoderBackend);
 <a href=#503 id=503 data-nosnippet>503</a>
-<a href=#504 id=504 data-nosnippet>504</a><span class="kw">impl </span>VideoEncode <span class="kw">for </span>VideoEncoder {
-<a href=#505 id=505 data-nosnippet>505</a>    <span class="kw">fn </span>codec(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VideoCodec {
-<a href=#506 id=506 data-nosnippet>506</a>        <span class="self">self</span>.<span class="number">0</span>.codec()
-<a href=#507 id=507 data-nosnippet>507</a>    }
-<a href=#508 id=508 data-nosnippet>508</a>    <span class="kw">fn </span>backend(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#509 id=509 data-nosnippet>509</a>        <span class="self">self</span>.<span class="number">0</span>.backend()
-<a href=#510 id=510 data-nosnippet>510</a>    }
-<a href=#511 id=511 data-nosnippet>511</a>    <span class="kw">fn </span>takes_surface_input(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#512 id=512 data-nosnippet>512</a>        <span class="self">self</span>.<span class="number">0</span>.takes_surface_input()
-<a href=#513 id=513 data-nosnippet>513</a>    }
-<a href=#514 id=514 data-nosnippet>514</a>    <span class="kw">fn </span>encode(
-<a href=#515 id=515 data-nosnippet>515</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#516 id=516 data-nosnippet>516</a>        frame: <span class="kw-2">&amp;</span>RawFrame,
-<a href=#517 id=517 data-nosnippet>517</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">crate</span>::types::EncodedChunk&gt;, CaptureError&gt; {
-<a href=#518 id=518 data-nosnippet>518</a>        <span class="self">self</span>.<span class="number">0</span>.encode(frame)
-<a href=#519 id=519 data-nosnippet>519</a>    }
-<a href=#520 id=520 data-nosnippet>520</a>    <span class="kw">fn </span>request_keyframe(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#521 id=521 data-nosnippet>521</a>        <span class="self">self</span>.<span class="number">0</span>.request_keyframe()
-<a href=#522 id=522 data-nosnippet>522</a>    }
-<a href=#523 id=523 data-nosnippet>523</a>    <span class="kw">fn </span>set_bitrate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bitrate: Bitrate) -&gt; <span class="prelude-ty">Result</span>&lt;(), CaptureError&gt; {
-<a href=#524 id=524 data-nosnippet>524</a>        <span class="self">self</span>.<span class="number">0</span>.set_bitrate(bitrate)
-<a href=#525 id=525 data-nosnippet>525</a>    }
-<a href=#526 id=526 data-nosnippet>526</a>    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">crate</span>::types::EncodedChunk&gt;, CaptureError&gt; {
-<a href=#527 id=527 data-nosnippet>527</a>        <span class="self">self</span>.<span class="number">0</span>.flush()
-<a href=#528 id=528 data-nosnippet>528</a>    }
-<a href=#529 id=529 data-nosnippet>529</a>}
-<a href=#530 id=530 data-nosnippet>530</a>
-<a href=#531 id=531 data-nosnippet>531</a><span class="doccomment">/// A running camera: a started, platform-selected video capture delivering
-<a href=#532 id=532 data-nosnippet>532</a>/// I420 frames at the requested encode geometry. Obtained from
-<a href=#533 id=533 data-nosnippet>533</a>/// [`Engine::open_camera`]; dropping it stops the session and releases the
-<a href=#534 id=534 data-nosnippet>534</a>/// device (on the owning thread — the `!Send` contract).
-<a href=#535 id=535 data-nosnippet>535</a></span><span class="kw">pub struct </span>Camera(CameraInner);
-<a href=#536 id=536 data-nosnippet>536</a>
-<a href=#537 id=537 data-nosnippet>537</a><span class="doccomment">/// The concrete capture behind a [`Camera`]: the compile-time-selected platform
-<a href=#538 id=538 data-nosnippet>538</a>/// backend, or (behind `synthetic`) the camera-free test source. An enum rather
-<a href=#539 id=539 data-nosnippet>539</a>/// than `Box&lt;dyn VideoCapture&gt;` — the arm set is closed and known at compile
-<a href=#540 id=540 data-nosnippet>540</a>/// time, so dispatch stays static and every existing [`Camera`] call site (which
-<a href=#541 id=541 data-nosnippet>541</a>/// only ever goes through its inherent methods, never `.0`) is unaffected.
-<a href=#542 id=542 data-nosnippet>542</a></span><span class="kw">enum </span>CameraInner {
-<a href=#543 id=543 data-nosnippet>543</a>    Platform(CameraBackend),
-<a href=#544 id=544 data-nosnippet>544</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#545 id=545 data-nosnippet>545</a>    </span>Synthetic(<span class="kw">crate</span>::platform::generic::synthetic::SyntheticCapturer),
-<a href=#546 id=546 data-nosnippet>546</a>}
-<a href=#547 id=547 data-nosnippet>547</a>
-<a href=#548 id=548 data-nosnippet>548</a><span class="kw">impl </span>Camera {
-<a href=#549 id=549 data-nosnippet>549</a>    <span class="doccomment">/// Block until the next frame is available. `Err` when the stream ends or
-<a href=#550 id=550 data-nosnippet>550</a>    /// the device is lost (the caller re-opens; a vanished named device falls
-<a href=#551 id=551 data-nosnippet>551</a>    /// back to default inside the open).
-<a href=#552 id=552 data-nosnippet>552</a>    </span><span class="kw">pub fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;RawFrame, CaptureError&gt; {
-<a href=#553 id=553 data-nosnippet>553</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#554 id=554 data-nosnippet>554</a>            CameraInner::Platform(c) =&gt; c.next_frame(),
-<a href=#555 id=555 data-nosnippet>555</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#556 id=556 data-nosnippet>556</a>            </span>CameraInner::Synthetic(c) =&gt; c.next_frame(),
-<a href=#557 id=557 data-nosnippet>557</a>        }
-<a href=#558 id=558 data-nosnippet>558</a>    }
-<a href=#559 id=559 data-nosnippet>559</a>
-<a href=#560 id=560 data-nosnippet>560</a>    <span class="doccomment">/// The geometry + pixel format delivered frames carry (the encode target,
-<a href=#561 id=561 data-nosnippet>561</a>    /// post any internal scale) — always equal to the `target` it was opened
-<a href=#562 id=562 data-nosnippet>562</a>    /// with.
-<a href=#563 id=563 data-nosnippet>563</a>    </span><span class="kw">pub fn </span>negotiated(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (Dimensions, PixelFormat) {
-<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#565 id=565 data-nosnippet>565</a>            CameraInner::Platform(c) =&gt; c.negotiated(),
-<a href=#566 id=566 data-nosnippet>566</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#567 id=567 data-nosnippet>567</a>            </span>CameraInner::Synthetic(c) =&gt; c.negotiated(),
-<a href=#568 id=568 data-nosnippet>568</a>        }
-<a href=#569 id=569 data-nosnippet>569</a>    }
-<a href=#570 id=570 data-nosnippet>570</a>}
-<a href=#571 id=571 data-nosnippet>571</a>
-<a href=#572 id=572 data-nosnippet>572</a><span class="doccomment">/// A running screen share: either a platform screen/window capture, or a
-<a href=#573 id=573 data-nosnippet>573</a>/// **camera shared as a screen** (the picker's "Devices" tab — a webcam,
-<a href=#574 id=574 data-nosnippet>574</a>/// capture card, or virtual camera streamed onto a screen tile). Obtained from
-<a href=#575 id=575 data-nosnippet>575</a>/// [`Engine::open_screen_capture`]; dropping it stops the session and (with it)
-<a href=#576 id=576 data-nosnippet>576</a>/// any paired [`ScreenAudio`] leg. Not `Send`: drive and drop on the one
-<a href=#577 id=577 data-nosnippet>577</a>/// capture thread (the `!Send` contract).
-<a href=#578 id=578 data-nosnippet>578</a>///
-<a href=#579 id=579 data-nosnippet>579</a>/// Both arms produce the same I420/NV12 [`RawFrame`]s, so the publish pipeline
-<a href=#580 id=580 data-nosnippet>580</a>/// is identical — the only differences are that a camera is never damage-driven
-<a href=#581 id=581 data-nosnippet>581</a>/// (it always delivers) and never resizes, so its `next_frame_timeout` always
-<a href=#582 id=582 data-nosnippet>582</a>/// blocks for a frame and its `content_size` is `None`.
-<a href=#583 id=583 data-nosnippet>583</a></span><span class="kw">pub struct </span>ScreenShare(ScreenShareInner);
-<a href=#584 id=584 data-nosnippet>584</a>
-<a href=#585 id=585 data-nosnippet>585</a><span class="kw">enum </span>ScreenShareInner {
-<a href=#586 id=586 data-nosnippet>586</a>    <span class="doccomment">/// A platform display/window capture (SCK / WGC / PipeWire).
-<a href=#587 id=587 data-nosnippet>587</a>    </span>Platform(ScreenBackend),
-<a href=#588 id=588 data-nosnippet>588</a>    <span class="doccomment">/// A camera streamed as a screen. Continuous (not damage-driven).
-<a href=#589 id=589 data-nosnippet>589</a>    </span>Camera(Camera),
-<a href=#590 id=590 data-nosnippet>590</a>}
-<a href=#591 id=591 data-nosnippet>591</a>
-<a href=#592 id=592 data-nosnippet>592</a><span class="kw">impl </span>ScreenShare {
-<a href=#593 id=593 data-nosnippet>593</a>    <span class="doccomment">/// Block until the next frame is available. `Err` when the share ends — the
-<a href=#594 id=594 data-nosnippet>594</a>    /// window closed, the user stopped it via the OS overlay, the camera was
-<a href=#595 id=595 data-nosnippet>595</a>    /// lost, or the session was lost. The caller treats that as a clean capture
-<a href=#596 id=596 data-nosnippet>596</a>    /// end (stop publishing the screen track), not a crash.
-<a href=#597 id=597 data-nosnippet>597</a>    </span><span class="kw">pub fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;RawFrame, CaptureError&gt; {
-<a href=#598 id=598 data-nosnippet>598</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#599 id=599 data-nosnippet>599</a>            ScreenShareInner::Platform(s) =&gt; s.next_frame(),
-<a href=#600 id=600 data-nosnippet>600</a>            ScreenShareInner::Camera(c) =&gt; c.next_frame(),
-<a href=#601 id=601 data-nosnippet>601</a>        }
-<a href=#602 id=602 data-nosnippet>602</a>    }
-<a href=#603 id=603 data-nosnippet>603</a>
-<a href=#604 id=604 data-nosnippet>604</a>    <span class="doccomment">/// Bounded-wait pull: `Ok(None)` when `timeout` elapses with no frame.
-<a href=#605 id=605 data-nosnippet>605</a>    /// Screen capture is damage-driven — a static source produces no frames —
-<a href=#606 id=606 data-nosnippet>606</a>    /// so a consumer that must stay live (preview, keyframe-on-demand for new
-<a href=#607 id=607 data-nosnippet>607</a>    /// subscribers) polls with this and re-emits its cached last frame on
-<a href=#608 id=608 data-nosnippet>608</a>    /// `None`. A camera is continuous, so it just blocks for the next frame
-<a href=#609 id=609 data-nosnippet>609</a>    /// (the `timeout` is irrelevant — a frame is always coming).
-<a href=#610 id=610 data-nosnippet>610</a>    </span><span class="kw">pub fn </span>next_frame_timeout(
-<a href=#611 id=611 data-nosnippet>611</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#612 id=612 data-nosnippet>612</a>        timeout: std::time::Duration,
-<a href=#613 id=613 data-nosnippet>613</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;RawFrame&gt;, CaptureError&gt; {
-<a href=#614 id=614 data-nosnippet>614</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#615 id=615 data-nosnippet>615</a>            ScreenShareInner::Platform(s) =&gt; s.next_frame_timeout(timeout),
-<a href=#616 id=616 data-nosnippet>616</a>            ScreenShareInner::Camera(c) =&gt; c.next_frame().map(<span class="prelude-val">Some</span>),
-<a href=#617 id=617 data-nosnippet>617</a>        }
-<a href=#618 id=618 data-nosnippet>618</a>    }
-<a href=#619 id=619 data-nosnippet>619</a>
-<a href=#620 id=620 data-nosnippet>620</a>    <span class="doccomment">/// The source's current content size (points) observed on delivered
-<a href=#621 id=621 data-nosnippet>621</a>    /// frames, where the platform reports it. A running capture's pixel
-<a href=#622 id=622 data-nosnippet>622</a>    /// geometry is fixed at open, so a change here means the shared window was
-<a href=#623 id=623 data-nosnippet>623</a>    /// resized — restart the share to track it. `None` = unknown (always for a
-<a href=#624 id=624 data-nosnippet>624</a>    /// camera — it has a fixed negotiated size and never resizes).
-<a href=#625 id=625 data-nosnippet>625</a>    </span><span class="kw">pub fn </span>content_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(u32, u32)&gt; {
-<a href=#626 id=626 data-nosnippet>626</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#627 id=627 data-nosnippet>627</a>            ScreenShareInner::Platform(s) =&gt; s.content_size(),
-<a href=#628 id=628 data-nosnippet>628</a>            ScreenShareInner::Camera(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-<a href=#629 id=629 data-nosnippet>629</a>        }
-<a href=#630 id=630 data-nosnippet>630</a>    }
-<a href=#631 id=631 data-nosnippet>631</a>
-<a href=#632 id=632 data-nosnippet>632</a>    <span class="doccomment">/// Whether the captured SOURCE still exists (see
-<a href=#633 id=633 data-nosnippet>633</a>    /// [`crate::backend::ScreenCapture::source_alive`]). A camera-as-screen share
-<a href=#634 id=634 data-nosnippet>634</a>    /// reports alive — its device loss surfaces through `next_frame` errors.
-<a href=#635 id=635 data-nosnippet>635</a>    /// Blocking (~tens of ms on SCK) — call from the capture thread while idle.
-<a href=#636 id=636 data-nosnippet>636</a>    </span><span class="kw">pub fn </span>source_alive(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#637 id=637 data-nosnippet>637</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#638 id=638 data-nosnippet>638</a>            ScreenShareInner::Platform(s) =&gt; s.source_alive(),
-<a href=#639 id=639 data-nosnippet>639</a>            ScreenShareInner::Camera(<span class="kw">_</span>) =&gt; <span class="bool-val">true</span>,
-<a href=#640 id=640 data-nosnippet>640</a>        }
-<a href=#641 id=641 data-nosnippet>641</a>    }
-<a href=#642 id=642 data-nosnippet>642</a>
-<a href=#643 id=643 data-nosnippet>643</a>    <span class="doccomment">/// The geometry + pixel format delivered frames carry (the encode target,
-<a href=#644 id=644 data-nosnippet>644</a>    /// post the native→target scale) — what an encoder built for this share
-<a href=#645 id=645 data-nosnippet>645</a>    /// should be configured with.
-<a href=#646 id=646 data-nosnippet>646</a>    </span><span class="kw">pub fn </span>negotiated(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (Dimensions, PixelFormat) {
-<a href=#647 id=647 data-nosnippet>647</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#648 id=648 data-nosnippet>648</a>            ScreenShareInner::Platform(s) =&gt; s.negotiated(),
-<a href=#649 id=649 data-nosnippet>649</a>            ScreenShareInner::Camera(c) =&gt; c.negotiated(),
-<a href=#650 id=650 data-nosnippet>650</a>        }
-<a href=#651 id=651 data-nosnippet>651</a>    }
-<a href=#652 id=652 data-nosnippet>652</a>}
-<a href=#653 id=653 data-nosnippet>653</a>
-<a href=#654 id=654 data-nosnippet>654</a><span class="doccomment">/// The app-audio leg of a [`ScreenShare`]: the shared application's audio as
-<a href=#655 id=655 data-nosnippet>655</a>/// fixed 20 ms 48 kHz mono PCM frames — the **same** shape as a [`Microphone`],
-<a href=#656 id=656 data-nosnippet>656</a>/// so the Opus encoder and publish path reuse the mic plumbing. Obtained as the
-<a href=#657 id=657 data-nosnippet>657</a>/// `Some(_)` second element of [`Engine::open_screen_capture`] when audio was
-<a href=#658 id=658 data-nosnippet>658</a>/// requested for a window source on a supporting platform. Not `Send`: lives on
-<a href=#659 id=659 data-nosnippet>659</a>/// the screen capture thread alongside its video parent.
-<a href=#660 id=660 data-nosnippet>660</a></span><span class="kw">pub struct </span>ScreenAudio(AppAudioBackend);
-<a href=#661 id=661 data-nosnippet>661</a>
-<a href=#662 id=662 data-nosnippet>662</a><span class="kw">impl </span>ScreenAudio {
-<a href=#663 id=663 data-nosnippet>663</a>    <span class="doccomment">/// Block until the next fixed-size PCM frame is available. `Err` when the
-<a href=#664 id=664 data-nosnippet>664</a>    /// parent screen share ends (the audio leg dies with its video).
-<a href=#665 id=665 data-nosnippet>665</a>    </span><span class="kw">pub fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;PcmFrame, AudioError&gt; {
-<a href=#666 id=666 data-nosnippet>666</a>        <span class="self">self</span>.<span class="number">0</span>.next_frame()
-<a href=#667 id=667 data-nosnippet>667</a>    }
-<a href=#668 id=668 data-nosnippet>668</a>
-<a href=#669 id=669 data-nosnippet>669</a>    <span class="doccomment">/// Wrap a platform audio-leg backend — for the `os::&lt;platform&gt;` escape
-<a href=#670 id=670 data-nosnippet>670</a>    /// hatches, which mint extra legs outside `open_screen_capture`. Gated to
-<a href=#671 id=671 data-nosnippet>671</a>    /// the platforms whose escape hatch mints audio legs (dead code elsewhere).
-<a href=#672 id=672 data-nosnippet>672</a>    </span><span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
-<a href=#673 id=673 data-nosnippet>673</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>from_backend(inner: AppAudioBackend) -&gt; <span class="self">Self </span>{
-<a href=#674 id=674 data-nosnippet>674</a>        <span class="self">Self</span>(inner)
-<a href=#675 id=675 data-nosnippet>675</a>    }
-<a href=#676 id=676 data-nosnippet>676</a>}
-<a href=#677 id=677 data-nosnippet>677</a>
-<a href=#678 id=678 data-nosnippet>678</a><span class="doccomment">/// A video decoder for one inbound track, by wire codec, hiding whether the
-<a href=#679 id=679 data-nosnippet>679</a>/// hardware (VideoToolbox) or the software (openh264) path was selected.
-<a href=#680 id=680 data-nosnippet>680</a>/// Obtained from [`Engine::video_decoder`]; dropping it tears the decode session
-<a href=#681 id=681 data-nosnippet>681</a>/// down. Not `Send`: lives on the decode thread.
-<a href=#682 id=682 data-nosnippet>682</a>///
-<a href=#683 id=683 data-nosnippet>683</a>/// A thin newtype over the platform-selected [`crate::platform::VideoDecoderBackend`]
-<a href=#684 id=684 data-nosnippet>684</a>/// (VideoToolbox on Apple, SW openh264 elsewhere); both methods delegate, so
-<a href=#685 id=685 data-nosnippet>685</a>/// per-AU `decode` is static dispatch and this facade carries no platform `cfg`.
-<a href=#686 id=686 data-nosnippet>686</a></span><span class="kw">pub struct </span>VideoDecoder(<span class="kw">crate</span>::platform::VideoDecoderBackend);
-<a href=#687 id=687 data-nosnippet>687</a>
-<a href=#688 id=688 data-nosnippet>688</a><span class="kw">impl </span>VideoDecoder {
-<a href=#689 id=689 data-nosnippet>689</a>    <span class="doccomment">/// The codec this decoder consumes.
-<a href=#690 id=690 data-nosnippet>690</a>    </span><span class="kw">pub fn </span>codec(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VideoCodec {
-<a href=#691 id=691 data-nosnippet>691</a>        <span class="kw">crate</span>::backend::VideoDecode::codec(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>)
-<a href=#692 id=692 data-nosnippet>692</a>    }
-<a href=#693 id=693 data-nosnippet>693</a>
-<a href=#694 id=694 data-nosnippet>694</a>    <span class="doccomment">/// A short human label for the decode path in use, including hardware vs
-<a href=#695 id=695 data-nosnippet>695</a>    /// software (e.g. `"VideoToolbox (hardware)"`). For diagnostics/logging.
-<a href=#696 id=696 data-nosnippet>696</a>    </span><span class="kw">pub fn </span>backend(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#697 id=697 data-nosnippet>697</a>        <span class="kw">crate</span>::backend::VideoDecode::backend(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>)
-<a href=#698 id=698 data-nosnippet>698</a>    }
-<a href=#699 id=699 data-nosnippet>699</a>
-<a href=#700 id=700 data-nosnippet>700</a>    <span class="doccomment">/// Decode one encoded access unit. Returns the decoded I420 frame if one
-<a href=#701 id=701 data-nosnippet>701</a>    /// is ready, or `None` while pre-bootstrap (no keyframe/sequence header
-<a href=#702 id=702 data-nosnippet>702</a>    /// seen yet) or buffering. Errors only on a genuine decode failure.
-<a href=#703 id=703 data-nosnippet>703</a>    </span><span class="kw">pub fn </span>decode(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chunk: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;RawFrame&gt;, CaptureError&gt; {
-<a href=#704 id=704 data-nosnippet>704</a>        <span class="kw">crate</span>::backend::VideoDecode::decode(<span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0</span>, chunk)
-<a href=#705 id=705 data-nosnippet>705</a>    }
-<a href=#706 id=706 data-nosnippet>706</a>}
-<a href=#707 id=707 data-nosnippet>707</a>
-<a href=#708 id=708 data-nosnippet>708</a><span class="doccomment">/// A running microphone: a started, platform-selected audio input delivering
-<a href=#709 id=709 data-nosnippet>709</a>/// fixed 20 ms 48 kHz mono PCM frames. Obtained from
-<a href=#710 id=710 data-nosnippet>710</a>/// [`Engine::open_microphone`]; dropping it stops capture and releases the
-<a href=#711 id=711 data-nosnippet>711</a>/// device (on the owning thread — the `!Send` contract).
-<a href=#712 id=712 data-nosnippet>712</a></span><span class="kw">pub struct </span>Microphone(MicrophoneInner);
-<a href=#713 id=713 data-nosnippet>713</a>
-<a href=#714 id=714 data-nosnippet>714</a><span class="doccomment">/// The concrete audio input behind a [`Microphone`]: the platform cpal capturer,
-<a href=#715 id=715 data-nosnippet>715</a>/// or (behind `synthetic`) the mic-free test tone. Mirrors [`CameraInner`].
-<a href=#716 id=716 data-nosnippet>716</a></span><span class="kw">enum </span>MicrophoneInner {
-<a href=#717 id=717 data-nosnippet>717</a>    <span class="comment">// Boxed: `CpalCapturer` is far larger than the synthetic arm (rings +
-<a href=#718 id=718 data-nosnippet>718</a>    // resampler state), and clippy flags the resulting size skew
-<a href=#719 id=719 data-nosnippet>719</a>    // (`large_enum_variant`) once the `synthetic` feature adds a second arm.
-<a href=#720 id=720 data-nosnippet>720</a>    </span>Platform(Box&lt;cpal_io::CpalCapturer&gt;),
-<a href=#721 id=721 data-nosnippet>721</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#722 id=722 data-nosnippet>722</a>    </span>Synthetic(<span class="kw">crate</span>::platform::generic::synthetic_audio::SyntheticAudioInput),
-<a href=#723 id=723 data-nosnippet>723</a>}
-<a href=#724 id=724 data-nosnippet>724</a>
-<a href=#725 id=725 data-nosnippet>725</a><span class="kw">impl </span>Microphone {
-<a href=#726 id=726 data-nosnippet>726</a>    <span class="doccomment">/// The opened device's native sample rate (Hz). A non-48 kHz rate means a
-<a href=#727 id=727 data-nosnippet>727</a>    /// resampled open — in practice a Bluetooth headset in HFP mode, whose SCO
-<a href=#728 id=728 data-nosnippet>728</a>    /// route may not be live yet at open (see
-<a href=#729 id=729 data-nosnippet>729</a>    /// [`crate::audio::ROUTE_WARMUP_DELAY`]); the capture owner uses this to arm
-<a href=#730 id=730 data-nosnippet>730</a>    /// the one-shot warmup reopen. Always 48 kHz for the synthetic source (it
-<a href=#731 id=731 data-nosnippet>731</a>    /// generates at the engine rate directly), so it never arms that warmup.
-<a href=#732 id=732 data-nosnippet>732</a>    </span><span class="kw">pub fn </span>device_rate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
-<a href=#733 id=733 data-nosnippet>733</a>        <span class="kw">use </span><span class="kw">crate</span>::backend::AudioInput;
-<a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#735 id=735 data-nosnippet>735</a>            MicrophoneInner::Platform(m) =&gt; m.negotiated().<span class="number">0</span>.hz(),
-<a href=#736 id=736 data-nosnippet>736</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#737 id=737 data-nosnippet>737</a>            </span>MicrophoneInner::Synthetic(m) =&gt; m.negotiated().<span class="number">0</span>.hz(),
-<a href=#738 id=738 data-nosnippet>738</a>        }
-<a href=#739 id=739 data-nosnippet>739</a>    }
-<a href=#740 id=740 data-nosnippet>740</a>
-<a href=#741 id=741 data-nosnippet>741</a>    <span class="doccomment">/// Block until the next fixed-size PCM frame is available. `Err` when the
-<a href=#742 id=742 data-nosnippet>742</a>    /// stream ends or the device is lost (the caller re-opens — a vanished
-<a href=#743 id=743 data-nosnippet>743</a>    /// named device falls back to default inside the open).
-<a href=#744 id=744 data-nosnippet>744</a>    </span><span class="kw">pub fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;PcmFrame, AudioError&gt; {
-<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#746 id=746 data-nosnippet>746</a>            MicrophoneInner::Platform(m) =&gt; m.next_frame(),
-<a href=#747 id=747 data-nosnippet>747</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#748 id=748 data-nosnippet>748</a>            </span>MicrophoneInner::Synthetic(m) =&gt; m.next_frame(),
-<a href=#749 id=749 data-nosnippet>749</a>        }
-<a href=#750 id=750 data-nosnippet>750</a>    }
-<a href=#751 id=751 data-nosnippet>751</a>
-<a href=#752 id=752 data-nosnippet>752</a>    <span class="doccomment">/// The (rate, channels) the device actually negotiated — the device truth
-<a href=#753 id=753 data-nosnippet>753</a>    /// for diagnostics. Delivery is always 48 kHz mono regardless.
-<a href=#754 id=754 data-nosnippet>754</a>    </span><span class="kw">pub fn </span>negotiated(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (SampleRate, ChannelCount) {
-<a href=#755 id=755 data-nosnippet>755</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#756 id=756 data-nosnippet>756</a>            MicrophoneInner::Platform(m) =&gt; m.negotiated(),
-<a href=#757 id=757 data-nosnippet>757</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#758 id=758 data-nosnippet>758</a>            </span>MicrophoneInner::Synthetic(m) =&gt; m.negotiated(),
-<a href=#759 id=759 data-nosnippet>759</a>        }
-<a href=#760 id=760 data-nosnippet>760</a>    }
-<a href=#761 id=761 data-nosnippet>761</a>
-<a href=#762 id=762 data-nosnippet>762</a>    <span class="doccomment">/// Cumulative captured samples DROPPED because the capture ring overflowed (the
-<a href=#763 id=763 data-nosnippet>763</a>    /// consumer of [`Self::next_frame`] fell behind the device callback) — the
-<a href=#764 id=764 data-nosnippet>764</a>    /// send-side audible hole. Monotonic since this device opened, so a caller
-<a href=#765 id=765 data-nosnippet>765</a>    /// diffing it must treat a drop below the last read as a fresh open (a hot-swap
-<a href=#766 id=766 data-nosnippet>766</a>    /// or a reopen mints a new counter). See
-<a href=#767 id=767 data-nosnippet>767</a>    /// [`crate::backend::AudioInput::capture_overflow_samples`].
-<a href=#768 id=768 data-nosnippet>768</a>    </span><span class="kw">pub fn </span>capture_overflow_samples(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
-<a href=#769 id=769 data-nosnippet>769</a>        <span class="kw">use </span><span class="kw">crate</span>::backend::AudioInput;
-<a href=#770 id=770 data-nosnippet>770</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#771 id=771 data-nosnippet>771</a>            MicrophoneInner::Platform(m) =&gt; m.capture_overflow_samples(),
-<a href=#772 id=772 data-nosnippet>772</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#773 id=773 data-nosnippet>773</a>            </span>MicrophoneInner::Synthetic(m) =&gt; m.capture_overflow_samples(),
-<a href=#774 id=774 data-nosnippet>774</a>        }
-<a href=#775 id=775 data-nosnippet>775</a>    }
-<a href=#776 id=776 data-nosnippet>776</a>
-<a href=#777 id=777 data-nosnippet>777</a>    <span class="doccomment">/// The name of the device actually opened (post-fallback), for logging
-<a href=#778 id=778 data-nosnippet>778</a>    /// what a hot-swap landed on. `Some("synthetic")` for the test source.
-<a href=#779 id=779 data-nosnippet>779</a>    </span><span class="kw">pub fn </span>opened_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
-<a href=#780 id=780 data-nosnippet>780</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#781 id=781 data-nosnippet>781</a>            MicrophoneInner::Platform(m) =&gt; m.opened_name(),
-<a href=#782 id=782 data-nosnippet>782</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#783 id=783 data-nosnippet>783</a>            </span>MicrophoneInner::Synthetic(<span class="kw">_</span>) =&gt; <span class="prelude-val">Some</span>(<span class="string">"synthetic"</span>),
-<a href=#784 id=784 data-nosnippet>784</a>        }
-<a href=#785 id=785 data-nosnippet>785</a>    }
-<a href=#786 id=786 data-nosnippet>786</a>}
+<a href=#504 id=504 data-nosnippet>504</a><span class="kw">impl </span><span class="kw">crate</span>::backend::sealed::Sealed <span class="kw">for </span>VideoEncoder {}
+<a href=#505 id=505 data-nosnippet>505</a>
+<a href=#506 id=506 data-nosnippet>506</a><span class="kw">impl </span>VideoEncode <span class="kw">for </span>VideoEncoder {
+<a href=#507 id=507 data-nosnippet>507</a>    <span class="kw">fn </span>codec(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VideoCodec {
+<a href=#508 id=508 data-nosnippet>508</a>        <span class="self">self</span>.<span class="number">0</span>.codec()
+<a href=#509 id=509 data-nosnippet>509</a>    }
+<a href=#510 id=510 data-nosnippet>510</a>    <span class="kw">fn </span>backend(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#511 id=511 data-nosnippet>511</a>        <span class="self">self</span>.<span class="number">0</span>.backend()
+<a href=#512 id=512 data-nosnippet>512</a>    }
+<a href=#513 id=513 data-nosnippet>513</a>    <span class="kw">fn </span>takes_surface_input(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="self">self</span>.<span class="number">0</span>.takes_surface_input()
+<a href=#515 id=515 data-nosnippet>515</a>    }
+<a href=#516 id=516 data-nosnippet>516</a>    <span class="kw">fn </span>encode(
+<a href=#517 id=517 data-nosnippet>517</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#518 id=518 data-nosnippet>518</a>        frame: <span class="kw-2">&amp;</span>RawFrame,
+<a href=#519 id=519 data-nosnippet>519</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">crate</span>::types::EncodedChunk&gt;, CaptureError&gt; {
+<a href=#520 id=520 data-nosnippet>520</a>        <span class="self">self</span>.<span class="number">0</span>.encode(frame)
+<a href=#521 id=521 data-nosnippet>521</a>    }
+<a href=#522 id=522 data-nosnippet>522</a>    <span class="kw">fn </span>request_keyframe(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="self">self</span>.<span class="number">0</span>.request_keyframe()
+<a href=#524 id=524 data-nosnippet>524</a>    }
+<a href=#525 id=525 data-nosnippet>525</a>    <span class="kw">fn </span>set_bitrate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bitrate: Bitrate) -&gt; <span class="prelude-ty">Result</span>&lt;(), CaptureError&gt; {
+<a href=#526 id=526 data-nosnippet>526</a>        <span class="self">self</span>.<span class="number">0</span>.set_bitrate(bitrate)
+<a href=#527 id=527 data-nosnippet>527</a>    }
+<a href=#528 id=528 data-nosnippet>528</a>    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">crate</span>::types::EncodedChunk&gt;, CaptureError&gt; {
+<a href=#529 id=529 data-nosnippet>529</a>        <span class="self">self</span>.<span class="number">0</span>.flush()
+<a href=#530 id=530 data-nosnippet>530</a>    }
+<a href=#531 id=531 data-nosnippet>531</a>}
+<a href=#532 id=532 data-nosnippet>532</a>
+<a href=#533 id=533 data-nosnippet>533</a><span class="doccomment">/// A running camera: a started, platform-selected video capture delivering
+<a href=#534 id=534 data-nosnippet>534</a>/// I420 frames at the requested encode geometry. Obtained from
+<a href=#535 id=535 data-nosnippet>535</a>/// [`Engine::open_camera`]; dropping it stops the session and releases the
+<a href=#536 id=536 data-nosnippet>536</a>/// device (on the owning thread — the `!Send` contract).
+<a href=#537 id=537 data-nosnippet>537</a></span><span class="kw">pub struct </span>Camera(CameraInner);
+<a href=#538 id=538 data-nosnippet>538</a>
+<a href=#539 id=539 data-nosnippet>539</a><span class="doccomment">/// The concrete capture behind a [`Camera`]: the compile-time-selected platform
+<a href=#540 id=540 data-nosnippet>540</a>/// backend, or (behind `synthetic`) the camera-free test source. An enum rather
+<a href=#541 id=541 data-nosnippet>541</a>/// than `Box&lt;dyn VideoCapture&gt;` — the arm set is closed and known at compile
+<a href=#542 id=542 data-nosnippet>542</a>/// time, so dispatch stays static and every existing [`Camera`] call site (which
+<a href=#543 id=543 data-nosnippet>543</a>/// only ever goes through its inherent methods, never `.0`) is unaffected.
+<a href=#544 id=544 data-nosnippet>544</a></span><span class="kw">enum </span>CameraInner {
+<a href=#545 id=545 data-nosnippet>545</a>    Platform(CameraBackend),
+<a href=#546 id=546 data-nosnippet>546</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#547 id=547 data-nosnippet>547</a>    </span>Synthetic(<span class="kw">crate</span>::platform::generic::synthetic::SyntheticCapturer),
+<a href=#548 id=548 data-nosnippet>548</a>}
+<a href=#549 id=549 data-nosnippet>549</a>
+<a href=#550 id=550 data-nosnippet>550</a><span class="kw">impl </span>Camera {
+<a href=#551 id=551 data-nosnippet>551</a>    <span class="doccomment">/// Block until the next frame is available. `Err` when the stream ends or
+<a href=#552 id=552 data-nosnippet>552</a>    /// the device is lost (the caller re-opens; a vanished named device falls
+<a href=#553 id=553 data-nosnippet>553</a>    /// back to default inside the open).
+<a href=#554 id=554 data-nosnippet>554</a>    </span><span class="kw">pub fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;RawFrame, CaptureError&gt; {
+<a href=#555 id=555 data-nosnippet>555</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#556 id=556 data-nosnippet>556</a>            CameraInner::Platform(c) =&gt; c.next_frame(),
+<a href=#557 id=557 data-nosnippet>557</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#558 id=558 data-nosnippet>558</a>            </span>CameraInner::Synthetic(c) =&gt; c.next_frame(),
+<a href=#559 id=559 data-nosnippet>559</a>        }
+<a href=#560 id=560 data-nosnippet>560</a>    }
+<a href=#561 id=561 data-nosnippet>561</a>
+<a href=#562 id=562 data-nosnippet>562</a>    <span class="doccomment">/// The geometry + pixel format delivered frames carry (the encode target,
+<a href=#563 id=563 data-nosnippet>563</a>    /// post any internal scale) — always equal to the `target` it was opened
+<a href=#564 id=564 data-nosnippet>564</a>    /// with.
+<a href=#565 id=565 data-nosnippet>565</a>    </span><span class="kw">pub fn </span>negotiated(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (Dimensions, PixelFormat) {
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#567 id=567 data-nosnippet>567</a>            CameraInner::Platform(c) =&gt; c.negotiated(),
+<a href=#568 id=568 data-nosnippet>568</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#569 id=569 data-nosnippet>569</a>            </span>CameraInner::Synthetic(c) =&gt; c.negotiated(),
+<a href=#570 id=570 data-nosnippet>570</a>        }
+<a href=#571 id=571 data-nosnippet>571</a>    }
+<a href=#572 id=572 data-nosnippet>572</a>}
+<a href=#573 id=573 data-nosnippet>573</a>
+<a href=#574 id=574 data-nosnippet>574</a><span class="doccomment">/// A running screen share: either a platform screen/window capture, or a
+<a href=#575 id=575 data-nosnippet>575</a>/// **camera shared as a screen** (the picker's "Devices" tab — a webcam,
+<a href=#576 id=576 data-nosnippet>576</a>/// capture card, or virtual camera streamed onto a screen tile). Obtained from
+<a href=#577 id=577 data-nosnippet>577</a>/// [`Engine::open_screen_capture`]; dropping it stops the session and (with it)
+<a href=#578 id=578 data-nosnippet>578</a>/// any paired [`ScreenAudio`] leg. Not `Send`: drive and drop on the one
+<a href=#579 id=579 data-nosnippet>579</a>/// capture thread (the `!Send` contract).
+<a href=#580 id=580 data-nosnippet>580</a>///
+<a href=#581 id=581 data-nosnippet>581</a>/// Both arms produce the same I420/NV12 [`RawFrame`]s, so the publish pipeline
+<a href=#582 id=582 data-nosnippet>582</a>/// is identical — the only differences are that a camera is never damage-driven
+<a href=#583 id=583 data-nosnippet>583</a>/// (it always delivers) and never resizes, so its `next_frame_timeout` always
+<a href=#584 id=584 data-nosnippet>584</a>/// blocks for a frame and its `content_size` is `None`.
+<a href=#585 id=585 data-nosnippet>585</a></span><span class="kw">pub struct </span>ScreenShare(ScreenShareInner);
+<a href=#586 id=586 data-nosnippet>586</a>
+<a href=#587 id=587 data-nosnippet>587</a><span class="kw">enum </span>ScreenShareInner {
+<a href=#588 id=588 data-nosnippet>588</a>    <span class="doccomment">/// A platform display/window capture (SCK / WGC / PipeWire).
+<a href=#589 id=589 data-nosnippet>589</a>    </span>Platform(ScreenBackend),
+<a href=#590 id=590 data-nosnippet>590</a>    <span class="doccomment">/// A camera streamed as a screen. Continuous (not damage-driven).
+<a href=#591 id=591 data-nosnippet>591</a>    </span>Camera(Camera),
+<a href=#592 id=592 data-nosnippet>592</a>}
+<a href=#593 id=593 data-nosnippet>593</a>
+<a href=#594 id=594 data-nosnippet>594</a><span class="kw">impl </span>ScreenShare {
+<a href=#595 id=595 data-nosnippet>595</a>    <span class="doccomment">/// Block until the next frame is available. `Err` when the share ends — the
+<a href=#596 id=596 data-nosnippet>596</a>    /// window closed, the user stopped it via the OS overlay, the camera was
+<a href=#597 id=597 data-nosnippet>597</a>    /// lost, or the session was lost. The caller treats that as a clean capture
+<a href=#598 id=598 data-nosnippet>598</a>    /// end (stop publishing the screen track), not a crash.
+<a href=#599 id=599 data-nosnippet>599</a>    </span><span class="kw">pub fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;RawFrame, CaptureError&gt; {
+<a href=#600 id=600 data-nosnippet>600</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#601 id=601 data-nosnippet>601</a>            ScreenShareInner::Platform(s) =&gt; s.next_frame(),
+<a href=#602 id=602 data-nosnippet>602</a>            ScreenShareInner::Camera(c) =&gt; c.next_frame(),
+<a href=#603 id=603 data-nosnippet>603</a>        }
+<a href=#604 id=604 data-nosnippet>604</a>    }
+<a href=#605 id=605 data-nosnippet>605</a>
+<a href=#606 id=606 data-nosnippet>606</a>    <span class="doccomment">/// Bounded-wait pull: `Ok(None)` when `timeout` elapses with no frame.
+<a href=#607 id=607 data-nosnippet>607</a>    /// Screen capture is damage-driven — a static source produces no frames —
+<a href=#608 id=608 data-nosnippet>608</a>    /// so a consumer that must stay live (preview, keyframe-on-demand for new
+<a href=#609 id=609 data-nosnippet>609</a>    /// subscribers) polls with this and re-emits its cached last frame on
+<a href=#610 id=610 data-nosnippet>610</a>    /// `None`. A camera is continuous, so it just blocks for the next frame
+<a href=#611 id=611 data-nosnippet>611</a>    /// (the `timeout` is irrelevant — a frame is always coming).
+<a href=#612 id=612 data-nosnippet>612</a>    </span><span class="kw">pub fn </span>next_frame_timeout(
+<a href=#613 id=613 data-nosnippet>613</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#614 id=614 data-nosnippet>614</a>        timeout: std::time::Duration,
+<a href=#615 id=615 data-nosnippet>615</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;RawFrame&gt;, CaptureError&gt; {
+<a href=#616 id=616 data-nosnippet>616</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#617 id=617 data-nosnippet>617</a>            ScreenShareInner::Platform(s) =&gt; s.next_frame_timeout(timeout),
+<a href=#618 id=618 data-nosnippet>618</a>            ScreenShareInner::Camera(c) =&gt; c.next_frame().map(<span class="prelude-val">Some</span>),
+<a href=#619 id=619 data-nosnippet>619</a>        }
+<a href=#620 id=620 data-nosnippet>620</a>    }
+<a href=#621 id=621 data-nosnippet>621</a>
+<a href=#622 id=622 data-nosnippet>622</a>    <span class="doccomment">/// The source's current content size (points) observed on delivered
+<a href=#623 id=623 data-nosnippet>623</a>    /// frames, where the platform reports it. A running capture's pixel
+<a href=#624 id=624 data-nosnippet>624</a>    /// geometry is fixed at open, so a change here means the shared window was
+<a href=#625 id=625 data-nosnippet>625</a>    /// resized — restart the share to track it. `None` = unknown (always for a
+<a href=#626 id=626 data-nosnippet>626</a>    /// camera — it has a fixed negotiated size and never resizes).
+<a href=#627 id=627 data-nosnippet>627</a>    </span><span class="kw">pub fn </span>content_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;(u32, u32)&gt; {
+<a href=#628 id=628 data-nosnippet>628</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#629 id=629 data-nosnippet>629</a>            ScreenShareInner::Platform(s) =&gt; s.content_size(),
+<a href=#630 id=630 data-nosnippet>630</a>            ScreenShareInner::Camera(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
+<a href=#631 id=631 data-nosnippet>631</a>        }
+<a href=#632 id=632 data-nosnippet>632</a>    }
+<a href=#633 id=633 data-nosnippet>633</a>
+<a href=#634 id=634 data-nosnippet>634</a>    <span class="doccomment">/// Whether the captured SOURCE still exists (see
+<a href=#635 id=635 data-nosnippet>635</a>    /// [`crate::backend::ScreenCapture::source_alive`]). A camera-as-screen share
+<a href=#636 id=636 data-nosnippet>636</a>    /// reports alive — its device loss surfaces through `next_frame` errors.
+<a href=#637 id=637 data-nosnippet>637</a>    /// Blocking (~tens of ms on SCK) — call from the capture thread while idle.
+<a href=#638 id=638 data-nosnippet>638</a>    </span><span class="kw">pub fn </span>source_alive(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#639 id=639 data-nosnippet>639</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#640 id=640 data-nosnippet>640</a>            ScreenShareInner::Platform(s) =&gt; s.source_alive(),
+<a href=#641 id=641 data-nosnippet>641</a>            ScreenShareInner::Camera(<span class="kw">_</span>) =&gt; <span class="bool-val">true</span>,
+<a href=#642 id=642 data-nosnippet>642</a>        }
+<a href=#643 id=643 data-nosnippet>643</a>    }
+<a href=#644 id=644 data-nosnippet>644</a>
+<a href=#645 id=645 data-nosnippet>645</a>    <span class="doccomment">/// The geometry + pixel format delivered frames carry (the encode target,
+<a href=#646 id=646 data-nosnippet>646</a>    /// post the native→target scale) — what an encoder built for this share
+<a href=#647 id=647 data-nosnippet>647</a>    /// should be configured with.
+<a href=#648 id=648 data-nosnippet>648</a>    </span><span class="kw">pub fn </span>negotiated(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (Dimensions, PixelFormat) {
+<a href=#649 id=649 data-nosnippet>649</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#650 id=650 data-nosnippet>650</a>            ScreenShareInner::Platform(s) =&gt; s.negotiated(),
+<a href=#651 id=651 data-nosnippet>651</a>            ScreenShareInner::Camera(c) =&gt; c.negotiated(),
+<a href=#652 id=652 data-nosnippet>652</a>        }
+<a href=#653 id=653 data-nosnippet>653</a>    }
+<a href=#654 id=654 data-nosnippet>654</a>}
+<a href=#655 id=655 data-nosnippet>655</a>
+<a href=#656 id=656 data-nosnippet>656</a><span class="doccomment">/// The app-audio leg of a [`ScreenShare`]: the shared application's audio as
+<a href=#657 id=657 data-nosnippet>657</a>/// fixed 20 ms 48 kHz mono PCM frames — the **same** shape as a [`Microphone`],
+<a href=#658 id=658 data-nosnippet>658</a>/// so the Opus encoder and publish path reuse the mic plumbing. Obtained as the
+<a href=#659 id=659 data-nosnippet>659</a>/// `Some(_)` second element of [`Engine::open_screen_capture`] when audio was
+<a href=#660 id=660 data-nosnippet>660</a>/// requested for a window source on a supporting platform. Not `Send`: lives on
+<a href=#661 id=661 data-nosnippet>661</a>/// the screen capture thread alongside its video parent.
+<a href=#662 id=662 data-nosnippet>662</a></span><span class="kw">pub struct </span>ScreenAudio(AppAudioBackend);
+<a href=#663 id=663 data-nosnippet>663</a>
+<a href=#664 id=664 data-nosnippet>664</a><span class="kw">impl </span>ScreenAudio {
+<a href=#665 id=665 data-nosnippet>665</a>    <span class="doccomment">/// Block until the next fixed-size PCM frame is available. `Err` when the
+<a href=#666 id=666 data-nosnippet>666</a>    /// parent screen share ends (the audio leg dies with its video).
+<a href=#667 id=667 data-nosnippet>667</a>    </span><span class="kw">pub fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;PcmFrame, AudioError&gt; {
+<a href=#668 id=668 data-nosnippet>668</a>        <span class="self">self</span>.<span class="number">0</span>.next_frame()
+<a href=#669 id=669 data-nosnippet>669</a>    }
+<a href=#670 id=670 data-nosnippet>670</a>
+<a href=#671 id=671 data-nosnippet>671</a>    <span class="doccomment">/// Wrap a platform audio-leg backend — for the `os::&lt;platform&gt;` escape
+<a href=#672 id=672 data-nosnippet>672</a>    /// hatches, which mint extra legs outside `open_screen_capture`. Gated to
+<a href=#673 id=673 data-nosnippet>673</a>    /// the platforms whose escape hatch mints audio legs (dead code elsewhere).
+<a href=#674 id=674 data-nosnippet>674</a>    </span><span class="attr">#[cfg(target_os = <span class="string">"linux"</span>)]
+<a href=#675 id=675 data-nosnippet>675</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>from_backend(inner: AppAudioBackend) -&gt; <span class="self">Self </span>{
+<a href=#676 id=676 data-nosnippet>676</a>        <span class="self">Self</span>(inner)
+<a href=#677 id=677 data-nosnippet>677</a>    }
+<a href=#678 id=678 data-nosnippet>678</a>}
+<a href=#679 id=679 data-nosnippet>679</a>
+<a href=#680 id=680 data-nosnippet>680</a><span class="doccomment">/// A video decoder for one inbound track, by wire codec, hiding whether the
+<a href=#681 id=681 data-nosnippet>681</a>/// hardware (VideoToolbox) or the software (openh264) path was selected.
+<a href=#682 id=682 data-nosnippet>682</a>/// Obtained from [`Engine::video_decoder`]; dropping it tears the decode session
+<a href=#683 id=683 data-nosnippet>683</a>/// down. Not `Send`: lives on the decode thread.
+<a href=#684 id=684 data-nosnippet>684</a>///
+<a href=#685 id=685 data-nosnippet>685</a>/// A thin newtype over the platform-selected [`crate::platform::VideoDecoderBackend`]
+<a href=#686 id=686 data-nosnippet>686</a>/// (VideoToolbox + the SW H.264 floor on Apple, SW openh264 elsewhere); both
+<a href=#687 id=687 data-nosnippet>687</a>/// methods delegate, so per-AU `decode` is static dispatch and this facade carries
+<a href=#688 id=688 data-nosnippet>688</a>/// no platform `cfg`. [`Self::backend`] can therefore change value mid-stream on
+<a href=#689 id=689 data-nosnippet>689</a>/// Apple — read it per query, do not cache it as the stream's identity.
+<a href=#690 id=690 data-nosnippet>690</a></span><span class="kw">pub struct </span>VideoDecoder(<span class="kw">crate</span>::platform::VideoDecoderBackend);
+<a href=#691 id=691 data-nosnippet>691</a>
+<a href=#692 id=692 data-nosnippet>692</a><span class="kw">impl </span>VideoDecoder {
+<a href=#693 id=693 data-nosnippet>693</a>    <span class="doccomment">/// The codec this decoder consumes.
+<a href=#694 id=694 data-nosnippet>694</a>    </span><span class="kw">pub fn </span>codec(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VideoCodec {
+<a href=#695 id=695 data-nosnippet>695</a>        <span class="kw">crate</span>::backend::VideoDecode::codec(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>)
+<a href=#696 id=696 data-nosnippet>696</a>    }
+<a href=#697 id=697 data-nosnippet>697</a>
+<a href=#698 id=698 data-nosnippet>698</a>    <span class="doccomment">/// A short human label for the decode path in use, including hardware vs
+<a href=#699 id=699 data-nosnippet>699</a>    /// software (e.g. `"VideoToolbox (hardware)"`). For diagnostics/logging.
+<a href=#700 id=700 data-nosnippet>700</a>    </span><span class="kw">pub fn </span>backend(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#701 id=701 data-nosnippet>701</a>        <span class="kw">crate</span>::backend::VideoDecode::backend(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>)
+<a href=#702 id=702 data-nosnippet>702</a>    }
+<a href=#703 id=703 data-nosnippet>703</a>
+<a href=#704 id=704 data-nosnippet>704</a>    <span class="doccomment">/// Decode one encoded access unit. Returns the decoded I420 frame if one
+<a href=#705 id=705 data-nosnippet>705</a>    /// is ready, or `None` while pre-bootstrap (no keyframe/sequence header
+<a href=#706 id=706 data-nosnippet>706</a>    /// seen yet) or buffering. Errors only on a genuine decode failure.
+<a href=#707 id=707 data-nosnippet>707</a>    </span><span class="kw">pub fn </span>decode(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chunk: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;RawFrame&gt;, CaptureError&gt; {
+<a href=#708 id=708 data-nosnippet>708</a>        <span class="kw">crate</span>::backend::VideoDecode::decode(<span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0</span>, chunk)
+<a href=#709 id=709 data-nosnippet>709</a>    }
+<a href=#710 id=710 data-nosnippet>710</a>}
+<a href=#711 id=711 data-nosnippet>711</a>
+<a href=#712 id=712 data-nosnippet>712</a><span class="doccomment">/// A running microphone: a started, platform-selected audio input delivering
+<a href=#713 id=713 data-nosnippet>713</a>/// fixed 20 ms 48 kHz mono PCM frames. Obtained from
+<a href=#714 id=714 data-nosnippet>714</a>/// [`Engine::open_microphone`]; dropping it stops capture and releases the
+<a href=#715 id=715 data-nosnippet>715</a>/// device (on the owning thread — the `!Send` contract).
+<a href=#716 id=716 data-nosnippet>716</a></span><span class="kw">pub struct </span>Microphone(MicrophoneInner);
+<a href=#717 id=717 data-nosnippet>717</a>
+<a href=#718 id=718 data-nosnippet>718</a><span class="doccomment">/// The concrete audio input behind a [`Microphone`]: the platform cpal capturer,
+<a href=#719 id=719 data-nosnippet>719</a>/// or (behind `synthetic`) the mic-free test tone. Mirrors [`CameraInner`].
+<a href=#720 id=720 data-nosnippet>720</a></span><span class="kw">enum </span>MicrophoneInner {
+<a href=#721 id=721 data-nosnippet>721</a>    <span class="comment">// Boxed: `CpalCapturer` is far larger than the synthetic arm (rings +
+<a href=#722 id=722 data-nosnippet>722</a>    // resampler state), and clippy flags the resulting size skew
+<a href=#723 id=723 data-nosnippet>723</a>    // (`large_enum_variant`) once the `synthetic` feature adds a second arm.
+<a href=#724 id=724 data-nosnippet>724</a>    </span>Platform(Box&lt;cpal_io::CpalCapturer&gt;),
+<a href=#725 id=725 data-nosnippet>725</a>    <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#726 id=726 data-nosnippet>726</a>    </span>Synthetic(<span class="kw">crate</span>::platform::generic::synthetic_audio::SyntheticAudioInput),
+<a href=#727 id=727 data-nosnippet>727</a>}
+<a href=#728 id=728 data-nosnippet>728</a>
+<a href=#729 id=729 data-nosnippet>729</a><span class="kw">impl </span>Microphone {
+<a href=#730 id=730 data-nosnippet>730</a>    <span class="doccomment">/// The opened device's native sample rate (Hz). A non-48 kHz rate means a
+<a href=#731 id=731 data-nosnippet>731</a>    /// resampled open — in practice a Bluetooth headset in HFP mode, whose SCO
+<a href=#732 id=732 data-nosnippet>732</a>    /// route may not be live yet at open (see
+<a href=#733 id=733 data-nosnippet>733</a>    /// [`crate::audio::ROUTE_WARMUP_DELAY`]); the capture owner uses this to arm
+<a href=#734 id=734 data-nosnippet>734</a>    /// the one-shot warmup reopen. Always 48 kHz for the synthetic source (it
+<a href=#735 id=735 data-nosnippet>735</a>    /// generates at the engine rate directly), so it never arms that warmup.
+<a href=#736 id=736 data-nosnippet>736</a>    </span><span class="kw">pub fn </span>device_rate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="kw">use </span><span class="kw">crate</span>::backend::AudioInput;
+<a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#739 id=739 data-nosnippet>739</a>            MicrophoneInner::Platform(m) =&gt; m.negotiated().<span class="number">0</span>.hz(),
+<a href=#740 id=740 data-nosnippet>740</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#741 id=741 data-nosnippet>741</a>            </span>MicrophoneInner::Synthetic(m) =&gt; m.negotiated().<span class="number">0</span>.hz(),
+<a href=#742 id=742 data-nosnippet>742</a>        }
+<a href=#743 id=743 data-nosnippet>743</a>    }
+<a href=#744 id=744 data-nosnippet>744</a>
+<a href=#745 id=745 data-nosnippet>745</a>    <span class="doccomment">/// Block until the next fixed-size PCM frame is available. `Err` when the
+<a href=#746 id=746 data-nosnippet>746</a>    /// stream ends or the device is lost (the caller re-opens — a vanished
+<a href=#747 id=747 data-nosnippet>747</a>    /// named device falls back to default inside the open).
+<a href=#748 id=748 data-nosnippet>748</a>    </span><span class="kw">pub fn </span>next_frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;PcmFrame, AudioError&gt; {
+<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#750 id=750 data-nosnippet>750</a>            MicrophoneInner::Platform(m) =&gt; m.next_frame(),
+<a href=#751 id=751 data-nosnippet>751</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#752 id=752 data-nosnippet>752</a>            </span>MicrophoneInner::Synthetic(m) =&gt; m.next_frame(),
+<a href=#753 id=753 data-nosnippet>753</a>        }
+<a href=#754 id=754 data-nosnippet>754</a>    }
+<a href=#755 id=755 data-nosnippet>755</a>
+<a href=#756 id=756 data-nosnippet>756</a>    <span class="doccomment">/// The (rate, channels) the device actually negotiated — the device truth
+<a href=#757 id=757 data-nosnippet>757</a>    /// for diagnostics. Delivery is always 48 kHz mono regardless.
+<a href=#758 id=758 data-nosnippet>758</a>    </span><span class="kw">pub fn </span>negotiated(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (SampleRate, ChannelCount) {
+<a href=#759 id=759 data-nosnippet>759</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#760 id=760 data-nosnippet>760</a>            MicrophoneInner::Platform(m) =&gt; m.negotiated(),
+<a href=#761 id=761 data-nosnippet>761</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#762 id=762 data-nosnippet>762</a>            </span>MicrophoneInner::Synthetic(m) =&gt; m.negotiated(),
+<a href=#763 id=763 data-nosnippet>763</a>        }
+<a href=#764 id=764 data-nosnippet>764</a>    }
+<a href=#765 id=765 data-nosnippet>765</a>
+<a href=#766 id=766 data-nosnippet>766</a>    <span class="doccomment">/// Cumulative captured samples DROPPED because the capture ring overflowed (the
+<a href=#767 id=767 data-nosnippet>767</a>    /// consumer of [`Self::next_frame`] fell behind the device callback) — the
+<a href=#768 id=768 data-nosnippet>768</a>    /// send-side audible hole. Monotonic since this device opened, so a caller
+<a href=#769 id=769 data-nosnippet>769</a>    /// diffing it must treat a drop below the last read as a fresh open (a hot-swap
+<a href=#770 id=770 data-nosnippet>770</a>    /// or a reopen mints a new counter). See
+<a href=#771 id=771 data-nosnippet>771</a>    /// [`crate::backend::AudioInput::capture_overflow_samples`].
+<a href=#772 id=772 data-nosnippet>772</a>    </span><span class="kw">pub fn </span>capture_overflow_samples(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#773 id=773 data-nosnippet>773</a>        <span class="kw">use </span><span class="kw">crate</span>::backend::AudioInput;
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#775 id=775 data-nosnippet>775</a>            MicrophoneInner::Platform(m) =&gt; m.capture_overflow_samples(),
+<a href=#776 id=776 data-nosnippet>776</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#777 id=777 data-nosnippet>777</a>            </span>MicrophoneInner::Synthetic(m) =&gt; m.capture_overflow_samples(),
+<a href=#778 id=778 data-nosnippet>778</a>        }
+<a href=#779 id=779 data-nosnippet>779</a>    }
+<a href=#780 id=780 data-nosnippet>780</a>
+<a href=#781 id=781 data-nosnippet>781</a>    <span class="doccomment">/// The name of the device actually opened (post-fallback), for logging
+<a href=#782 id=782 data-nosnippet>782</a>    /// what a hot-swap landed on. `Some("synthetic")` for the test source.
+<a href=#783 id=783 data-nosnippet>783</a>    </span><span class="kw">pub fn </span>opened_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
+<a href=#784 id=784 data-nosnippet>784</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#785 id=785 data-nosnippet>785</a>            MicrophoneInner::Platform(m) =&gt; m.opened_name(),
+<a href=#786 id=786 data-nosnippet>786</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#787 id=787 data-nosnippet>787</a>            </span>MicrophoneInner::Synthetic(<span class="kw">_</span>) =&gt; <span class="prelude-val">Some</span>(<span class="string">"synthetic"</span>),
+<a href=#788 id=788 data-nosnippet>788</a>        }
+<a href=#789 id=789 data-nosnippet>789</a>    }
+<a href=#790 id=790 data-nosnippet>790</a>}
 </code></pre></div></section></main></body></html>
