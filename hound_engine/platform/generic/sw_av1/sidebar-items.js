@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SwAv1Decoder"],"fn":["available","open"]};

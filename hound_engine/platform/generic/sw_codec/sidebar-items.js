@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["SwVideoDecoder","SwVideoEncoder"]};
+window.SIDEBAR_ITEMS = {"enum":["SwVideoDecoder"],"struct":["SwVideoEncoder"]};

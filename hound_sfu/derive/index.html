@@ -1,0 +1,68 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Derived base-layer (`…_t0`) tracks — the relay’s temporal-SVC half"><title>hound_sfu::derive - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_sfu" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module derive</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../hound_sfu/index.html">hound_<wbr>sfu</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module derive</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#derived-base-layer-_t0-tracks--the-relays-temporal-svc-half" title="Derived base-layer (`…_t0`) tracks — the relay’s temporal-SVC half">Derived base-layer (<code>…_t0</code>) tracks — the relay’s temporal-SVC half</a><ul><li><a href="#why-a-derived-track-and-not-object-dropping" title="Why a derived TRACK and not object dropping">Why a derived TRACK and not object dropping</a></li><li><a href="#what-this-costs-the-relay" title="What this costs the relay">What this costs the relay</a></li><li><a href="#group-and-keyframe-semantics-are-preserved" title="Group and keyframe semantics are preserved">Group and keyframe semantics are preserved</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate hound_<wbr>sfu</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">hound_sfu</a></div><h1>Module <span>derive</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/hound_sfu/derive.rs.html#1-453">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="derived-base-layer-_t0-tracks--the-relays-temporal-svc-half"><a class="doc-anchor" href="#derived-base-layer-_t0-tracks--the-relays-temporal-svc-half">§</a>Derived base-layer (<code>…_t0</code>) tracks — the relay’s temporal-SVC half</h2>
+<p>A publisher’s camera encoder marks each frame with its L1T2 temporal layer
+(<code>hound_media::TemporalLayer</code>), carried in the MoQ object envelope’s reserved
+byte. This module turns that marking into something a receiver can subscribe
+to: for every camera video broadcast in the origin, it republishes a
+<strong>derived</strong> broadcast under <code>…/cam_t0</code> carrying only the base-layer objects.</p>
+<p>A receiver that takes <code>cam_t0</code> instead of <code>cam</code> gets the same resolution at
+half the frame rate for ~70% of the bits, with no re-encode anywhere and no
+keyframe — which is the whole point: the publisher publishes once and does not
+know, or need to know, which of its subscribers took which.</p>
+<h3 id="why-a-derived-track-and-not-object-dropping"><a class="doc-anchor" href="#why-a-derived-track-and-not-object-dropping">§</a>Why a derived TRACK and not object dropping</h3>
+<p>MOQT draft-19 §9.4 removed the relay’s licence to drop objects: <em>“A relay MUST
+NOT reorder or drop objects received on a multi-object stream when forwarding
+to subscribers.”</em> Sniffing a layer byte and skipping objects mid-stream is
+therefore not a door that is open, however convenient. Interposition is:
+<a href="../moq_relay/struct.OriginProducer.html#method.publish_broadcast" title="method hound_sfu::moq_relay::OriginProducer::publish_broadcast"><code>moq_net::OriginProducer::publish_broadcast</code></a> lets us consume <code>…/cam</code> and
+republish a <strong>different</strong> broadcast, to which §9.4 simply does not apply. The
+derived track is complete and well-formed on its own terms.</p>
+<h3 id="what-this-costs-the-relay"><a class="doc-anchor" href="#what-this-costs-the-relay">§</a>What this costs the relay</h3>
+<p><a href="../moq_relay/index.html" title="mod hound_sfu::moq_relay"><code>crate::moq_relay</code></a>’s central claim is that the relay never touches a byte —
+moq-net’s shared [<code>moq_net::Origin</code>] fans everything out and the SFU only owns
+the auth gate. This module is the first thing to break that, so it is built to
+break it as little as possible:</p>
+<ul>
+<li><strong>No transcode, no bitstream parse.</strong> The filter reads ONE byte, through
+[<code>hound_transport::moq::object_temporal_id</code>] — the same accessor the
+endpoints encode with, so the relay can never grow its own idea of where the
+layer id lives.</li>
+<li><strong>No copy.</strong> moq-net hands objects out as [<code>bytes::Bytes</code>]; forwarding one is
+a refcount bump.</li>
+<li><strong><code>frame_seq</code> is never rewritten.</strong> mediasoup’s regression
+(versatica/mediasoup#1625) is that rewriting frame numbers corrupts the
+dependency structure. The gaps a filtered track leaves in the sequence space
+are intentional and the receiver is told to expect them
+(<code>hound_media::TEMPORAL_BASE_STRIDE</code>) rather than being lied to.</li>
+<li><strong>Nothing runs until somebody subscribes.</strong> Each derived track is announced
+eagerly (so a receiver’s subscribe resolves immediately) but the per-object
+pump is gated on [<code>moq_net::TrackProducer::used</code>] and stops again on
+<code>unused</code>. A call where nobody is constrained pays one idle task per camera
+and zero per-object work.</li>
+</ul>
+<h3 id="group-and-keyframe-semantics-are-preserved"><a class="doc-anchor" href="#group-and-keyframe-semantics-are-preserved">§</a>Group and keyframe semantics are preserved</h3>
+<p>The derived track mirrors the source’s group structure: same group sequences,
+same boundaries. A derived group is created <strong>lazily</strong>, on its first surviving
+object, so a group whose objects are all enhancement-layer simply does not
+appear rather than appearing empty.</p>
+<p>That lazy creation is also what preserves the join contract. hound’s video
+publisher rolls a group on every keyframe, so a group’s first object is always
+the IDR — and a keyframe is always base layer (an IDR is by construction
+referenced; the encoder additionally forces this, see <code>vt_encoder</code>). So the
+first surviving object of a derived group is the same IDR, and moq-net’s
+head-of-current-group replay hands a fresh <code>…_t0</code> subscriber a decodable
+stream exactly as the source track does.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Deriver.html" title="struct hound_sfu::derive::Deriver">Deriver</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Owns the deriver supervisor task for one origin. Dropping it stops derivation
+and, with it, drops every derived broadcast’s producer — so a subscriber still
+on a <code>…_t0</code> track sees a clean end-of-track rather than a stalled stream. Held
+by <a href="../sfu/struct.Sfu.html" title="struct hound_sfu::sfu::Sfu"><code>crate::sfu::Sfu</code></a> / <a href="../moq_relay/struct.Relay.html" title="struct hound_sfu::moq_relay::Relay"><code>crate::moq_relay::Relay</code></a> so the task’s lifetime is
+exactly the server’s.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.DERIVABLE_TRACK.html" title="constant hound_sfu::derive::DERIVABLE_TRACK">DERIVABLE_<wbr>TRACK</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The moq track name a base-layer view is derived from.</dd><dt><a class="constant" href="constant.DERIVE_OUTCOMES.html" title="constant hound_sfu::derive::DERIVE_OUTCOMES">DERIVE_<wbr>OUTCOMES</a></dt><dd>The closed set of <code>sfu_derived_objects_total{outcome}</code> label values — every
+verdict <a href="fn.is_base_layer.html" title="fn hound_sfu::derive::is_base_layer"><code>is_base_layer</code></a> can reach. Bounded and enumerated here so <code>main</code>’s
+zero-init can expose both on a fresh scrape (an all-<code>forwarded</code> relay would
+otherwise render no <code>filtered</code> series at all, and “the filter is doing
+nothing” would be indistinguishable from “the series does not exist yet”).</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.derivable.html" title="fn hound_sfu::derive::derivable">derivable</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Whether <code>path</code>’s track tail is one this module derives a <code>…_t0</code> view of.</dd><dt><a class="fn" href="fn.derive_broadcast.html" title="fn hound_sfu::derive::derive_broadcast">derive_<wbr>broadcast</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>One source broadcast’s derivation: announce <code>out_path</code>’s track, then pump it
+whenever somebody is subscribed.</dd><dt><a class="fn" href="fn.derive_group.html" title="fn hound_sfu::derive::derive_group">derive_<wbr>group</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Copy one source group’s base-layer objects into a derived group of the SAME
+sequence. The derived group is created lazily on the first surviving object, so
+an all-enhancement group produces nothing rather than an empty group.</dd><dt><a class="fn" href="fn.derived_path.html" title="fn hound_sfu::derive::derived_path">derived_<wbr>path</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The derived broadcast path for a source path (<code>…/cam</code> → <code>…/cam_t0</code>).</dd><dt><a class="fn" href="fn.is_base_layer.html" title="fn hound_sfu::derive::is_base_layer">is_<wbr>base_<wbr>layer</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The filter, and the only thing this module reads out of an object: does it
+belong to the base temporal layer?</dd><dt><a class="fn" href="fn.pump_base_layer.html" title="fn hound_sfu::derive::pump_base_layer">pump_<wbr>base_<wbr>layer</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Subscribe to the source track and copy its base-layer objects into <code>derived</code>,
+group for group, until the source ends or errors.</dd><dt><a class="fn" href="fn.spawn_deriver.html" title="fn hound_sfu::derive::spawn_deriver">spawn_<wbr>deriver</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Watch <code>origin</code> for camera broadcasts and keep a derived <code>…_t0</code> broadcast
+alongside each one, for as long as it is announced.</dd></dl></section></div></main></body></html>

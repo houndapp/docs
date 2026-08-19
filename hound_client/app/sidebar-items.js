@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["KEYRING_READ_GRACE","REALTIME_WELCOME_GRACE","STEAM_INIT_BOUND"],"fn":["bounded_steam_init","steam_auth_error"],"struct":["AppState","HoundClient"]};
+window.SIDEBAR_ITEMS = {"constant":["KEYRING_READ_GRACE","MESSAGE_WINDOW","REALTIME_WELCOME_GRACE","RESYNC_SUBSCRIBE_GRACE","STEAM_INIT_BOUND"],"fn":["bounded_steam_init","steam_auth_error"],"struct":["AppState","HoundClient"]};

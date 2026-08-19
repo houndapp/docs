@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["auth","ingress","moq_relay","sfu"]};
+window.SIDEBAR_ITEMS = {"constant":["DERIVE_OUTCOMES"],"mod":["auth","derive","ingress","moq_relay","sfu"]};
