@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["OUTAGE_ESCALATE_AFTER"],"struct":["DeviceOutage","Outage"]};

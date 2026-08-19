@@ -1,0 +1,198 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/media/engine/src/audio/outage.rs`."><title>outage.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_engine/audio/</div>outage.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Device-outage escalation — report the failure that did NOT recover
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! Every audio device loop in the stack recovers from a dead stream by
+<a href=#4 id=4 data-nosnippet>4</a>//! reopening: the mix bus's output sink ([`super::mix`]) and the client's mic
+<a href=#5 id=5 data-nosnippet>5</a>//! capture loop both drop the endpoint and re-open it on a backoff. The device
+<a href=#6 id=6 data-nosnippet>6</a>//! errors that trigger that are overwhelmingly *transient and self-healing* — a
+<a href=#7 id=7 data-nosnippet>7</a>//! USB headset unplugged, a suspend/resume, a PipeWire node restarted under the
+<a href=#8 id=8 data-nosnippet>8</a>//! stream, an ALSA `EIO` — and the reopen has fixed them within a tick.
+<a href=#9 id=9 data-nosnippet>9</a>//!
+<a href=#10 id=10 data-nosnippet>10</a>//! So the thing worth an operator EVENT is not the stream error. It is an outage
+<a href=#11 id=11 data-nosnippet>11</a>//! that **outlives the recovery**: no device for N seconds across M failed
+<a href=#12 id=12 data-nosnippet>12</a>//! reopens. Reporting at the error callback instead files an issue for every
+<a href=#13 id=13 data-nosnippet>13</a>//! successfully-recovered hiccup while a genuinely-down device (whose reopens
+<a href=#14 id=14 data-nosnippet>14</a>//! quietly fail forever) produces nothing at all.
+<a href=#15 id=15 data-nosnippet>15</a>//!
+<a href=#16 id=16 data-nosnippet>16</a>//! This module is that latch. It owns no clock — the caller passes `Instant`s —
+<a href=#17 id=17 data-nosnippet>17</a>//! so the policy is unit-tested rather than inferred from a live device, and the
+<a href=#18 id=18 data-nosnippet>18</a>//! real-time mix thread can drive it from the `Instant` it already sampled.
+<a href=#19 id=19 data-nosnippet>19</a>
+<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">use </span>std::time::{Duration, Instant};
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a><span class="doccomment">/// How long an audio endpoint may stay down before the outage is escalated from
+<a href=#23 id=23 data-nosnippet>23</a>/// a `warn!` (recovery in progress) to an `error!` (recovery is not working —
+<a href=#24 id=24 data-nosnippet>24</a>/// the Sentry bridge promotes first-party `error!` to an event).
+<a href=#25 id=25 data-nosnippet>25</a>///
+<a href=#26 id=26 data-nosnippet>26</a>/// Sized well above every recovery path that actually works: the mix bus's
+<a href=#27 id=27 data-nosnippet>27</a>/// reopen ladder tops out at a 5 s heartbeat, the route-change debounce settles
+<a href=#28 id=28 data-nosnippet>28</a>/// in 2 s, and the BT/HFP warmup reopen fires at 1.2 s. 8 s therefore means
+<a href=#29 id=29 data-nosnippet>29</a>/// "the ladder has run and is still failing", not "a reopen is mid-flight".
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub const </span>OUTAGE_ESCALATE_AFTER: Duration = Duration::from_secs(<span class="number">8</span>);
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// What an escalation (or a recovery) reports: how long the endpoint was down
+<a href=#33 id=33 data-nosnippet>33</a>/// and how many reopen attempts failed inside that window.
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub struct </span>Outage {
+<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">pub </span>elapsed: Duration,
+<a href=#37 id=37 data-nosnippet>37</a>    <span class="kw">pub </span>failed_attempts: u32,
+<a href=#38 id=38 data-nosnippet>38</a>}
+<a href=#39 id=39 data-nosnippet>39</a>
+<a href=#40 id=40 data-nosnippet>40</a><span class="doccomment">/// Tracks one audio endpoint's down/up state and decides when the outage stops
+<a href=#41 id=41 data-nosnippet>41</a>/// being a recoverable hiccup. Pure: `Default` is "up", every transition takes
+<a href=#42 id=42 data-nosnippet>42</a>/// the caller's `now`.
+<a href=#43 id=43 data-nosnippet>43</a></span><span class="attr">#[derive(Default, Debug)]
+<a href=#44 id=44 data-nosnippet>44</a></span><span class="kw">pub struct </span>DeviceOutage {
+<a href=#45 id=45 data-nosnippet>45</a>    <span class="doccomment">/// When the endpoint went down; `None` while it is up.
+<a href=#46 id=46 data-nosnippet>46</a>    </span>since: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
+<a href=#47 id=47 data-nosnippet>47</a>    failed_attempts: u32,
+<a href=#48 id=48 data-nosnippet>48</a>    <span class="doccomment">/// Latch so one outage costs at most one event, however many ticks observe it.
+<a href=#49 id=49 data-nosnippet>49</a>    </span>escalated: bool,
+<a href=#50 id=50 data-nosnippet>50</a>}
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a><span class="kw">impl </span>DeviceOutage {
+<a href=#53 id=53 data-nosnippet>53</a>    <span class="doccomment">/// Mark the endpoint down as of `now` (the stream died, or there is simply no
+<a href=#54 id=54 data-nosnippet>54</a>    /// device open). Idempotent: only the FIRST call starts the clock, so a tick
+<a href=#55 id=55 data-nosnippet>55</a>    /// loop can call it unconditionally while the endpoint is down.
+<a href=#56 id=56 data-nosnippet>56</a>    </span><span class="kw">pub fn </span>down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, now: Instant) {
+<a href=#57 id=57 data-nosnippet>57</a>        <span class="self">self</span>.since.get_or_insert(now);
+<a href=#58 id=58 data-nosnippet>58</a>    }
+<a href=#59 id=59 data-nosnippet>59</a>
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="doccomment">/// A reopen attempt failed: keep the outage running and count the attempt, so
+<a href=#61 id=61 data-nosnippet>61</a>    /// the escalation can say how hard recovery tried.
+<a href=#62 id=62 data-nosnippet>62</a>    </span><span class="kw">pub fn </span>attempt_failed(<span class="kw-2">&amp;mut </span><span class="self">self</span>, now: Instant) {
+<a href=#63 id=63 data-nosnippet>63</a>        <span class="self">self</span>.down(now);
+<a href=#64 id=64 data-nosnippet>64</a>        <span class="self">self</span>.failed_attempts = <span class="self">self</span>.failed_attempts.saturating_add(<span class="number">1</span>);
+<a href=#65 id=65 data-nosnippet>65</a>    }
+<a href=#66 id=66 data-nosnippet>66</a>
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// Whether the endpoint is currently considered down.
+<a href=#68 id=68 data-nosnippet>68</a>    </span><span class="kw">pub fn </span>is_down(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="self">self</span>.since.is_some()
+<a href=#70 id=70 data-nosnippet>70</a>    }
+<a href=#71 id=71 data-nosnippet>71</a>
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="doccomment">/// Returns `Some` exactly once per outage, at the point recovery has been
+<a href=#73 id=73 data-nosnippet>73</a>    /// failing for [`OUTAGE_ESCALATE_AFTER`] — the caller's cue to log an
+<a href=#74 id=74 data-nosnippet>74</a>    /// `error!`. Every later tick of the same outage returns `None`.
+<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">pub fn </span>escalate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, now: Instant) -&gt; <span class="prelude-ty">Option</span>&lt;Outage&gt; {
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">let </span>since = <span class="self">self</span>.since<span class="question-mark">?</span>;
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">let </span>elapsed = now.saturating_duration_since(since);
+<a href=#78 id=78 data-nosnippet>78</a>        <span class="kw">if </span><span class="self">self</span>.escalated || elapsed &lt; OUTAGE_ESCALATE_AFTER {
+<a href=#79 id=79 data-nosnippet>79</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#80 id=80 data-nosnippet>80</a>        }
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="self">self</span>.escalated = <span class="bool-val">true</span>;
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="prelude-val">Some</span>(Outage {
+<a href=#83 id=83 data-nosnippet>83</a>            elapsed,
+<a href=#84 id=84 data-nosnippet>84</a>            failed_attempts: <span class="self">self</span>.failed_attempts,
+<a href=#85 id=85 data-nosnippet>85</a>        })
+<a href=#86 id=86 data-nosnippet>86</a>    }
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="doccomment">/// The endpoint is back: clear the outage. Returns `Some` only if the outage
+<a href=#89 id=89 data-nosnippet>89</a>    /// had already been escalated, so the caller can close the loop on an event
+<a href=#90 id=90 data-nosnippet>90</a>    /// it filed ("recovered after …") and stay silent about the ordinary hiccups.
+<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">pub fn </span>recovered(<span class="kw-2">&amp;mut </span><span class="self">self</span>, now: Instant) -&gt; <span class="prelude-ty">Option</span>&lt;Outage&gt; {
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>since = <span class="self">self</span>.since.take()<span class="question-mark">?</span>;
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span>escalated = std::mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.escalated, <span class="bool-val">false</span>);
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>failed_attempts = std::mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.failed_attempts);
+<a href=#95 id=95 data-nosnippet>95</a>        escalated.then(|| Outage {
+<a href=#96 id=96 data-nosnippet>96</a>            elapsed: now.saturating_duration_since(since),
+<a href=#97 id=97 data-nosnippet>97</a>            failed_attempts,
+<a href=#98 id=98 data-nosnippet>98</a>        })
+<a href=#99 id=99 data-nosnippet>99</a>    }
+<a href=#100 id=100 data-nosnippet>100</a>}
+<a href=#101 id=101 data-nosnippet>101</a>
+<a href=#102 id=102 data-nosnippet>102</a><span class="attr">#[cfg(test)]
+<a href=#103 id=103 data-nosnippet>103</a></span><span class="kw">mod </span>tests {
+<a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#105 id=105 data-nosnippet>105</a>
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="doccomment">/// The common case: a stream error whose reopen works. The outage opens and
+<a href=#107 id=107 data-nosnippet>107</a>    /// closes well inside the escalation window, so NOTHING is reported — this is
+<a href=#108 id=108 data-nosnippet>108</a>    /// the whole point (an EIO that self-heals must not file a Sentry issue).
+<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="attr">#[test]
+<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">fn </span>a_recovered_hiccup_reports_nothing() {
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span><span class="kw-2">mut </span>outage = DeviceOutage::default();
+<a href=#113 id=113 data-nosnippet>113</a>        outage.down(t0);
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="macro">assert!</span>(outage.is_down());
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="macro">assert_eq!</span>(outage.escalate(t0 + Duration::from_millis(<span class="number">10</span>)), <span class="prelude-val">None</span>);
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="macro">assert_eq!</span>(
+<a href=#117 id=117 data-nosnippet>117</a>            outage.recovered(t0 + Duration::from_millis(<span class="number">20</span>)),
+<a href=#118 id=118 data-nosnippet>118</a>            <span class="prelude-val">None</span>,
+<a href=#119 id=119 data-nosnippet>119</a>            <span class="string">"a hiccup that never escalated closes silently"
+<a href=#120 id=120 data-nosnippet>120</a>        </span>);
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="macro">assert!</span>(!outage.is_down());
+<a href=#122 id=122 data-nosnippet>122</a>    }
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="doccomment">/// An outage that outlives the reopen ladder escalates ONCE, carrying how long
+<a href=#125 id=125 data-nosnippet>125</a>    /// and how many attempts — and the recovery behind it is reported too, so the
+<a href=#126 id=126 data-nosnippet>126</a>    /// filed event has a visible end.
+<a href=#127 id=127 data-nosnippet>127</a>    </span><span class="attr">#[test]
+<a href=#128 id=128 data-nosnippet>128</a>    </span><span class="kw">fn </span>a_sustained_outage_escalates_once_then_reports_recovery() {
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span><span class="kw-2">mut </span>outage = DeviceOutage::default();
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="comment">// The clock starts at the DEATH; the reopen attempts that follow only add
+<a href=#132 id=132 data-nosnippet>132</a>        // to the count (`attempt_failed` never re-anchors `since`).
+<a href=#133 id=133 data-nosnippet>133</a>        </span>outage.down(t0);
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..=<span class="number">3 </span>{
+<a href=#135 id=135 data-nosnippet>135</a>            outage.attempt_failed(t0 + Duration::from_secs(i));
+<a href=#136 id=136 data-nosnippet>136</a>        }
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="macro">assert_eq!</span>(
+<a href=#138 id=138 data-nosnippet>138</a>            outage.escalate(t0 + OUTAGE_ESCALATE_AFTER - Duration::from_millis(<span class="number">1</span>)),
+<a href=#139 id=139 data-nosnippet>139</a>            <span class="prelude-val">None</span>,
+<a href=#140 id=140 data-nosnippet>140</a>            <span class="string">"still inside the recovery window"
+<a href=#141 id=141 data-nosnippet>141</a>        </span>);
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">let </span>fired = outage
+<a href=#144 id=144 data-nosnippet>144</a>            .escalate(t0 + OUTAGE_ESCALATE_AFTER)
+<a href=#145 id=145 data-nosnippet>145</a>            .expect(<span class="string">"escalates at the threshold"</span>);
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="macro">assert_eq!</span>(fired.failed_attempts, <span class="number">3</span>);
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="macro">assert_eq!</span>(fired.elapsed, OUTAGE_ESCALATE_AFTER);
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="macro">assert_eq!</span>(
+<a href=#149 id=149 data-nosnippet>149</a>            outage.escalate(t0 + OUTAGE_ESCALATE_AFTER * <span class="number">10</span>),
+<a href=#150 id=150 data-nosnippet>150</a>            <span class="prelude-val">None</span>,
+<a href=#151 id=151 data-nosnippet>151</a>            <span class="string">"one event per outage, however long it runs"
+<a href=#152 id=152 data-nosnippet>152</a>        </span>);
+<a href=#153 id=153 data-nosnippet>153</a>
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>back = outage
+<a href=#155 id=155 data-nosnippet>155</a>            .recovered(t0 + Duration::from_secs(<span class="number">20</span>))
+<a href=#156 id=156 data-nosnippet>156</a>            .expect(<span class="string">"an escalated outage reports its recovery"</span>);
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="macro">assert_eq!</span>(back.elapsed, Duration::from_secs(<span class="number">20</span>));
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="macro">assert_eq!</span>(back.failed_attempts, <span class="number">3</span>);
+<a href=#159 id=159 data-nosnippet>159</a>    }
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Recovery re-arms: a second outage on the same tracker can escalate again
+<a href=#162 id=162 data-nosnippet>162</a>    /// (a device that flaps down/up/down must not go silent after the first).
+<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="attr">#[test]
+<a href=#164 id=164 data-nosnippet>164</a>    </span><span class="kw">fn </span>recovery_re_arms_the_latch() {
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">let </span><span class="kw-2">mut </span>outage = DeviceOutage::default();
+<a href=#167 id=167 data-nosnippet>167</a>        outage.down(t0);
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="macro">assert!</span>(outage.escalate(t0 + OUTAGE_ESCALATE_AFTER).is_some());
+<a href=#169 id=169 data-nosnippet>169</a>        outage.recovered(t0 + OUTAGE_ESCALATE_AFTER);
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">let </span>t1 = t0 + Duration::from_secs(<span class="number">60</span>);
+<a href=#172 id=172 data-nosnippet>172</a>        outage.attempt_failed(t1);
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="macro">assert_eq!</span>(
+<a href=#174 id=174 data-nosnippet>174</a>            outage.escalate(t1).map(|o| o.failed_attempts),
+<a href=#175 id=175 data-nosnippet>175</a>            <span class="prelude-val">None</span>,
+<a href=#176 id=176 data-nosnippet>176</a>            <span class="string">"the second outage starts its own clock"
+<a href=#177 id=177 data-nosnippet>177</a>        </span>);
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="macro">assert_eq!</span>(
+<a href=#179 id=179 data-nosnippet>179</a>            outage
+<a href=#180 id=180 data-nosnippet>180</a>                .escalate(t1 + OUTAGE_ESCALATE_AFTER)
+<a href=#181 id=181 data-nosnippet>181</a>                .map(|o| o.failed_attempts),
+<a href=#182 id=182 data-nosnippet>182</a>            <span class="prelude-val">Some</span>(<span class="number">1</span>),
+<a href=#183 id=183 data-nosnippet>183</a>            <span class="string">"and its own attempt count"
+<a href=#184 id=184 data-nosnippet>184</a>        </span>);
+<a href=#185 id=185 data-nosnippet>185</a>    }
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="doccomment">/// An `escalate`/`recovered` on an endpoint that was never marked down is a
+<a href=#188 id=188 data-nosnippet>188</a>    /// no-op — the tick loop calls these unconditionally.
+<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="attr">#[test]
+<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">fn </span>an_up_endpoint_is_inert() {
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>now = Instant::now();
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span><span class="kw-2">mut </span>outage = DeviceOutage::default();
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="macro">assert_eq!</span>(outage.escalate(now), <span class="prelude-val">None</span>);
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="macro">assert_eq!</span>(outage.recovered(now), <span class="prelude-val">None</span>);
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="macro">assert!</span>(!outage.is_down());
+<a href=#196 id=196 data-nosnippet>196</a>    }
+<a href=#197 id=197 data-nosnippet>197</a>}
+</code></pre></div></section></main></body></html>

@@ -462,421 +462,464 @@
 <a href=#462 id=462 data-nosnippet>462</a>    // `.ok()` (silent 200 ms spin, nothing in the logs or Sentry); now it reports
 <a href=#463 id=463 data-nosnippet>463</a>    // once per transition and retries slowly, since the grant can still arrive.
 <a href=#464 id=464 data-nosnippet>464</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>open_retry = OpenRetry::default();
-<a href=#465 id=465 data-nosnippet>465</a>    <span class="kw">let </span><span class="kw-2">mut </span>silence = MicSilenceWatch::default();
-<a href=#466 id=466 data-nosnippet>466</a>    <span class="comment">// Last capture-ring overflow total seen from the CURRENT device. The counter is
-<a href=#467 id=467 data-nosnippet>467</a>    // per-open, so a value below the last read means a reopen/hot-swap minted a fresh
-<a href=#468 id=468 data-nosnippet>468</a>    // one — count it whole rather than under-reporting until it passes the old total.
-<a href=#469 id=469 data-nosnippet>469</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>last_overflow: u64 = <span class="number">0</span>;
-<a href=#470 id=470 data-nosnippet>470</a>    <span class="comment">// Mute-edge memory for the APM's capture-output-used hint (`None` until the
-<a href=#471 id=471 data-nosnippet>471</a>    // first frame so the initial state is always asserted).
-<a href=#472 id=472 data-nosnippet>472</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>apm_output_used: <span class="prelude-ty">Option</span>&lt;bool&gt; = <span class="prelude-val">None</span>;
-<a href=#473 id=473 data-nosnippet>473</a>
-<a href=#474 id=474 data-nosnippet>474</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#475 id=475 data-nosnippet>475</a>        <span class="kw">if </span>device_rx.has_changed().unwrap_or(<span class="bool-val">false</span>) {
-<a href=#476 id=476 data-nosnippet>476</a>            choice = device_rx.borrow_and_update().clone();
-<a href=#477 id=477 data-nosnippet>477</a>            drop(mic.take());
-<a href=#478 id=478 data-nosnippet>478</a>            <span class="comment">// Disarm the OLD device's pending warmup: were it left due, it could
-<a href=#479 id=479 data-nosnippet>479</a>            // fire in the gap before the reopen below and burn the NEW device's
-<a href=#480 id=480 data-nosnippet>480</a>            // one warmup cycle on a device it never belonged to.
-<a href=#481 id=481 data-nosnippet>481</a>            </span>warmup = MicRouteWarmup { due: <span class="prelude-val">None </span>};
-<a href=#482 id=482 data-nosnippet>482</a>            arm_warmup = <span class="bool-val">true</span>;
-<a href=#483 id=483 data-nosnippet>483</a>        }
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="comment">// BT/HFP route warmup: one reopen after the SCO link has had time to
-<a href=#485 id=485 data-nosnippet>485</a>        // settle, mirroring the playout side's warmup in the mix bus.
-<a href=#486 id=486 data-nosnippet>486</a>        </span><span class="kw">if </span>warmup.fire(Instant::now()) {
-<a href=#487 id=487 data-nosnippet>487</a>            <span class="macro">tracing::info!</span>(<span class="string">"voice: warmup reopen of non-48k (BT/HFP) mic — silent-route fix"</span>);
-<a href=#488 id=488 data-nosnippet>488</a>            drop(mic.take());
-<a href=#489 id=489 data-nosnippet>489</a>            arm_warmup = <span class="bool-val">false</span>;
-<a href=#490 id=490 data-nosnippet>490</a>        }
-<a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">if </span>mic.is_none() {
-<a href=#492 id=492 data-nosnippet>492</a>            <span class="kw">match </span>open_mic(
-<a href=#493 id=493 data-nosnippet>493</a>                <span class="kw-2">&amp;</span>choice,
-<a href=#494 id=494 data-nosnippet>494</a>                clock,
-<a href=#495 id=495 data-nosnippet>495</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#496 id=496 data-nosnippet>496</a>                </span>capture_source,
-<a href=#497 id=497 data-nosnippet>497</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#498 id=498 data-nosnippet>498</a>                </span><span class="kw-2">&amp;</span>synthetic_silence,
-<a href=#499 id=499 data-nosnippet>499</a>            ) {
-<a href=#500 id=500 data-nosnippet>500</a>                <span class="prelude-val">Ok</span>(m) =&gt; {
-<a href=#501 id=501 data-nosnippet>501</a>                    <span class="comment">// The rate is the one fact that identifies which route we actually
-<a href=#502 id=502 data-nosnippet>502</a>                    // landed on after a fault/hot-swap reopen (48 k built-in vs 24 k HFP)
-<a href=#503 id=503 data-nosnippet>503</a>                    // — and it is what the capture resampler is pinned to for this open.
-<a href=#504 id=504 data-nosnippet>504</a>                    // Every open used to be silent, so a mid-call device change left no
-<a href=#505 id=505 data-nosnippet>505</a>                    // trace at all.
-<a href=#506 id=506 data-nosnippet>506</a>                    </span><span class="macro">tracing::debug!</span>(
-<a href=#507 id=507 data-nosnippet>507</a>                        track = <span class="string">"mic"</span>,
-<a href=#508 id=508 data-nosnippet>508</a>                        device_rate = m.device_rate(),
-<a href=#509 id=509 data-nosnippet>509</a>                        <span class="string">"mic: capture device opened"
-<a href=#510 id=510 data-nosnippet>510</a>                    </span>);
-<a href=#511 id=511 data-nosnippet>511</a>                    <span class="kw">if </span>arm_warmup {
-<a href=#512 id=512 data-nosnippet>512</a>                        warmup = MicRouteWarmup::arm(m.device_rate(), Instant::now());
-<a href=#513 id=513 data-nosnippet>513</a>                    }
-<a href=#514 id=514 data-nosnippet>514</a>                    arm_warmup = <span class="bool-val">true</span>;
-<a href=#515 id=515 data-nosnippet>515</a>                    <span class="comment">// P5: every open (first, hot-swap, warmup, post-fault) is a new
-<a href=#516 id=516 data-nosnippet>516</a>                    // device — drop the volume actor's cached provider and re-resolve
-<a href=#517 id=517 data-nosnippet>517</a>                    // against whichever name this open actually landed on.
-<a href=#518 id=518 data-nosnippet>518</a>                    </span>os_volume.device_changed(m.opened_name().map(str::to_owned));
-<a href=#519 id=519 data-nosnippet>519</a>                    mic = <span class="prelude-val">Some</span>(m);
-<a href=#520 id=520 data-nosnippet>520</a>                    open_retry.opened();
-<a href=#521 id=521 data-nosnippet>521</a>                }
-<a href=#522 id=522 data-nosnippet>522</a>                <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#523 id=523 data-nosnippet>523</a>                    <span class="comment">// Classify, then report ONCE per transition into this failure
-<a href=#524 id=524 data-nosnippet>524</a>                    // class — the Sentry bridge promotes `error!` to an event, so a
-<a href=#525 id=525 data-nosnippet>525</a>                    // sticky denial must not log per tick. Keep looping either way:
-<a href=#526 id=526 data-nosnippet>526</a>                    // the device (or the grant) can still show up.
-<a href=#527 id=527 data-nosnippet>527</a>                    </span><span class="kw">let </span>failure = OpenFailure::of_audio(<span class="kw-2">&amp;</span>e);
-<a href=#528 id=528 data-nosnippet>528</a>                    <span class="kw">let </span>(log, wait) = open_retry.failed(failure);
-<a href=#529 id=529 data-nosnippet>529</a>                    <span class="kw">if </span>log {
-<a href=#530 id=530 data-nosnippet>530</a>                        <span class="kw">match </span>failure {
-<a href=#531 id=531 data-nosnippet>531</a>                            OpenFailure::PermissionDenied =&gt; <span class="macro">tracing::error!</span>(
-<a href=#532 id=532 data-nosnippet>532</a>                                track = <span class="string">"mic"</span>,
-<a href=#533 id=533 data-nosnippet>533</a>                                %e,
-<a href=#534 id=534 data-nosnippet>534</a>                                <span class="string">"microphone permission denied — enable hound in System Settings → \
-<a href=#535 id=535 data-nosnippet>535</a>                                 Privacy &amp; Security → Microphone"
-<a href=#536 id=536 data-nosnippet>536</a>                            </span>),
-<a href=#537 id=537 data-nosnippet>537</a>                            OpenFailure::Other =&gt; <span class="macro">tracing::warn!</span>(
-<a href=#538 id=538 data-nosnippet>538</a>                                track = <span class="string">"mic"</span>,
-<a href=#539 id=539 data-nosnippet>539</a>                                %e,
-<a href=#540 id=540 data-nosnippet>540</a>                                <span class="string">"mic: microphone open failed — retrying"
-<a href=#541 id=541 data-nosnippet>541</a>                            </span>),
-<a href=#542 id=542 data-nosnippet>542</a>                        }
-<a href=#543 id=543 data-nosnippet>543</a>                    }
-<a href=#544 id=544 data-nosnippet>544</a>                    <span class="comment">// Nothing is being captured, so nothing may still be metered —
-<a href=#545 id=545 data-nosnippet>545</a>                    // and no device to drive the OS volume actor against either.
-<a href=#546 id=546 data-nosnippet>546</a>                    </span>os_volume.device_changed(<span class="prelude-val">None</span>);
-<a href=#547 id=547 data-nosnippet>547</a>                    silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
-<a href=#548 id=548 data-nosnippet>548</a>                    std::thread::sleep(wait);
-<a href=#549 id=549 data-nosnippet>549</a>                    <span class="kw">continue</span>;
-<a href=#550 id=550 data-nosnippet>550</a>                }
-<a href=#551 id=551 data-nosnippet>551</a>            }
-<a href=#552 id=552 data-nosnippet>552</a>        }
-<a href=#553 id=553 data-nosnippet>553</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(cap) = mic.as_mut() <span class="kw">else </span>{
-<a href=#554 id=554 data-nosnippet>554</a>            silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
-<a href=#555 id=555 data-nosnippet>555</a>            <span class="kw">continue</span>;
-<a href=#556 id=556 data-nosnippet>556</a>        };
-<a href=#557 id=557 data-nosnippet>557</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cap.next_frame()));
-<a href=#558 id=558 data-nosnippet>558</a>        <span class="kw">match </span>pulled {
-<a href=#559 id=559 data-nosnippet>559</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>frame)) =&gt; {
-<a href=#560 id=560 data-nosnippet>560</a>                <span class="comment">// RTC-debug: one PCM frame captured from the mic device, plus any
-<a href=#561 id=561 data-nosnippet>561</a>                // samples the capture ring dropped since the last frame — the ONLY
-<a href=#562 id=562 data-nosnippet>562</a>                // local signal that the far end is hearing chopped words.
-<a href=#563 id=563 data-nosnippet>563</a>                </span>stats.audio_captured();
-<a href=#564 id=564 data-nosnippet>564</a>                <span class="kw">let </span>overflow = cap.capture_overflow_samples();
-<a href=#565 id=565 data-nosnippet>565</a>                stats.capture_overflowed(<span class="kw">if </span>overflow &gt;= last_overflow {
-<a href=#566 id=566 data-nosnippet>566</a>                    overflow - last_overflow
-<a href=#567 id=567 data-nosnippet>567</a>                } <span class="kw">else </span>{
-<a href=#568 id=568 data-nosnippet>568</a>                    overflow
-<a href=#569 id=569 data-nosnippet>569</a>                });
-<a href=#570 id=570 data-nosnippet>570</a>                last_overflow = overflow;
-<a href=#571 id=571 data-nosnippet>571</a>                <span class="comment">// The dead-route detector reads the RAW frame — it keys on
-<a href=#572 id=572 data-nosnippet>572</a>                // bit-exact device zeros, which the APM's dither/HPF would erase.
-<a href=#573 id=573 data-nosnippet>573</a>                </span><span class="kw">if </span>silence.observe(<span class="kw-2">&amp;</span>frame.samples) {
-<a href=#574 id=574 data-nosnippet>574</a>                    <span class="macro">tracing::warn!</span>(
-<a href=#575 id=575 data-nosnippet>575</a>                        device_rate = cap.device_rate(),
-<a href=#576 id=576 data-nosnippet>576</a>                        <span class="string">"voice: mic delivering PURE SILENCE (~3 s of bit-exact zeros) — \
-<a href=#577 id=577 data-nosnippet>577</a>                         dead capture route (BT/SCO not live, permission, or a silent \
-<a href=#578 id=578 data-nosnippet>578</a>                         virtual device)"
-<a href=#579 id=579 data-nosnippet>579</a>                    </span>);
-<a href=#580 id=580 data-nosnippet>580</a>                }
-<a href=#581 id=581 data-nosnippet>581</a>                <span class="kw">let </span>muted = mute.mic.load(Ordering::Relaxed);
-<a href=#582 id=582 data-nosnippet>582</a>                <span class="comment">// Capture processing runs on EVERY frame, muted included, and
-<a href=#583 id=583 data-nosnippet>583</a>                // before the mute gate: AEC3's render swap-queue is drained by
-<a href=#584 id=584 data-nosnippet>584</a>                // capture calls and its delay tracking (and AGC2's speech-level
-<a href=#585 id=585 data-nosnippet>585</a>                // estimate) need the 10 ms cadence — skipping during mute means
-<a href=#586 id=586 data-nosnippet>586</a>                // an echo burst and wrong gain on every unmute. Muted frames are
-<a href=#587 id=587 data-nosnippet>587</a>                // still dropped below, so nothing processed ever leaves. The
-<a href=#588 id=588 data-nosnippet>588</a>                // output-used hint (on mute edges) freezes AGC2's adaptation so a
-<a href=#589 id=589 data-nosnippet>589</a>                // long mute over keyboard clatter cannot retune the speech gain.
-<a href=#590 id=590 data-nosnippet>590</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(apm) = apm.as_ref() {
-<a href=#591 id=591 data-nosnippet>591</a>                    <span class="kw">if </span><span class="macro">apm_output_used !</span>= <span class="prelude-val">Some</span>(!muted) {
-<a href=#592 id=592 data-nosnippet>592</a>                        apm.set_capture_output_used(!muted);
-<a href=#593 id=593 data-nosnippet>593</a>                        apm_output_used = <span class="prelude-val">Some</span>(!muted);
-<a href=#594 id=594 data-nosnippet>594</a>                    }
-<a href=#595 id=595 data-nosnippet>595</a>                    <span class="comment">// P5: feed the last OS-read applied level BEFORE processing (the
-<a href=#596 id=596 data-nosnippet>596</a>                    // round trip's "apply" half — see `apm.rs`'s `process_capture` doc),
-<a href=#597 id=597 data-nosnippet>597</a>                    // unconditionally and every frame, same as the mute hint above: this
-<a href=#598 id=598 data-nosnippet>598</a>                    // must keep flowing even while AGC is off or the mic is muted, so the
-<a href=#599 id=599 data-nosnippet>599</a>                    // controller's next opinion (once re-enabled/unmuted) starts from
-<a href=#600 id=600 data-nosnippet>600</a>                    // ground truth rather than a stale reading.
-<a href=#601 id=601 data-nosnippet>601</a>                    </span>apm.set_applied_input_volume(os_volume.applied());
-<a href=#602 id=602 data-nosnippet>602</a>                    <span class="kw">let </span>raw_rms = frame.rms();
-<a href=#603 id=603 data-nosnippet>603</a>                    apm.process_capture(<span class="kw-2">&amp;mut </span>frame);
-<a href=#604 id=604 data-nosnippet>604</a>                    <span class="kw">let </span>clipped = frame
-<a href=#605 id=605 data-nosnippet>605</a>                        .samples
-<a href=#606 id=606 data-nosnippet>606</a>                        .iter()
-<a href=#607 id=607 data-nosnippet>607</a>                        .any(|<span class="kw-2">&amp;</span>s| s == i16::MIN || s == i16::MAX);
-<a href=#608 id=608 data-nosnippet>608</a>                    stats.set_mic_stage_levels(dbfs(raw_rms), dbfs(frame.rms()), clipped);
-<a href=#609 id=609 data-nosnippet>609</a>                    <span class="comment">// Re-assert liveness per frame: the APM is reported active at
-<a href=#610 id=610 data-nosnippet>610</a>                    // establish, but its panic guard can retire it mid-call (a
-<a href=#611 id=611 data-nosnippet>611</a>                    // panicking process call poisons the lock and every later frame
-<a href=#612 id=612 data-nosnippet>612</a>                    // passes through untouched). Without this the audio report would
-<a href=#613 id=613 data-nosnippet>613</a>                    // keep claiming AEC/NS/AGC are running on a raw mic.
-<a href=#614 id=614 data-nosnippet>614</a>                    </span>stats.set_apm_active(!apm.is_degraded());
-<a href=#615 id=615 data-nosnippet>615</a>
-<a href=#616 id=616 data-nosnippet>616</a>                    <span class="comment">// P5's "apply" half: the controller's fresh recommendation, gated on
-<a href=#617 id=617 data-nosnippet>617</a>                    // a resolved provider + the AGC toggle (coupled, no separate setting)
-<a href=#618 id=618 data-nosnippet>618</a>                    // + not muted + the ~1/s rate limit. `VolumeWriteGate` is pure and
-<a href=#619 id=619 data-nosnippet>619</a>                    // unit-tested (`call::audio_tx::tests`); this call site is the only
-<a href=#620 id=620 data-nosnippet>620</a>                    // place its inputs come from real state.
-<a href=#621 id=621 data-nosnippet>621</a>                    </span><span class="kw">let </span>recommended = apm.recommended_input_volume();
-<a href=#622 id=622 data-nosnippet>622</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(level) = volume_gate.should_write(
-<a href=#623 id=623 data-nosnippet>623</a>                        recommended,
-<a href=#624 id=624 data-nosnippet>624</a>                        os_volume.is_available(),
-<a href=#625 id=625 data-nosnippet>625</a>                        voice.agc_enabled(),
-<a href=#626 id=626 data-nosnippet>626</a>                        muted,
-<a href=#627 id=627 data-nosnippet>627</a>                        Instant::now(),
-<a href=#628 id=628 data-nosnippet>628</a>                    ) {
-<a href=#629 id=629 data-nosnippet>629</a>                        os_volume.request_write(level);
-<a href=#630 id=630 data-nosnippet>630</a>                    }
-<a href=#631 id=631 data-nosnippet>631</a>                    stats.set_os_input_volume(
-<a href=#632 id=632 data-nosnippet>632</a>                        os_volume.is_available(),
-<a href=#633 id=633 data-nosnippet>633</a>                        os_volume.applied(),
-<a href=#634 id=634 data-nosnippet>634</a>                        recommended,
-<a href=#635 id=635 data-nosnippet>635</a>                    );
-<a href=#636 id=636 data-nosnippet>636</a>                }
-<a href=#637 id=637 data-nosnippet>637</a>                <span class="kw">if </span>muted {
-<a href=#638 id=638 data-nosnippet>638</a>                    silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
-<a href=#639 id=639 data-nosnippet>639</a>                    <span class="kw">continue</span>;
-<a href=#640 id=640 data-nosnippet>640</a>                }
-<a href=#641 id=641 data-nosnippet>641</a>                <span class="comment">// Metered POST-processing: the bar (and dominant-speaker ranking)
-<a href=#642 id=642 data-nosnippet>642</a>                // reflect what peers actually hear, gain included.
-<a href=#643 id=643 data-nosnippet>643</a>                </span><span class="kw">let </span>level = level_from_rms(frame.rms());
-<a href=#644 id=644 data-nosnippet>644</a>                levels.send_modify(|l| l.mic = level);
-<a href=#645 id=645 data-nosnippet>645</a>                stats.set_self_level(level);
-<a href=#646 id=646 data-nosnippet>646</a>                <span class="kw">let _ </span>= pcm_tx.try_send(frame);
-<a href=#647 id=647 data-nosnippet>647</a>            }
-<a href=#648 id=648 data-nosnippet>648</a>            <span class="kw">_ </span>=&gt; {
-<a href=#649 id=649 data-nosnippet>649</a>                <span class="comment">// The capture ring stopped (the cpal input error callback fired — device
-<a href=#650 id=650 data-nosnippet>650</a>                // gone, config invalidated, or an automatic reroute) or `next_frame`
-<a href=#651 id=651 data-nosnippet>651</a>                // panicked. Rebuilding is REQUIRED: the device rate and the resampler are
-<a href=#652 id=652 data-nosnippet>652</a>                // captured at open, so a stream that silently rerouted to a 24 kHz HFP mic
-<a href=#653 id=653 data-nosnippet>653</a>                // would keep resampling as if it were still 48 k. Announce it — this path
-<a href=#654 id=654 data-nosnippet>654</a>                // used to drop the device and sleep with nothing in the log, so a mid-call
-<a href=#655 id=655 data-nosnippet>655</a>                // mic route change was invisible.
-<a href=#656 id=656 data-nosnippet>656</a>                </span><span class="macro">tracing::info!</span>(
-<a href=#657 id=657 data-nosnippet>657</a>                    track = <span class="string">"mic"</span>,
-<a href=#658 id=658 data-nosnippet>658</a>                    device_rate = mic.as_ref().map(|m| m.device_rate()).unwrap_or(<span class="number">0</span>),
-<a href=#659 id=659 data-nosnippet>659</a>                    <span class="string">"mic: capture stream ended — reopening the device"
-<a href=#660 id=660 data-nosnippet>660</a>                </span>);
-<a href=#661 id=661 data-nosnippet>661</a>                drop(mic.take());
-<a href=#662 id=662 data-nosnippet>662</a>                <span class="comment">// The route is gone; the last level it produced must not outlive it,
-<a href=#663 id=663 data-nosnippet>663</a>                // and neither should the OS volume actor's now-stale provider.
-<a href=#664 id=664 data-nosnippet>664</a>                </span>os_volume.device_changed(<span class="prelude-val">None</span>);
-<a href=#665 id=665 data-nosnippet>665</a>                silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
-<a href=#666 id=666 data-nosnippet>666</a>                std::thread::sleep(std::time::Duration::from_millis(<span class="number">200</span>));
-<a href=#667 id=667 data-nosnippet>667</a>            }
-<a href=#668 id=668 data-nosnippet>668</a>        }
-<a href=#669 id=669 data-nosnippet>669</a>    }
-<a href=#670 id=670 data-nosnippet>670</a>}
-<a href=#671 id=671 data-nosnippet>671</a>
-<a href=#672 id=672 data-nosnippet>672</a><span class="doccomment">/// The `!Send` screen APP-AUDIO capture thread: block on the engine `ScreenAudio`
-<a href=#673 id=673 data-nosnippet>673</a>/// (the mic-thread analogue — no APM, no levels, no hot-swap) and forward each 20 ms
-<a href=#674 id=674 data-nosnippet>674</a>/// PCM frame to the publish task. A `next_frame` error/panic is the leg's clean end
-<a href=#675 id=675 data-nosnippet>675</a>/// (its parent screen stream stopped); drop the leg on this owning thread and exit.
-<a href=#676 id=676 data-nosnippet>676</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>screen_audio_capture_loop(
-<a href=#677 id=677 data-nosnippet>677</a>    stop: Arc&lt;AtomicBool&gt;,
-<a href=#678 id=678 data-nosnippet>678</a>    <span class="kw-2">mut </span>audio: hound_engine::api::ScreenAudio,
-<a href=#679 id=679 data-nosnippet>679</a>    pcm_tx: tokio::sync::mpsc::Sender&lt;hound_engine::types::PcmFrame&gt;,
-<a href=#680 id=680 data-nosnippet>680</a>) {
-<a href=#681 id=681 data-nosnippet>681</a>    <span class="kw">let </span><span class="kw-2">mut </span>captured: u64 = <span class="number">0</span>;
-<a href=#682 id=682 data-nosnippet>682</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
-<a href=#683 id=683 data-nosnippet>683</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| audio.next_frame()));
-<a href=#684 id=684 data-nosnippet>684</a>        <span class="kw">match </span>pulled {
-<a href=#685 id=685 data-nosnippet>685</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(pcm)) =&gt; {
-<a href=#686 id=686 data-nosnippet>686</a>                captured += <span class="number">1</span>;
-<a href=#687 id=687 data-nosnippet>687</a>                <span class="kw">if </span>captured == <span class="number">1 </span>|| captured.is_multiple_of(<span class="number">500</span>) {
-<a href=#688 id=688 data-nosnippet>688</a>                    <span class="macro">tracing::info!</span>(captured, <span class="string">"screen: captured app-audio frames"</span>);
-<a href=#689 id=689 data-nosnippet>689</a>                }
-<a href=#690 id=690 data-nosnippet>690</a>                <span class="kw">let _ </span>= pcm_tx.try_send(pcm); <span class="comment">// drop on backpressure
-<a href=#691 id=691 data-nosnippet>691</a>            </span>}
-<a href=#692 id=692 data-nosnippet>692</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
-<a href=#693 id=693 data-nosnippet>693</a>                <span class="macro">tracing::warn!</span>(%e, captured, <span class="string">"screen: app-audio capture ended (error)"</span>);
-<a href=#694 id=694 data-nosnippet>694</a>                <span class="kw">break</span>;
-<a href=#695 id=695 data-nosnippet>695</a>            }
-<a href=#696 id=696 data-nosnippet>696</a>            <span class="prelude-val">Err</span>(_panic) =&gt; {
-<a href=#697 id=697 data-nosnippet>697</a>                <span class="macro">tracing::warn!</span>(captured, <span class="string">"screen: app-audio capture panicked"</span>);
-<a href=#698 id=698 data-nosnippet>698</a>                <span class="kw">break</span>;
-<a href=#699 id=699 data-nosnippet>699</a>            }
-<a href=#700 id=700 data-nosnippet>700</a>        }
-<a href=#701 id=701 data-nosnippet>701</a>    }
-<a href=#702 id=702 data-nosnippet>702</a>    <span class="macro">tracing::info!</span>(captured, <span class="string">"screen: app-audio capture loop stopped"</span>);
-<a href=#703 id=703 data-nosnippet>703</a>    drop(audio);
-<a href=#704 id=704 data-nosnippet>704</a>}
-<a href=#705 id=705 data-nosnippet>705</a>
-<a href=#706 id=706 data-nosnippet>706</a><span class="doccomment">/// The async screen AUDIO publish task: the mic publish path MINUS APM / levels /
-<a href=#707 id=707 data-nosnippet>707</a>/// hot-swap (app audio is not a mic). Opus-encodes each forwarded PCM frame and
-<a href=#708 id=708 data-nosnippet>708</a>/// publishes it on the `screen_audio` track; the receiver plays it on the shared
-<a href=#709 id=709 data-nosnippet>709</a>/// mix bus exactly like a mic.
-<a href=#710 id=710 data-nosnippet>710</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_screen_audio_publish(
-<a href=#711 id=711 data-nosnippet>711</a>    relay: Arc&lt;MoqRelaySession&gt;,
-<a href=#712 id=712 data-nosnippet>712</a>    path: String,
-<a href=#713 id=713 data-nosnippet>713</a>    sender: u16,
-<a href=#714 id=714 data-nosnippet>714</a>    <span class="kw-2">mut </span>pcm_rx: tokio::sync::mpsc::Receiver&lt;hound_engine::types::PcmFrame&gt;,
-<a href=#715 id=715 data-nosnippet>715</a>    stats: Arc&lt;CallStats&gt;,
-<a href=#716 id=716 data-nosnippet>716</a>    mute: Arc&lt;MuteFlags&gt;,
-<a href=#717 id=717 data-nosnippet>717</a>) -&gt; JoinHandle&lt;()&gt; {
-<a href=#718 id=718 data-nosnippet>718</a>    <span class="comment">// App-audio is audio: encode + publish on the RT audio runtime, off the video pool.
-<a href=#719 id=719 data-nosnippet>719</a>    </span>audio_runtime().spawn(<span class="kw">async move </span>{
-<a href=#720 id=720 data-nosnippet>720</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoder = <span class="kw">match </span>OpusEncoder::new(SCREEN_AUDIO_BITRATE, OpusProfile::Music) {
-<a href=#721 id=721 data-nosnippet>721</a>            <span class="prelude-val">Ok</span>(e) =&gt; e,
-<a href=#722 id=722 data-nosnippet>722</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#723 id=723 data-nosnippet>723</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to build app-audio Opus encoder"</span>);
-<a href=#724 id=724 data-nosnippet>724</a>                <span class="kw">return</span>;
-<a href=#725 id=725 data-nosnippet>725</a>            }
-<a href=#726 id=726 data-nosnippet>726</a>        };
-<a href=#727 id=727 data-nosnippet>727</a>        <span class="kw">let </span><span class="kw-2">mut </span>publisher = <span class="kw">match </span>relay.publish_track(<span class="kw-2">&amp;</span>path, SCREEN_AUDIO_TRACK, AUDIO_PRIORITY) {
-<a href=#728 id=728 data-nosnippet>728</a>            <span class="prelude-val">Ok</span>(p) =&gt; p,
-<a href=#729 id=729 data-nosnippet>729</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#730 id=730 data-nosnippet>730</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to publish audio track"</span>);
-<a href=#731 id=731 data-nosnippet>731</a>                <span class="kw">return</span>;
-<a href=#732 id=732 data-nosnippet>732</a>            }
-<a href=#733 id=733 data-nosnippet>733</a>        };
-<a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">if </span>publisher.wait_subscribed().<span class="kw">await</span>.is_err() {
-<a href=#735 id=735 data-nosnippet>735</a>            <span class="kw">return</span>;
-<a href=#736 id=736 data-nosnippet>736</a>        }
-<a href=#737 id=737 data-nosnippet>737</a>        <span class="macro">tracing::info!</span>(<span class="string">"screen: app-audio track subscribed — publishing"</span>);
-<a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame_seq = <span class="number">0u32</span>;
-<a href=#739 id=739 data-nosnippet>739</a>        <span class="kw">let </span><span class="kw-2">mut </span>sent: u64 = <span class="number">0</span>;
-<a href=#740 id=740 data-nosnippet>740</a>        <span class="comment">// The same suppression gate as the mic, and today a permanent no-op: the MUSIC
-<a href=#741 id=741 data-nosnippet>741</a>        // profile deliberately runs without DTX (`OpusProfile::dtx`), so a shared
-<a href=#742 id=742 data-nosnippet>742</a>        // track's silence is still coded at full rate and never reaches the DTX size
-<a href=#743 id=743 data-nosnippet>743</a>        // band. It is wired anyway so the two audio publish legs cannot drift — the day
-<a href=#744 id=744 data-nosnippet>744</a>        // the music profile's silence-boundary listening check lands and DTX flips on,
-<a href=#745 id=745 data-nosnippet>745</a>        // app audio inherits suppression with no further change.
-<a href=#746 id=746 data-nosnippet>746</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>silence = SilenceGate::default();
-<a href=#747 id=747 data-nosnippet>747</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(pcm) = pcm_rx.recv().<span class="kw">await </span>{
-<a href=#748 id=748 data-nosnippet>748</a>            <span class="comment">// The broadcaster's "share audio" toggle: drop BEFORE encode, so a muted
-<a href=#749 id=749 data-nosnippet>749</a>            // share costs zero CPU and zero wire data. Receivers read the gap as a
-<a href=#750 id=750 data-nosnippet>750</a>            // quiet source (their starve metric is DTX-aware), and un-muting resumes
-<a href=#751 id=751 data-nosnippet>751</a>            // instantly on this same track.
-<a href=#752 id=752 data-nosnippet>752</a>            </span><span class="kw">if </span>mute.screen_audio.load(Ordering::Relaxed) {
-<a href=#753 id=753 data-nosnippet>753</a>                <span class="kw">continue</span>;
-<a href=#754 id=754 data-nosnippet>754</a>            }
-<a href=#755 id=755 data-nosnippet>755</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(packet) = encoder.encode(<span class="kw-2">&amp;</span>pcm) <span class="kw">else </span>{
-<a href=#756 id=756 data-nosnippet>756</a>                <span class="kw">continue</span>;
-<a href=#757 id=757 data-nosnippet>757</a>            };
-<a href=#758 id=758 data-nosnippet>758</a>            <span class="kw">let </span>bytes = packet.data.len();
-<a href=#759 id=759 data-nosnippet>759</a>            <span class="kw">if </span>!silence.publish(bytes, Instant::now()) {
-<a href=#760 id=760 data-nosnippet>760</a>                <span class="kw">continue</span>;
-<a href=#761 id=761 data-nosnippet>761</a>            }
-<a href=#762 id=762 data-nosnippet>762</a>            <span class="kw">let </span>frame = WireFrame {
-<a href=#763 id=763 data-nosnippet>763</a>                sender,
-<a href=#764 id=764 data-nosnippet>764</a>                track: TrackKind::ScrAudio,
-<a href=#765 id=765 data-nosnippet>765</a>                codec: WireCodec::Opus,
-<a href=#766 id=766 data-nosnippet>766</a>                <span class="comment">// Count-driven grouping (ordered substream); keyframe bit is moot for audio.
-<a href=#767 id=767 data-nosnippet>767</a>                </span>keyframe: <span class="bool-val">false</span>,
-<a href=#768 id=768 data-nosnippet>768</a>                frame_seq,
-<a href=#769 id=769 data-nosnippet>769</a>                timestamp_us: packet.timestamp_us.micros(),
-<a href=#770 id=770 data-nosnippet>770</a>                data: packet.data,
-<a href=#771 id=771 data-nosnippet>771</a>            };
-<a href=#772 id=772 data-nosnippet>772</a>            frame_seq = frame_seq.wrapping_add(<span class="number">1</span>);
-<a href=#773 id=773 data-nosnippet>773</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = publish_audio_one(<span class="kw-2">&amp;mut </span>publisher, <span class="kw-2">&amp;</span>frame) {
-<a href=#774 id=774 data-nosnippet>774</a>                <span class="macro">tracing::warn!</span>(%e, <span class="string">"screen: publish audio frame failed"</span>);
-<a href=#775 id=775 data-nosnippet>775</a>            } <span class="kw">else </span>{
-<a href=#776 id=776 data-nosnippet>776</a>                <span class="comment">// RTC-debug: one screen app-audio frame published.
-<a href=#777 id=777 data-nosnippet>777</a>                </span>stats.screen_audio_sent(bytes);
-<a href=#778 id=778 data-nosnippet>778</a>                sent += <span class="number">1</span>;
-<a href=#779 id=779 data-nosnippet>779</a>                <span class="kw">if </span>sent == <span class="number">1 </span>|| sent.is_multiple_of(<span class="number">500</span>) {
-<a href=#780 id=780 data-nosnippet>780</a>                    <span class="macro">tracing::info!</span>(sent, <span class="string">"screen: published app-audio frames"</span>);
-<a href=#781 id=781 data-nosnippet>781</a>                }
-<a href=#782 id=782 data-nosnippet>782</a>            }
-<a href=#783 id=783 data-nosnippet>783</a>        }
-<a href=#784 id=784 data-nosnippet>784</a>        <span class="macro">tracing::info!</span>(sent, <span class="string">"screen: app-audio publish ended"</span>);
-<a href=#785 id=785 data-nosnippet>785</a>    })
-<a href=#786 id=786 data-nosnippet>786</a>}
-<a href=#787 id=787 data-nosnippet>787</a>
-<a href=#788 id=788 data-nosnippet>788</a><span class="attr">#[cfg(test)]
-<a href=#789 id=789 data-nosnippet>789</a></span><span class="kw">mod </span>tests {
-<a href=#790 id=790 data-nosnippet>790</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#791 id=791 data-nosnippet>791</a>
-<a href=#792 id=792 data-nosnippet>792</a>    <span class="doccomment">/// AGC-off inertness: no write, no matter how much the recommendation
-<a href=#793 id=793 data-nosnippet>793</a>    /// differs from what was last written, and no matter how much time passed.
-<a href=#794 id=794 data-nosnippet>794</a>    </span><span class="attr">#[test]
-<a href=#795 id=795 data-nosnippet>795</a>    </span><span class="kw">fn </span>agc_off_never_writes() {
-<a href=#796 id=796 data-nosnippet>796</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
-<a href=#797 id=797 data-nosnippet>797</a>        <span class="kw">let </span>now = Instant::now();
-<a href=#798 id=798 data-nosnippet>798</a>        <span class="macro">assert_eq!</span>(
-<a href=#799 id=799 data-nosnippet>799</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>, now),
-<a href=#800 id=800 data-nosnippet>800</a>            <span class="prelude-val">None</span>,
-<a href=#801 id=801 data-nosnippet>801</a>            <span class="string">"AGC off must be inert regardless of a resolved provider"
-<a href=#802 id=802 data-nosnippet>802</a>        </span>);
-<a href=#803 id=803 data-nosnippet>803</a>        <span class="macro">assert_eq!</span>(
-<a href=#804 id=804 data-nosnippet>804</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>, now + Duration::from_secs(<span class="number">5</span>)),
-<a href=#805 id=805 data-nosnippet>805</a>            <span class="prelude-val">None</span>,
-<a href=#806 id=806 data-nosnippet>806</a>            <span class="string">"…even after the rate limit would otherwise have elapsed"
-<a href=#807 id=807 data-nosnippet>807</a>        </span>);
-<a href=#808 id=808 data-nosnippet>808</a>    }
-<a href=#809 id=809 data-nosnippet>809</a>
-<a href=#810 id=810 data-nosnippet>810</a>    <span class="doccomment">/// Mute pause: no write while muted, even with AGC on and a resolved
-<a href=#811 id=811 data-nosnippet>811</a>    /// provider — mirrors the mute freeze on `Apm::set_capture_output_used`.
-<a href=#812 id=812 data-nosnippet>812</a>    </span><span class="attr">#[test]
-<a href=#813 id=813 data-nosnippet>813</a>    </span><span class="kw">fn </span>muted_never_writes() {
-<a href=#814 id=814 data-nosnippet>814</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
-<a href=#815 id=815 data-nosnippet>815</a>        <span class="macro">assert_eq!</span>(
-<a href=#816 id=816 data-nosnippet>816</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, Instant::now()),
-<a href=#817 id=817 data-nosnippet>817</a>            <span class="prelude-val">None
-<a href=#818 id=818 data-nosnippet>818</a>        </span>);
-<a href=#819 id=819 data-nosnippet>819</a>    }
-<a href=#820 id=820 data-nosnippet>820</a>
-<a href=#821 id=821 data-nosnippet>821</a>    <span class="doccomment">/// Unavailable-provider degrade: no write when no platform provider
-<a href=#822 id=822 data-nosnippet>822</a>    /// resolved (Linux today; an unsupported device on any platform), even
-<a href=#823 id=823 data-nosnippet>823</a>    /// with AGC on and unmuted.
-<a href=#824 id=824 data-nosnippet>824</a>    </span><span class="attr">#[test]
-<a href=#825 id=825 data-nosnippet>825</a>    </span><span class="kw">fn </span>unavailable_provider_never_writes() {
-<a href=#826 id=826 data-nosnippet>826</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
-<a href=#827 id=827 data-nosnippet>827</a>        <span class="macro">assert_eq!</span>(
-<a href=#828 id=828 data-nosnippet>828</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">false</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, Instant::now()),
-<a href=#829 id=829 data-nosnippet>829</a>            <span class="prelude-val">None
-<a href=#830 id=830 data-nosnippet>830</a>        </span>);
-<a href=#831 id=831 data-nosnippet>831</a>    }
-<a href=#832 id=832 data-nosnippet>832</a>
-<a href=#833 id=833 data-nosnippet>833</a>    <span class="doccomment">/// The first eligible recommendation always writes (nothing written yet,
-<a href=#834 id=834 data-nosnippet>834</a>    /// so "changed since last write" trivially holds) — the round trip's
-<a href=#835 id=835 data-nosnippet>835</a>    /// baseline case.
-<a href=#836 id=836 data-nosnippet>836</a>    </span><span class="attr">#[test]
-<a href=#837 id=837 data-nosnippet>837</a>    </span><span class="kw">fn </span>first_eligible_recommendation_writes() {
-<a href=#838 id=838 data-nosnippet>838</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
-<a href=#839 id=839 data-nosnippet>839</a>        <span class="macro">assert_eq!</span>(
-<a href=#840 id=840 data-nosnippet>840</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, Instant::now()),
-<a href=#841 id=841 data-nosnippet>841</a>            <span class="prelude-val">Some</span>(<span class="number">0.8</span>)
-<a href=#842 id=842 data-nosnippet>842</a>        );
-<a href=#843 id=843 data-nosnippet>843</a>    }
-<a href=#844 id=844 data-nosnippet>844</a>
-<a href=#845 id=845 data-nosnippet>845</a>    <span class="doccomment">/// Rate limit: a SECOND change within the write interval is withheld even
-<a href=#846 id=846 data-nosnippet>846</a>    /// though the recommendation changed again; the SAME change becomes
-<a href=#847 id=847 data-nosnippet>847</a>    /// eligible once the interval has elapsed.
-<a href=#848 id=848 data-nosnippet>848</a>    </span><span class="attr">#[test]
-<a href=#849 id=849 data-nosnippet>849</a>    </span><span class="kw">fn </span>rate_limit_withholds_a_second_write_inside_the_interval() {
-<a href=#850 id=850 data-nosnippet>850</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
-<a href=#851 id=851 data-nosnippet>851</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#852 id=852 data-nosnippet>852</a>        <span class="macro">assert_eq!</span>(gate.should_write(<span class="number">0.6</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0), <span class="prelude-val">Some</span>(<span class="number">0.6</span>));
-<a href=#853 id=853 data-nosnippet>853</a>        <span class="comment">// Changed again, but well inside the 1 s window.
-<a href=#854 id=854 data-nosnippet>854</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#855 id=855 data-nosnippet>855</a>            gate.should_write(<span class="number">0.7</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0 + Duration::from_millis(<span class="number">200</span>)),
-<a href=#856 id=856 data-nosnippet>856</a>            <span class="prelude-val">None</span>,
-<a href=#857 id=857 data-nosnippet>857</a>            <span class="string">"a second change inside the rate-limit window must be withheld"
-<a href=#858 id=858 data-nosnippet>858</a>        </span>);
-<a href=#859 id=859 data-nosnippet>859</a>        <span class="comment">// Same (still-pending) recommendation, now past the window: eligible.
-<a href=#860 id=860 data-nosnippet>860</a>        </span><span class="macro">assert_eq!</span>(
-<a href=#861 id=861 data-nosnippet>861</a>            gate.should_write(<span class="number">0.7</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0 + OS_VOLUME_WRITE_INTERVAL),
-<a href=#862 id=862 data-nosnippet>862</a>            <span class="prelude-val">Some</span>(<span class="number">0.7</span>),
-<a href=#863 id=863 data-nosnippet>863</a>            <span class="string">"the withheld change becomes eligible once the interval elapses"
-<a href=#864 id=864 data-nosnippet>864</a>        </span>);
-<a href=#865 id=865 data-nosnippet>865</a>    }
-<a href=#866 id=866 data-nosnippet>866</a>
-<a href=#867 id=867 data-nosnippet>867</a>    <span class="doccomment">/// No write when the recommendation has not changed since the last write,
-<a href=#868 id=868 data-nosnippet>868</a>    /// even once the rate-limit interval has long elapsed — the gate is a
-<a href=#869 id=869 data-nosnippet>869</a>    /// change detector first, a throttle second.
-<a href=#870 id=870 data-nosnippet>870</a>    </span><span class="attr">#[test]
-<a href=#871 id=871 data-nosnippet>871</a>    </span><span class="kw">fn </span>unchanged_recommendation_never_rewrites() {
-<a href=#872 id=872 data-nosnippet>872</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
-<a href=#873 id=873 data-nosnippet>873</a>        <span class="kw">let </span>t0 = Instant::now();
-<a href=#874 id=874 data-nosnippet>874</a>        <span class="macro">assert_eq!</span>(gate.should_write(<span class="number">0.5</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0), <span class="prelude-val">Some</span>(<span class="number">0.5</span>));
-<a href=#875 id=875 data-nosnippet>875</a>        <span class="macro">assert_eq!</span>(
-<a href=#876 id=876 data-nosnippet>876</a>            gate.should_write(<span class="number">0.5</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0 + Duration::from_secs(<span class="number">60</span>)),
-<a href=#877 id=877 data-nosnippet>877</a>            <span class="prelude-val">None</span>,
-<a href=#878 id=878 data-nosnippet>878</a>            <span class="string">"an unchanged recommendation must never re-trigger a write"
-<a href=#879 id=879 data-nosnippet>879</a>        </span>);
-<a href=#880 id=880 data-nosnippet>880</a>    }
-<a href=#881 id=881 data-nosnippet>881</a>}
+<a href=#465 id=465 data-nosnippet>465</a>    <span class="comment">// How long the mic has been UNAVAILABLE, and whether that has outlived recovery.
+<a href=#466 id=466 data-nosnippet>466</a>    //
+<a href=#467 id=467 data-nosnippet>467</a>    // The engine's cpal input error callback only warns when a stream dies — at that
+<a href=#468 id=468 data-nosnippet>468</a>    // point the reopen below has not been tried, and it fixes nearly every fault
+<a href=#469 id=469 data-nosnippet>469</a>    // (unplug, suspend/resume, an automatic reroute). What deserves an event is a mic
+<a href=#470 id=470 data-nosnippet>470</a>    // that stays gone: `OpenRetry` alone reports a transient class exactly once at
+<a href=#471 id=471 data-nosnippet>471</a>    // `warn`, so a permanently vanished device was otherwise invisible in Sentry
+<a href=#472 id=472 data-nosnippet>472</a>    // while the far end heard nothing.
+<a href=#473 id=473 data-nosnippet>473</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>mic_outage = hound_engine::audio::DeviceOutage::default();
+<a href=#474 id=474 data-nosnippet>474</a>    <span class="kw">let </span><span class="kw-2">mut </span>silence = MicSilenceWatch::default();
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="comment">// Last capture-ring overflow total seen from the CURRENT device. The counter is
+<a href=#476 id=476 data-nosnippet>476</a>    // per-open, so a value below the last read means a reopen/hot-swap minted a fresh
+<a href=#477 id=477 data-nosnippet>477</a>    // one — count it whole rather than under-reporting until it passes the old total.
+<a href=#478 id=478 data-nosnippet>478</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>last_overflow: u64 = <span class="number">0</span>;
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="comment">// Mute-edge memory for the APM's capture-output-used hint (`None` until the
+<a href=#480 id=480 data-nosnippet>480</a>    // first frame so the initial state is always asserted).
+<a href=#481 id=481 data-nosnippet>481</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>apm_output_used: <span class="prelude-ty">Option</span>&lt;bool&gt; = <span class="prelude-val">None</span>;
+<a href=#482 id=482 data-nosnippet>482</a>
+<a href=#483 id=483 data-nosnippet>483</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">if </span>device_rx.has_changed().unwrap_or(<span class="bool-val">false</span>) {
+<a href=#485 id=485 data-nosnippet>485</a>            choice = device_rx.borrow_and_update().clone();
+<a href=#486 id=486 data-nosnippet>486</a>            drop(mic.take());
+<a href=#487 id=487 data-nosnippet>487</a>            <span class="comment">// Disarm the OLD device's pending warmup: were it left due, it could
+<a href=#488 id=488 data-nosnippet>488</a>            // fire in the gap before the reopen below and burn the NEW device's
+<a href=#489 id=489 data-nosnippet>489</a>            // one warmup cycle on a device it never belonged to.
+<a href=#490 id=490 data-nosnippet>490</a>            </span>warmup = MicRouteWarmup { due: <span class="prelude-val">None </span>};
+<a href=#491 id=491 data-nosnippet>491</a>            arm_warmup = <span class="bool-val">true</span>;
+<a href=#492 id=492 data-nosnippet>492</a>        }
+<a href=#493 id=493 data-nosnippet>493</a>        <span class="comment">// BT/HFP route warmup: one reopen after the SCO link has had time to
+<a href=#494 id=494 data-nosnippet>494</a>        // settle, mirroring the playout side's warmup in the mix bus.
+<a href=#495 id=495 data-nosnippet>495</a>        </span><span class="kw">if </span>warmup.fire(Instant::now()) {
+<a href=#496 id=496 data-nosnippet>496</a>            <span class="macro">tracing::info!</span>(<span class="string">"voice: warmup reopen of non-48k (BT/HFP) mic — silent-route fix"</span>);
+<a href=#497 id=497 data-nosnippet>497</a>            drop(mic.take());
+<a href=#498 id=498 data-nosnippet>498</a>            arm_warmup = <span class="bool-val">false</span>;
+<a href=#499 id=499 data-nosnippet>499</a>        }
+<a href=#500 id=500 data-nosnippet>500</a>        <span class="kw">if </span>mic.is_none() {
+<a href=#501 id=501 data-nosnippet>501</a>            <span class="kw">match </span>open_mic(
+<a href=#502 id=502 data-nosnippet>502</a>                <span class="kw-2">&amp;</span>choice,
+<a href=#503 id=503 data-nosnippet>503</a>                clock,
+<a href=#504 id=504 data-nosnippet>504</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#505 id=505 data-nosnippet>505</a>                </span>capture_source,
+<a href=#506 id=506 data-nosnippet>506</a>                <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#507 id=507 data-nosnippet>507</a>                </span><span class="kw-2">&amp;</span>synthetic_silence,
+<a href=#508 id=508 data-nosnippet>508</a>            ) {
+<a href=#509 id=509 data-nosnippet>509</a>                <span class="prelude-val">Ok</span>(m) =&gt; {
+<a href=#510 id=510 data-nosnippet>510</a>                    <span class="comment">// The rate is the one fact that identifies which route we actually
+<a href=#511 id=511 data-nosnippet>511</a>                    // landed on after a fault/hot-swap reopen (48 k built-in vs 24 k HFP)
+<a href=#512 id=512 data-nosnippet>512</a>                    // — and it is what the capture resampler is pinned to for this open.
+<a href=#513 id=513 data-nosnippet>513</a>                    // Every open used to be silent, so a mid-call device change left no
+<a href=#514 id=514 data-nosnippet>514</a>                    // trace at all.
+<a href=#515 id=515 data-nosnippet>515</a>                    </span><span class="macro">tracing::debug!</span>(
+<a href=#516 id=516 data-nosnippet>516</a>                        track = <span class="string">"mic"</span>,
+<a href=#517 id=517 data-nosnippet>517</a>                        device_rate = m.device_rate(),
+<a href=#518 id=518 data-nosnippet>518</a>                        <span class="string">"mic: capture device opened"
+<a href=#519 id=519 data-nosnippet>519</a>                    </span>);
+<a href=#520 id=520 data-nosnippet>520</a>                    <span class="kw">if </span>arm_warmup {
+<a href=#521 id=521 data-nosnippet>521</a>                        warmup = MicRouteWarmup::arm(m.device_rate(), Instant::now());
+<a href=#522 id=522 data-nosnippet>522</a>                    }
+<a href=#523 id=523 data-nosnippet>523</a>                    arm_warmup = <span class="bool-val">true</span>;
+<a href=#524 id=524 data-nosnippet>524</a>                    <span class="comment">// P5: every open (first, hot-swap, warmup, post-fault) is a new
+<a href=#525 id=525 data-nosnippet>525</a>                    // device — drop the volume actor's cached provider and re-resolve
+<a href=#526 id=526 data-nosnippet>526</a>                    // against whichever name this open actually landed on.
+<a href=#527 id=527 data-nosnippet>527</a>                    </span>os_volume.device_changed(m.opened_name().map(str::to_owned));
+<a href=#528 id=528 data-nosnippet>528</a>                    mic = <span class="prelude-val">Some</span>(m);
+<a href=#529 id=529 data-nosnippet>529</a>                    open_retry.opened();
+<a href=#530 id=530 data-nosnippet>530</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(o) = mic_outage.recovered(Instant::now()) {
+<a href=#531 id=531 data-nosnippet>531</a>                        <span class="macro">tracing::info!</span>(
+<a href=#532 id=532 data-nosnippet>532</a>                            track = <span class="string">"mic"</span>,
+<a href=#533 id=533 data-nosnippet>533</a>                            down_ms = o.elapsed.as_millis() <span class="kw">as </span>u64,
+<a href=#534 id=534 data-nosnippet>534</a>                            failed_opens = o.failed_attempts,
+<a href=#535 id=535 data-nosnippet>535</a>                            <span class="string">"mic: capture recovered after {:?} — the far end can hear \
+<a href=#536 id=536 data-nosnippet>536</a>                             this user again"</span>,
+<a href=#537 id=537 data-nosnippet>537</a>                            o.elapsed
+<a href=#538 id=538 data-nosnippet>538</a>                        );
+<a href=#539 id=539 data-nosnippet>539</a>                    }
+<a href=#540 id=540 data-nosnippet>540</a>                }
+<a href=#541 id=541 data-nosnippet>541</a>                <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#542 id=542 data-nosnippet>542</a>                    <span class="comment">// Classify, then report ONCE per transition into this failure
+<a href=#543 id=543 data-nosnippet>543</a>                    // class — the Sentry bridge promotes `error!` to an event, so a
+<a href=#544 id=544 data-nosnippet>544</a>                    // sticky denial must not log per tick. Keep looping either way:
+<a href=#545 id=545 data-nosnippet>545</a>                    // the device (or the grant) can still show up.
+<a href=#546 id=546 data-nosnippet>546</a>                    </span><span class="kw">let </span>failure = OpenFailure::of_audio(<span class="kw-2">&amp;</span>e);
+<a href=#547 id=547 data-nosnippet>547</a>                    <span class="kw">let </span>(log, wait) = open_retry.failed(failure);
+<a href=#548 id=548 data-nosnippet>548</a>                    <span class="kw">if </span>log {
+<a href=#549 id=549 data-nosnippet>549</a>                        <span class="kw">match </span>failure {
+<a href=#550 id=550 data-nosnippet>550</a>                            OpenFailure::PermissionDenied =&gt; <span class="macro">tracing::error!</span>(
+<a href=#551 id=551 data-nosnippet>551</a>                                track = <span class="string">"mic"</span>,
+<a href=#552 id=552 data-nosnippet>552</a>                                %e,
+<a href=#553 id=553 data-nosnippet>553</a>                                <span class="string">"microphone permission denied — enable hound in System Settings → \
+<a href=#554 id=554 data-nosnippet>554</a>                                 Privacy &amp; Security → Microphone"
+<a href=#555 id=555 data-nosnippet>555</a>                            </span>),
+<a href=#556 id=556 data-nosnippet>556</a>                            OpenFailure::Other =&gt; <span class="macro">tracing::warn!</span>(
+<a href=#557 id=557 data-nosnippet>557</a>                                track = <span class="string">"mic"</span>,
+<a href=#558 id=558 data-nosnippet>558</a>                                %e,
+<a href=#559 id=559 data-nosnippet>559</a>                                <span class="string">"mic: microphone open failed — retrying"
+<a href=#560 id=560 data-nosnippet>560</a>                            </span>),
+<a href=#561 id=561 data-nosnippet>561</a>                        }
+<a href=#562 id=562 data-nosnippet>562</a>                    }
+<a href=#563 id=563 data-nosnippet>563</a>                    <span class="comment">// A transient class only becomes an EVENT once the retry ladder
+<a href=#564 id=564 data-nosnippet>564</a>                    // has demonstrably failed for the whole escalation window — the
+<a href=#565 id=565 data-nosnippet>565</a>                    // reopen fixes an unplug/suspend/reroute far inside it. Denial is
+<a href=#566 id=566 data-nosnippet>566</a>                    // excluded: it is already reported above, actionably and once.
+<a href=#567 id=567 data-nosnippet>567</a>                    </span><span class="kw">let </span>now = Instant::now();
+<a href=#568 id=568 data-nosnippet>568</a>                    mic_outage.attempt_failed(now);
+<a href=#569 id=569 data-nosnippet>569</a>                    <span class="kw">if </span>failure == OpenFailure::Other
+<a href=#570 id=570 data-nosnippet>570</a>                        &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(o) = mic_outage.escalate(now)
+<a href=#571 id=571 data-nosnippet>571</a>                    {
+<a href=#572 id=572 data-nosnippet>572</a>                        <span class="macro">tracing::error!</span>(
+<a href=#573 id=573 data-nosnippet>573</a>                            track = <span class="string">"mic"</span>,
+<a href=#574 id=574 data-nosnippet>574</a>                            down_ms = o.elapsed.as_millis() <span class="kw">as </span>u64,
+<a href=#575 id=575 data-nosnippet>575</a>                            failed_opens = o.failed_attempts,
+<a href=#576 id=576 data-nosnippet>576</a>                            %e,
+<a href=#577 id=577 data-nosnippet>577</a>                            <span class="string">"mic: no capture device for {:?} across {} failed opens — the \
+<a href=#578 id=578 data-nosnippet>578</a>                             far end has heard nothing since"</span>,
+<a href=#579 id=579 data-nosnippet>579</a>                            o.elapsed,
+<a href=#580 id=580 data-nosnippet>580</a>                            o.failed_attempts
+<a href=#581 id=581 data-nosnippet>581</a>                        );
+<a href=#582 id=582 data-nosnippet>582</a>                    }
+<a href=#583 id=583 data-nosnippet>583</a>                    <span class="comment">// Nothing is being captured, so nothing may still be metered —
+<a href=#584 id=584 data-nosnippet>584</a>                    // and no device to drive the OS volume actor against either.
+<a href=#585 id=585 data-nosnippet>585</a>                    </span>os_volume.device_changed(<span class="prelude-val">None</span>);
+<a href=#586 id=586 data-nosnippet>586</a>                    silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
+<a href=#587 id=587 data-nosnippet>587</a>                    std::thread::sleep(wait);
+<a href=#588 id=588 data-nosnippet>588</a>                    <span class="kw">continue</span>;
+<a href=#589 id=589 data-nosnippet>589</a>                }
+<a href=#590 id=590 data-nosnippet>590</a>            }
+<a href=#591 id=591 data-nosnippet>591</a>        }
+<a href=#592 id=592 data-nosnippet>592</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(cap) = mic.as_mut() <span class="kw">else </span>{
+<a href=#593 id=593 data-nosnippet>593</a>            silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
+<a href=#594 id=594 data-nosnippet>594</a>            <span class="kw">continue</span>;
+<a href=#595 id=595 data-nosnippet>595</a>        };
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cap.next_frame()));
+<a href=#597 id=597 data-nosnippet>597</a>        <span class="kw">match </span>pulled {
+<a href=#598 id=598 data-nosnippet>598</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>frame)) =&gt; {
+<a href=#599 id=599 data-nosnippet>599</a>                <span class="comment">// RTC-debug: one PCM frame captured from the mic device, plus any
+<a href=#600 id=600 data-nosnippet>600</a>                // samples the capture ring dropped since the last frame — the ONLY
+<a href=#601 id=601 data-nosnippet>601</a>                // local signal that the far end is hearing chopped words.
+<a href=#602 id=602 data-nosnippet>602</a>                </span>stats.audio_captured();
+<a href=#603 id=603 data-nosnippet>603</a>                <span class="kw">let </span>overflow = cap.capture_overflow_samples();
+<a href=#604 id=604 data-nosnippet>604</a>                stats.capture_overflowed(<span class="kw">if </span>overflow &gt;= last_overflow {
+<a href=#605 id=605 data-nosnippet>605</a>                    overflow - last_overflow
+<a href=#606 id=606 data-nosnippet>606</a>                } <span class="kw">else </span>{
+<a href=#607 id=607 data-nosnippet>607</a>                    overflow
+<a href=#608 id=608 data-nosnippet>608</a>                });
+<a href=#609 id=609 data-nosnippet>609</a>                last_overflow = overflow;
+<a href=#610 id=610 data-nosnippet>610</a>                <span class="comment">// The dead-route detector reads the RAW frame — it keys on
+<a href=#611 id=611 data-nosnippet>611</a>                // bit-exact device zeros, which the APM's dither/HPF would erase.
+<a href=#612 id=612 data-nosnippet>612</a>                </span><span class="kw">if </span>silence.observe(<span class="kw-2">&amp;</span>frame.samples) {
+<a href=#613 id=613 data-nosnippet>613</a>                    <span class="macro">tracing::warn!</span>(
+<a href=#614 id=614 data-nosnippet>614</a>                        device_rate = cap.device_rate(),
+<a href=#615 id=615 data-nosnippet>615</a>                        <span class="string">"voice: mic delivering PURE SILENCE (~3 s of bit-exact zeros) — \
+<a href=#616 id=616 data-nosnippet>616</a>                         dead capture route (BT/SCO not live, permission, or a silent \
+<a href=#617 id=617 data-nosnippet>617</a>                         virtual device)"
+<a href=#618 id=618 data-nosnippet>618</a>                    </span>);
+<a href=#619 id=619 data-nosnippet>619</a>                }
+<a href=#620 id=620 data-nosnippet>620</a>                <span class="kw">let </span>muted = mute.mic.load(Ordering::Relaxed);
+<a href=#621 id=621 data-nosnippet>621</a>                <span class="comment">// Capture processing runs on EVERY frame, muted included, and
+<a href=#622 id=622 data-nosnippet>622</a>                // before the mute gate: AEC3's render swap-queue is drained by
+<a href=#623 id=623 data-nosnippet>623</a>                // capture calls and its delay tracking (and AGC2's speech-level
+<a href=#624 id=624 data-nosnippet>624</a>                // estimate) need the 10 ms cadence — skipping during mute means
+<a href=#625 id=625 data-nosnippet>625</a>                // an echo burst and wrong gain on every unmute. Muted frames are
+<a href=#626 id=626 data-nosnippet>626</a>                // still dropped below, so nothing processed ever leaves. The
+<a href=#627 id=627 data-nosnippet>627</a>                // output-used hint (on mute edges) freezes AGC2's adaptation so a
+<a href=#628 id=628 data-nosnippet>628</a>                // long mute over keyboard clatter cannot retune the speech gain.
+<a href=#629 id=629 data-nosnippet>629</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(apm) = apm.as_ref() {
+<a href=#630 id=630 data-nosnippet>630</a>                    <span class="kw">if </span><span class="macro">apm_output_used !</span>= <span class="prelude-val">Some</span>(!muted) {
+<a href=#631 id=631 data-nosnippet>631</a>                        apm.set_capture_output_used(!muted);
+<a href=#632 id=632 data-nosnippet>632</a>                        apm_output_used = <span class="prelude-val">Some</span>(!muted);
+<a href=#633 id=633 data-nosnippet>633</a>                    }
+<a href=#634 id=634 data-nosnippet>634</a>                    <span class="comment">// P5: feed the last OS-read applied level BEFORE processing (the
+<a href=#635 id=635 data-nosnippet>635</a>                    // round trip's "apply" half — see `apm.rs`'s `process_capture` doc),
+<a href=#636 id=636 data-nosnippet>636</a>                    // unconditionally and every frame, same as the mute hint above: this
+<a href=#637 id=637 data-nosnippet>637</a>                    // must keep flowing even while AGC is off or the mic is muted, so the
+<a href=#638 id=638 data-nosnippet>638</a>                    // controller's next opinion (once re-enabled/unmuted) starts from
+<a href=#639 id=639 data-nosnippet>639</a>                    // ground truth rather than a stale reading.
+<a href=#640 id=640 data-nosnippet>640</a>                    </span>apm.set_applied_input_volume(os_volume.applied());
+<a href=#641 id=641 data-nosnippet>641</a>                    <span class="kw">let </span>raw_rms = frame.rms();
+<a href=#642 id=642 data-nosnippet>642</a>                    apm.process_capture(<span class="kw-2">&amp;mut </span>frame);
+<a href=#643 id=643 data-nosnippet>643</a>                    <span class="kw">let </span>clipped = frame
+<a href=#644 id=644 data-nosnippet>644</a>                        .samples
+<a href=#645 id=645 data-nosnippet>645</a>                        .iter()
+<a href=#646 id=646 data-nosnippet>646</a>                        .any(|<span class="kw-2">&amp;</span>s| s == i16::MIN || s == i16::MAX);
+<a href=#647 id=647 data-nosnippet>647</a>                    stats.set_mic_stage_levels(dbfs(raw_rms), dbfs(frame.rms()), clipped);
+<a href=#648 id=648 data-nosnippet>648</a>                    <span class="comment">// Re-assert liveness per frame: the APM is reported active at
+<a href=#649 id=649 data-nosnippet>649</a>                    // establish, but its panic guard can retire it mid-call (a
+<a href=#650 id=650 data-nosnippet>650</a>                    // panicking process call poisons the lock and every later frame
+<a href=#651 id=651 data-nosnippet>651</a>                    // passes through untouched). Without this the audio report would
+<a href=#652 id=652 data-nosnippet>652</a>                    // keep claiming AEC/NS/AGC are running on a raw mic.
+<a href=#653 id=653 data-nosnippet>653</a>                    </span>stats.set_apm_active(!apm.is_degraded());
+<a href=#654 id=654 data-nosnippet>654</a>
+<a href=#655 id=655 data-nosnippet>655</a>                    <span class="comment">// P5's "apply" half: the controller's fresh recommendation, gated on
+<a href=#656 id=656 data-nosnippet>656</a>                    // a resolved provider + the AGC toggle (coupled, no separate setting)
+<a href=#657 id=657 data-nosnippet>657</a>                    // + not muted + the ~1/s rate limit. `VolumeWriteGate` is pure and
+<a href=#658 id=658 data-nosnippet>658</a>                    // unit-tested (`call::audio_tx::tests`); this call site is the only
+<a href=#659 id=659 data-nosnippet>659</a>                    // place its inputs come from real state.
+<a href=#660 id=660 data-nosnippet>660</a>                    </span><span class="kw">let </span>recommended = apm.recommended_input_volume();
+<a href=#661 id=661 data-nosnippet>661</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(level) = volume_gate.should_write(
+<a href=#662 id=662 data-nosnippet>662</a>                        recommended,
+<a href=#663 id=663 data-nosnippet>663</a>                        os_volume.is_available(),
+<a href=#664 id=664 data-nosnippet>664</a>                        voice.agc_enabled(),
+<a href=#665 id=665 data-nosnippet>665</a>                        muted,
+<a href=#666 id=666 data-nosnippet>666</a>                        Instant::now(),
+<a href=#667 id=667 data-nosnippet>667</a>                    ) {
+<a href=#668 id=668 data-nosnippet>668</a>                        os_volume.request_write(level);
+<a href=#669 id=669 data-nosnippet>669</a>                    }
+<a href=#670 id=670 data-nosnippet>670</a>                    stats.set_os_input_volume(
+<a href=#671 id=671 data-nosnippet>671</a>                        os_volume.is_available(),
+<a href=#672 id=672 data-nosnippet>672</a>                        os_volume.applied(),
+<a href=#673 id=673 data-nosnippet>673</a>                        recommended,
+<a href=#674 id=674 data-nosnippet>674</a>                    );
+<a href=#675 id=675 data-nosnippet>675</a>                }
+<a href=#676 id=676 data-nosnippet>676</a>                <span class="kw">if </span>muted {
+<a href=#677 id=677 data-nosnippet>677</a>                    silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
+<a href=#678 id=678 data-nosnippet>678</a>                    <span class="kw">continue</span>;
+<a href=#679 id=679 data-nosnippet>679</a>                }
+<a href=#680 id=680 data-nosnippet>680</a>                <span class="comment">// Metered POST-processing: the bar (and dominant-speaker ranking)
+<a href=#681 id=681 data-nosnippet>681</a>                // reflect what peers actually hear, gain included.
+<a href=#682 id=682 data-nosnippet>682</a>                </span><span class="kw">let </span>level = level_from_rms(frame.rms());
+<a href=#683 id=683 data-nosnippet>683</a>                levels.send_modify(|l| l.mic = level);
+<a href=#684 id=684 data-nosnippet>684</a>                stats.set_self_level(level);
+<a href=#685 id=685 data-nosnippet>685</a>                <span class="kw">let _ </span>= pcm_tx.try_send(frame);
+<a href=#686 id=686 data-nosnippet>686</a>            }
+<a href=#687 id=687 data-nosnippet>687</a>            <span class="kw">_ </span>=&gt; {
+<a href=#688 id=688 data-nosnippet>688</a>                <span class="comment">// The capture ring stopped (the cpal input error callback fired — device
+<a href=#689 id=689 data-nosnippet>689</a>                // gone, config invalidated, or an automatic reroute) or `next_frame`
+<a href=#690 id=690 data-nosnippet>690</a>                // panicked. Rebuilding is REQUIRED: the device rate and the resampler are
+<a href=#691 id=691 data-nosnippet>691</a>                // captured at open, so a stream that silently rerouted to a 24 kHz HFP mic
+<a href=#692 id=692 data-nosnippet>692</a>                // would keep resampling as if it were still 48 k. Announce it — this path
+<a href=#693 id=693 data-nosnippet>693</a>                // used to drop the device and sleep with nothing in the log, so a mid-call
+<a href=#694 id=694 data-nosnippet>694</a>                // mic route change was invisible.
+<a href=#695 id=695 data-nosnippet>695</a>                </span><span class="macro">tracing::info!</span>(
+<a href=#696 id=696 data-nosnippet>696</a>                    track = <span class="string">"mic"</span>,
+<a href=#697 id=697 data-nosnippet>697</a>                    device_rate = mic.as_ref().map(|m| m.device_rate()).unwrap_or(<span class="number">0</span>),
+<a href=#698 id=698 data-nosnippet>698</a>                    <span class="string">"mic: capture stream ended — reopening the device"
+<a href=#699 id=699 data-nosnippet>699</a>                </span>);
+<a href=#700 id=700 data-nosnippet>700</a>                <span class="comment">// Start the outage clock at the DEATH, not at the first failed
+<a href=#701 id=701 data-nosnippet>701</a>                // reopen, so the escalation window measures how long the user has
+<a href=#702 id=702 data-nosnippet>702</a>                // actually been inaudible.
+<a href=#703 id=703 data-nosnippet>703</a>                </span>mic_outage.down(Instant::now());
+<a href=#704 id=704 data-nosnippet>704</a>                drop(mic.take());
+<a href=#705 id=705 data-nosnippet>705</a>                <span class="comment">// The route is gone; the last level it produced must not outlive it,
+<a href=#706 id=706 data-nosnippet>706</a>                // and neither should the OS volume actor's now-stale provider.
+<a href=#707 id=707 data-nosnippet>707</a>                </span>os_volume.device_changed(<span class="prelude-val">None</span>);
+<a href=#708 id=708 data-nosnippet>708</a>                silence_mic_meter(<span class="kw-2">&amp;</span>levels, <span class="kw-2">&amp;</span>stats);
+<a href=#709 id=709 data-nosnippet>709</a>                std::thread::sleep(std::time::Duration::from_millis(<span class="number">200</span>));
+<a href=#710 id=710 data-nosnippet>710</a>            }
+<a href=#711 id=711 data-nosnippet>711</a>        }
+<a href=#712 id=712 data-nosnippet>712</a>    }
+<a href=#713 id=713 data-nosnippet>713</a>}
+<a href=#714 id=714 data-nosnippet>714</a>
+<a href=#715 id=715 data-nosnippet>715</a><span class="doccomment">/// The `!Send` screen APP-AUDIO capture thread: block on the engine `ScreenAudio`
+<a href=#716 id=716 data-nosnippet>716</a>/// (the mic-thread analogue — no APM, no levels, no hot-swap) and forward each 20 ms
+<a href=#717 id=717 data-nosnippet>717</a>/// PCM frame to the publish task. A `next_frame` error/panic is the leg's clean end
+<a href=#718 id=718 data-nosnippet>718</a>/// (its parent screen stream stopped); drop the leg on this owning thread and exit.
+<a href=#719 id=719 data-nosnippet>719</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>screen_audio_capture_loop(
+<a href=#720 id=720 data-nosnippet>720</a>    stop: Arc&lt;AtomicBool&gt;,
+<a href=#721 id=721 data-nosnippet>721</a>    <span class="kw-2">mut </span>audio: hound_engine::api::ScreenAudio,
+<a href=#722 id=722 data-nosnippet>722</a>    pcm_tx: tokio::sync::mpsc::Sender&lt;hound_engine::types::PcmFrame&gt;,
+<a href=#723 id=723 data-nosnippet>723</a>) {
+<a href=#724 id=724 data-nosnippet>724</a>    <span class="kw">let </span><span class="kw-2">mut </span>captured: u64 = <span class="number">0</span>;
+<a href=#725 id=725 data-nosnippet>725</a>    <span class="kw">while </span>!stop.load(Ordering::Relaxed) {
+<a href=#726 id=726 data-nosnippet>726</a>        <span class="kw">let </span>pulled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| audio.next_frame()));
+<a href=#727 id=727 data-nosnippet>727</a>        <span class="kw">match </span>pulled {
+<a href=#728 id=728 data-nosnippet>728</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(pcm)) =&gt; {
+<a href=#729 id=729 data-nosnippet>729</a>                captured += <span class="number">1</span>;
+<a href=#730 id=730 data-nosnippet>730</a>                <span class="kw">if </span>captured == <span class="number">1 </span>|| captured.is_multiple_of(<span class="number">500</span>) {
+<a href=#731 id=731 data-nosnippet>731</a>                    <span class="macro">tracing::info!</span>(captured, <span class="string">"screen: captured app-audio frames"</span>);
+<a href=#732 id=732 data-nosnippet>732</a>                }
+<a href=#733 id=733 data-nosnippet>733</a>                <span class="kw">let _ </span>= pcm_tx.try_send(pcm); <span class="comment">// drop on backpressure
+<a href=#734 id=734 data-nosnippet>734</a>            </span>}
+<a href=#735 id=735 data-nosnippet>735</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
+<a href=#736 id=736 data-nosnippet>736</a>                <span class="macro">tracing::warn!</span>(%e, captured, <span class="string">"screen: app-audio capture ended (error)"</span>);
+<a href=#737 id=737 data-nosnippet>737</a>                <span class="kw">break</span>;
+<a href=#738 id=738 data-nosnippet>738</a>            }
+<a href=#739 id=739 data-nosnippet>739</a>            <span class="prelude-val">Err</span>(_panic) =&gt; {
+<a href=#740 id=740 data-nosnippet>740</a>                <span class="macro">tracing::warn!</span>(captured, <span class="string">"screen: app-audio capture panicked"</span>);
+<a href=#741 id=741 data-nosnippet>741</a>                <span class="kw">break</span>;
+<a href=#742 id=742 data-nosnippet>742</a>            }
+<a href=#743 id=743 data-nosnippet>743</a>        }
+<a href=#744 id=744 data-nosnippet>744</a>    }
+<a href=#745 id=745 data-nosnippet>745</a>    <span class="macro">tracing::info!</span>(captured, <span class="string">"screen: app-audio capture loop stopped"</span>);
+<a href=#746 id=746 data-nosnippet>746</a>    drop(audio);
+<a href=#747 id=747 data-nosnippet>747</a>}
+<a href=#748 id=748 data-nosnippet>748</a>
+<a href=#749 id=749 data-nosnippet>749</a><span class="doccomment">/// The async screen AUDIO publish task: the mic publish path MINUS APM / levels /
+<a href=#750 id=750 data-nosnippet>750</a>/// hot-swap (app audio is not a mic). Opus-encodes each forwarded PCM frame and
+<a href=#751 id=751 data-nosnippet>751</a>/// publishes it on the `screen_audio` track; the receiver plays it on the shared
+<a href=#752 id=752 data-nosnippet>752</a>/// mix bus exactly like a mic.
+<a href=#753 id=753 data-nosnippet>753</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_screen_audio_publish(
+<a href=#754 id=754 data-nosnippet>754</a>    relay: Arc&lt;MoqRelaySession&gt;,
+<a href=#755 id=755 data-nosnippet>755</a>    path: String,
+<a href=#756 id=756 data-nosnippet>756</a>    sender: u16,
+<a href=#757 id=757 data-nosnippet>757</a>    <span class="kw-2">mut </span>pcm_rx: tokio::sync::mpsc::Receiver&lt;hound_engine::types::PcmFrame&gt;,
+<a href=#758 id=758 data-nosnippet>758</a>    stats: Arc&lt;CallStats&gt;,
+<a href=#759 id=759 data-nosnippet>759</a>    mute: Arc&lt;MuteFlags&gt;,
+<a href=#760 id=760 data-nosnippet>760</a>) -&gt; JoinHandle&lt;()&gt; {
+<a href=#761 id=761 data-nosnippet>761</a>    <span class="comment">// App-audio is audio: encode + publish on the RT audio runtime, off the video pool.
+<a href=#762 id=762 data-nosnippet>762</a>    </span>audio_runtime().spawn(<span class="kw">async move </span>{
+<a href=#763 id=763 data-nosnippet>763</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoder = <span class="kw">match </span>OpusEncoder::new(SCREEN_AUDIO_BITRATE, OpusProfile::Music) {
+<a href=#764 id=764 data-nosnippet>764</a>            <span class="prelude-val">Ok</span>(e) =&gt; e,
+<a href=#765 id=765 data-nosnippet>765</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#766 id=766 data-nosnippet>766</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to build app-audio Opus encoder"</span>);
+<a href=#767 id=767 data-nosnippet>767</a>                <span class="kw">return</span>;
+<a href=#768 id=768 data-nosnippet>768</a>            }
+<a href=#769 id=769 data-nosnippet>769</a>        };
+<a href=#770 id=770 data-nosnippet>770</a>        <span class="kw">let </span><span class="kw-2">mut </span>publisher = <span class="kw">match </span>relay.publish_track(<span class="kw-2">&amp;</span>path, SCREEN_AUDIO_TRACK, AUDIO_PRIORITY) {
+<a href=#771 id=771 data-nosnippet>771</a>            <span class="prelude-val">Ok</span>(p) =&gt; p,
+<a href=#772 id=772 data-nosnippet>772</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#773 id=773 data-nosnippet>773</a>                <span class="macro">tracing::error!</span>(%e, <span class="string">"screen: failed to publish audio track"</span>);
+<a href=#774 id=774 data-nosnippet>774</a>                <span class="kw">return</span>;
+<a href=#775 id=775 data-nosnippet>775</a>            }
+<a href=#776 id=776 data-nosnippet>776</a>        };
+<a href=#777 id=777 data-nosnippet>777</a>        <span class="kw">if </span>publisher.wait_subscribed().<span class="kw">await</span>.is_err() {
+<a href=#778 id=778 data-nosnippet>778</a>            <span class="kw">return</span>;
+<a href=#779 id=779 data-nosnippet>779</a>        }
+<a href=#780 id=780 data-nosnippet>780</a>        <span class="macro">tracing::info!</span>(<span class="string">"screen: app-audio track subscribed — publishing"</span>);
+<a href=#781 id=781 data-nosnippet>781</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame_seq = <span class="number">0u32</span>;
+<a href=#782 id=782 data-nosnippet>782</a>        <span class="kw">let </span><span class="kw-2">mut </span>sent: u64 = <span class="number">0</span>;
+<a href=#783 id=783 data-nosnippet>783</a>        <span class="comment">// The same suppression gate as the mic, and today a permanent no-op: the MUSIC
+<a href=#784 id=784 data-nosnippet>784</a>        // profile deliberately runs without DTX (`OpusProfile::dtx`), so a shared
+<a href=#785 id=785 data-nosnippet>785</a>        // track's silence is still coded at full rate and never reaches the DTX size
+<a href=#786 id=786 data-nosnippet>786</a>        // band. It is wired anyway so the two audio publish legs cannot drift — the day
+<a href=#787 id=787 data-nosnippet>787</a>        // the music profile's silence-boundary listening check lands and DTX flips on,
+<a href=#788 id=788 data-nosnippet>788</a>        // app audio inherits suppression with no further change.
+<a href=#789 id=789 data-nosnippet>789</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>silence = SilenceGate::default();
+<a href=#790 id=790 data-nosnippet>790</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(pcm) = pcm_rx.recv().<span class="kw">await </span>{
+<a href=#791 id=791 data-nosnippet>791</a>            <span class="comment">// The broadcaster's "share audio" toggle: drop BEFORE encode, so a muted
+<a href=#792 id=792 data-nosnippet>792</a>            // share costs zero CPU and zero wire data. Receivers read the gap as a
+<a href=#793 id=793 data-nosnippet>793</a>            // quiet source (their starve metric is DTX-aware), and un-muting resumes
+<a href=#794 id=794 data-nosnippet>794</a>            // instantly on this same track.
+<a href=#795 id=795 data-nosnippet>795</a>            </span><span class="kw">if </span>mute.screen_audio.load(Ordering::Relaxed) {
+<a href=#796 id=796 data-nosnippet>796</a>                <span class="kw">continue</span>;
+<a href=#797 id=797 data-nosnippet>797</a>            }
+<a href=#798 id=798 data-nosnippet>798</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(packet) = encoder.encode(<span class="kw-2">&amp;</span>pcm) <span class="kw">else </span>{
+<a href=#799 id=799 data-nosnippet>799</a>                <span class="kw">continue</span>;
+<a href=#800 id=800 data-nosnippet>800</a>            };
+<a href=#801 id=801 data-nosnippet>801</a>            <span class="kw">let </span>bytes = packet.data.len();
+<a href=#802 id=802 data-nosnippet>802</a>            <span class="kw">if </span>!silence.publish(bytes, Instant::now()) {
+<a href=#803 id=803 data-nosnippet>803</a>                <span class="kw">continue</span>;
+<a href=#804 id=804 data-nosnippet>804</a>            }
+<a href=#805 id=805 data-nosnippet>805</a>            <span class="kw">let </span>frame = WireFrame {
+<a href=#806 id=806 data-nosnippet>806</a>                sender,
+<a href=#807 id=807 data-nosnippet>807</a>                track: TrackKind::ScrAudio,
+<a href=#808 id=808 data-nosnippet>808</a>                codec: WireCodec::Opus,
+<a href=#809 id=809 data-nosnippet>809</a>                <span class="comment">// Count-driven grouping (ordered substream); keyframe bit is moot for audio.
+<a href=#810 id=810 data-nosnippet>810</a>                </span>keyframe: <span class="bool-val">false</span>,
+<a href=#811 id=811 data-nosnippet>811</a>                frame_seq,
+<a href=#812 id=812 data-nosnippet>812</a>                timestamp_us: packet.timestamp_us.micros(),
+<a href=#813 id=813 data-nosnippet>813</a>                data: packet.data,
+<a href=#814 id=814 data-nosnippet>814</a>            };
+<a href=#815 id=815 data-nosnippet>815</a>            frame_seq = frame_seq.wrapping_add(<span class="number">1</span>);
+<a href=#816 id=816 data-nosnippet>816</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = publish_audio_one(<span class="kw-2">&amp;mut </span>publisher, <span class="kw-2">&amp;</span>frame) {
+<a href=#817 id=817 data-nosnippet>817</a>                <span class="macro">tracing::warn!</span>(%e, <span class="string">"screen: publish audio frame failed"</span>);
+<a href=#818 id=818 data-nosnippet>818</a>            } <span class="kw">else </span>{
+<a href=#819 id=819 data-nosnippet>819</a>                <span class="comment">// RTC-debug: one screen app-audio frame published.
+<a href=#820 id=820 data-nosnippet>820</a>                </span>stats.screen_audio_sent(bytes);
+<a href=#821 id=821 data-nosnippet>821</a>                sent += <span class="number">1</span>;
+<a href=#822 id=822 data-nosnippet>822</a>                <span class="kw">if </span>sent == <span class="number">1 </span>|| sent.is_multiple_of(<span class="number">500</span>) {
+<a href=#823 id=823 data-nosnippet>823</a>                    <span class="macro">tracing::info!</span>(sent, <span class="string">"screen: published app-audio frames"</span>);
+<a href=#824 id=824 data-nosnippet>824</a>                }
+<a href=#825 id=825 data-nosnippet>825</a>            }
+<a href=#826 id=826 data-nosnippet>826</a>        }
+<a href=#827 id=827 data-nosnippet>827</a>        <span class="macro">tracing::info!</span>(sent, <span class="string">"screen: app-audio publish ended"</span>);
+<a href=#828 id=828 data-nosnippet>828</a>    })
+<a href=#829 id=829 data-nosnippet>829</a>}
+<a href=#830 id=830 data-nosnippet>830</a>
+<a href=#831 id=831 data-nosnippet>831</a><span class="attr">#[cfg(test)]
+<a href=#832 id=832 data-nosnippet>832</a></span><span class="kw">mod </span>tests {
+<a href=#833 id=833 data-nosnippet>833</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#834 id=834 data-nosnippet>834</a>
+<a href=#835 id=835 data-nosnippet>835</a>    <span class="doccomment">/// AGC-off inertness: no write, no matter how much the recommendation
+<a href=#836 id=836 data-nosnippet>836</a>    /// differs from what was last written, and no matter how much time passed.
+<a href=#837 id=837 data-nosnippet>837</a>    </span><span class="attr">#[test]
+<a href=#838 id=838 data-nosnippet>838</a>    </span><span class="kw">fn </span>agc_off_never_writes() {
+<a href=#839 id=839 data-nosnippet>839</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
+<a href=#840 id=840 data-nosnippet>840</a>        <span class="kw">let </span>now = Instant::now();
+<a href=#841 id=841 data-nosnippet>841</a>        <span class="macro">assert_eq!</span>(
+<a href=#842 id=842 data-nosnippet>842</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>, now),
+<a href=#843 id=843 data-nosnippet>843</a>            <span class="prelude-val">None</span>,
+<a href=#844 id=844 data-nosnippet>844</a>            <span class="string">"AGC off must be inert regardless of a resolved provider"
+<a href=#845 id=845 data-nosnippet>845</a>        </span>);
+<a href=#846 id=846 data-nosnippet>846</a>        <span class="macro">assert_eq!</span>(
+<a href=#847 id=847 data-nosnippet>847</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>, now + Duration::from_secs(<span class="number">5</span>)),
+<a href=#848 id=848 data-nosnippet>848</a>            <span class="prelude-val">None</span>,
+<a href=#849 id=849 data-nosnippet>849</a>            <span class="string">"…even after the rate limit would otherwise have elapsed"
+<a href=#850 id=850 data-nosnippet>850</a>        </span>);
+<a href=#851 id=851 data-nosnippet>851</a>    }
+<a href=#852 id=852 data-nosnippet>852</a>
+<a href=#853 id=853 data-nosnippet>853</a>    <span class="doccomment">/// Mute pause: no write while muted, even with AGC on and a resolved
+<a href=#854 id=854 data-nosnippet>854</a>    /// provider — mirrors the mute freeze on `Apm::set_capture_output_used`.
+<a href=#855 id=855 data-nosnippet>855</a>    </span><span class="attr">#[test]
+<a href=#856 id=856 data-nosnippet>856</a>    </span><span class="kw">fn </span>muted_never_writes() {
+<a href=#857 id=857 data-nosnippet>857</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
+<a href=#858 id=858 data-nosnippet>858</a>        <span class="macro">assert_eq!</span>(
+<a href=#859 id=859 data-nosnippet>859</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, Instant::now()),
+<a href=#860 id=860 data-nosnippet>860</a>            <span class="prelude-val">None
+<a href=#861 id=861 data-nosnippet>861</a>        </span>);
+<a href=#862 id=862 data-nosnippet>862</a>    }
+<a href=#863 id=863 data-nosnippet>863</a>
+<a href=#864 id=864 data-nosnippet>864</a>    <span class="doccomment">/// Unavailable-provider degrade: no write when no platform provider
+<a href=#865 id=865 data-nosnippet>865</a>    /// resolved (Linux today; an unsupported device on any platform), even
+<a href=#866 id=866 data-nosnippet>866</a>    /// with AGC on and unmuted.
+<a href=#867 id=867 data-nosnippet>867</a>    </span><span class="attr">#[test]
+<a href=#868 id=868 data-nosnippet>868</a>    </span><span class="kw">fn </span>unavailable_provider_never_writes() {
+<a href=#869 id=869 data-nosnippet>869</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
+<a href=#870 id=870 data-nosnippet>870</a>        <span class="macro">assert_eq!</span>(
+<a href=#871 id=871 data-nosnippet>871</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">false</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, Instant::now()),
+<a href=#872 id=872 data-nosnippet>872</a>            <span class="prelude-val">None
+<a href=#873 id=873 data-nosnippet>873</a>        </span>);
+<a href=#874 id=874 data-nosnippet>874</a>    }
+<a href=#875 id=875 data-nosnippet>875</a>
+<a href=#876 id=876 data-nosnippet>876</a>    <span class="doccomment">/// The first eligible recommendation always writes (nothing written yet,
+<a href=#877 id=877 data-nosnippet>877</a>    /// so "changed since last write" trivially holds) — the round trip's
+<a href=#878 id=878 data-nosnippet>878</a>    /// baseline case.
+<a href=#879 id=879 data-nosnippet>879</a>    </span><span class="attr">#[test]
+<a href=#880 id=880 data-nosnippet>880</a>    </span><span class="kw">fn </span>first_eligible_recommendation_writes() {
+<a href=#881 id=881 data-nosnippet>881</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
+<a href=#882 id=882 data-nosnippet>882</a>        <span class="macro">assert_eq!</span>(
+<a href=#883 id=883 data-nosnippet>883</a>            gate.should_write(<span class="number">0.8</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, Instant::now()),
+<a href=#884 id=884 data-nosnippet>884</a>            <span class="prelude-val">Some</span>(<span class="number">0.8</span>)
+<a href=#885 id=885 data-nosnippet>885</a>        );
+<a href=#886 id=886 data-nosnippet>886</a>    }
+<a href=#887 id=887 data-nosnippet>887</a>
+<a href=#888 id=888 data-nosnippet>888</a>    <span class="doccomment">/// Rate limit: a SECOND change within the write interval is withheld even
+<a href=#889 id=889 data-nosnippet>889</a>    /// though the recommendation changed again; the SAME change becomes
+<a href=#890 id=890 data-nosnippet>890</a>    /// eligible once the interval has elapsed.
+<a href=#891 id=891 data-nosnippet>891</a>    </span><span class="attr">#[test]
+<a href=#892 id=892 data-nosnippet>892</a>    </span><span class="kw">fn </span>rate_limit_withholds_a_second_write_inside_the_interval() {
+<a href=#893 id=893 data-nosnippet>893</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
+<a href=#894 id=894 data-nosnippet>894</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#895 id=895 data-nosnippet>895</a>        <span class="macro">assert_eq!</span>(gate.should_write(<span class="number">0.6</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0), <span class="prelude-val">Some</span>(<span class="number">0.6</span>));
+<a href=#896 id=896 data-nosnippet>896</a>        <span class="comment">// Changed again, but well inside the 1 s window.
+<a href=#897 id=897 data-nosnippet>897</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#898 id=898 data-nosnippet>898</a>            gate.should_write(<span class="number">0.7</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0 + Duration::from_millis(<span class="number">200</span>)),
+<a href=#899 id=899 data-nosnippet>899</a>            <span class="prelude-val">None</span>,
+<a href=#900 id=900 data-nosnippet>900</a>            <span class="string">"a second change inside the rate-limit window must be withheld"
+<a href=#901 id=901 data-nosnippet>901</a>        </span>);
+<a href=#902 id=902 data-nosnippet>902</a>        <span class="comment">// Same (still-pending) recommendation, now past the window: eligible.
+<a href=#903 id=903 data-nosnippet>903</a>        </span><span class="macro">assert_eq!</span>(
+<a href=#904 id=904 data-nosnippet>904</a>            gate.should_write(<span class="number">0.7</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0 + OS_VOLUME_WRITE_INTERVAL),
+<a href=#905 id=905 data-nosnippet>905</a>            <span class="prelude-val">Some</span>(<span class="number">0.7</span>),
+<a href=#906 id=906 data-nosnippet>906</a>            <span class="string">"the withheld change becomes eligible once the interval elapses"
+<a href=#907 id=907 data-nosnippet>907</a>        </span>);
+<a href=#908 id=908 data-nosnippet>908</a>    }
+<a href=#909 id=909 data-nosnippet>909</a>
+<a href=#910 id=910 data-nosnippet>910</a>    <span class="doccomment">/// No write when the recommendation has not changed since the last write,
+<a href=#911 id=911 data-nosnippet>911</a>    /// even once the rate-limit interval has long elapsed — the gate is a
+<a href=#912 id=912 data-nosnippet>912</a>    /// change detector first, a throttle second.
+<a href=#913 id=913 data-nosnippet>913</a>    </span><span class="attr">#[test]
+<a href=#914 id=914 data-nosnippet>914</a>    </span><span class="kw">fn </span>unchanged_recommendation_never_rewrites() {
+<a href=#915 id=915 data-nosnippet>915</a>        <span class="kw">let </span><span class="kw-2">mut </span>gate = VolumeWriteGate::new();
+<a href=#916 id=916 data-nosnippet>916</a>        <span class="kw">let </span>t0 = Instant::now();
+<a href=#917 id=917 data-nosnippet>917</a>        <span class="macro">assert_eq!</span>(gate.should_write(<span class="number">0.5</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0), <span class="prelude-val">Some</span>(<span class="number">0.5</span>));
+<a href=#918 id=918 data-nosnippet>918</a>        <span class="macro">assert_eq!</span>(
+<a href=#919 id=919 data-nosnippet>919</a>            gate.should_write(<span class="number">0.5</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, t0 + Duration::from_secs(<span class="number">60</span>)),
+<a href=#920 id=920 data-nosnippet>920</a>            <span class="prelude-val">None</span>,
+<a href=#921 id=921 data-nosnippet>921</a>            <span class="string">"an unchanged recommendation must never re-trigger a write"
+<a href=#922 id=922 data-nosnippet>922</a>        </span>);
+<a href=#923 id=923 data-nosnippet>923</a>    }
+<a href=#924 id=924 data-nosnippet>924</a>}
 </code></pre></div></section></main></body></html>
