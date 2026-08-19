@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["sealed"],"trait":["AppAudio","AudioInput","AudioOutput","ScreenCapture","VideoCapture","VideoDecode","VideoEncode"]};
+window.SIDEBAR_ITEMS = {"mod":["sealed"],"trait":["AppAudio","AudioInput","AudioOutput","InputVolume","ScreenCapture","VideoCapture","VideoDecode","VideoEncode"]};

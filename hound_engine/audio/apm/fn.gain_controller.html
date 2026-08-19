@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="AGC2 as this endpoint configures it — the loudness contract lives here."><title>gain_controller in hound_engine::audio::apm - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">gain_controller</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../hound_engine/index.html">hound_<wbr>engine</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><div id="rustdoc-modnav"><h2><a href="index.html">In hound_<wbr>engine::<wbr>audio::<wbr>apm</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">hound_engine</a>::<wbr><a href="../index.html">audio</a>::<wbr><a href="index.html">apm</a></div><h1>Function <span class="fn">gain_<wbr>controller</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/hound_engine/audio/apm.rs.html#132-150">Source</a> </span></div><pre class="rust item-decl"><code>fn gain_controller() -&gt; GainController2</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>AGC2 as this endpoint configures it — <strong>the loudness contract lives here</strong>.</p>
+<p>Target: RFC 7874’s −19 dBm0 active-speech level, i.e. <strong>−22 dBFS RMS ± 6 dB</strong>
+measured above 300 Hz. Adaptive digital gain ALONE cannot reach it, which is
+why this is not <code>Default::default()</code>:</p>
+<ul>
+<li>The adaptive stage’s settled target is <code>-(headroom_db + saturation-protector headroom)</code> = <strong>−17…−30 dBFS by design</strong> — a peak-safe trim, not a loudness
+normaliser. In Chrome/Discord it rides on top of an input-volume controller
+that drives the OS mic gain (P5, now wired — see <a href="struct.Apm.html#method.set_applied_input_volume" title="method hound_engine::audio::apm::Apm::set_applied_input_volume"><code>Apm::set_applied_input_volume</code></a>
+/ <a href="struct.Apm.html#method.recommended_input_volume" title="method hound_engine::audio::apm::Apm::recommended_input_volume"><code>Apm::recommended_input_volume</code></a> and <code>call::audio_tx</code> for the platform
+round trip), but that controller’s recommendation is orthogonal to this
+digital math (sonora’s <code>GainController2::process</code> never reads the applied/
+recommended input volume — verified against 0.2.0 source), so the fixed +
+adaptive digital stages below still have to do the whole job whenever no OS
+provider is resolved (Linux today) or a write is gated off (AGC disabled,
+muted, unavailable device). <code>fixed_digital</code> is the standard make-up stage for
+exactly this, and it feeds AGC2’s own limiter (−1 dBFS, 5:1), so raising it
+trades headroom, not clipping.</li>
+<li><code>max_output_noise_level_dbfs</code> clamps the adaptive gain to
+<code>ceiling − post-NS noise floor</code>. At the −50 dBFS default an ordinary mic is
+allowed 5–10 dB regardless of <code>max_gain_db</code>; −42 unclamps it. Going further
+(−40 and up) starts pumping room noise between words.</li>
+</ul>
+<p><strong>The two knobs are not additive, and that is why the make-up gain is 7 dB and
+not 12.</strong> Measured separately, each is worth ~+10 dB; together they are worth
+~+19, because unclamping the noise ceiling is what lets the <em>adaptive</em> stage do
+the work the fixed stage was standing in for. 12 dB on top of the unclamped
+ceiling put this repo’s speech-shaped excitation at <strong>−13.3 dBFS RMS</strong> — past
+the band’s loud edge and hotter than Discord-class. 7 dB targets the clean-
+excitation case at ~−18 dBFS, the top of the band: that case has the best SNR
+any input will have, so the noise clamp binds least and it is the LOUDEST the
+chain gets. Real, noisier mics let the clamp bind and land further down the
+band — which is the right way round.</p>
+<p>One function so the live config and <a href="struct.Apm.html#method.set_agc_enabled" title="method hound_engine::audio::apm::Apm::set_agc_enabled"><code>Apm::set_agc_enabled</code></a>’s rebuild cannot
+drift apart — a toggle that reinstated <code>Default::default()</code> would silently
+undo all of the above.</p>
+</div></details></section></div></main></body></html>

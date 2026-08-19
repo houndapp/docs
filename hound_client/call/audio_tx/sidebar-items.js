@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["dbfs","mic_capture_loop","open_mic","publish_audio_one","screen_audio_capture_loop","silence_mic_meter","spawn_mic_publish","spawn_screen_audio_publish"]};
+window.SIDEBAR_ITEMS = {"constant":["OS_VOLUME_PERIODIC_READ_INTERVAL","OS_VOLUME_POLL_INTERVAL","OS_VOLUME_WRITE_INTERVAL"],"fn":["dbfs","mic_capture_loop","open_mic","publish_audio_one","screen_audio_capture_loop","silence_mic_meter","spawn_mic_publish","spawn_screen_audio_publish","volume_actor_loop"],"struct":["OsInputVolume","VolumeWriteGate"]};

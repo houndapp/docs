@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["APM_FRAME_SAMPLES","INITIAL_STREAM_DELAY_MS"],"struct":["Apm"]};
+window.SIDEBAR_ITEMS = {"constant":["APM_FRAME_SAMPLES","FALLBACK_INPUT_VOLUME","FIXED_MAKEUP_GAIN_DB","INITIAL_STREAM_DELAY_MS","MAX_OUTPUT_NOISE_LEVEL_DBFS"],"fn":["gain_controller"],"struct":["Apm"]};
