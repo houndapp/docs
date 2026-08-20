@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["AUDIO_REORDER_HOLD"],"fn":["audio_pipeline","gain_and_meter","release_next","reorder_insert"],"struct":["HeldFrame"]};
+window.SIDEBAR_ITEMS = {"constant":["AUDIO_REORDER_HOLD"],"enum":["GapFill"],"fn":["audio_pipeline","gain_and_meter","gap_fill","release_next","reorder_insert"],"struct":["HeldFrame"]};
