@@ -30,7 +30,7 @@ session cannot strand one.</p>
     &amp;self,
     conn: ConnId,
     connect: Connect,
-    snapshot: impl <a class="trait" href="https://doc.rust-lang.org/1.93.0/core/ops/function/trait.FnOnce.html" title="trait core::ops::function::FnOnce">FnOnce</a>() -&gt; <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="../../space/struct.VoiceJoinEvent.html" title="struct backend::api::space::VoiceJoinEvent">VoiceJoinEvent</a>&gt;,
+    snapshot: impl <a class="trait" href="https://doc.rust-lang.org/1.93.0/core/ops/function/trait.FnOnce.html" title="trait core::ops::function::FnOnce">FnOnce</a>() -&gt; <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;VoiceJoinEvent&gt;,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.93.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.unit.html">()</a>, <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;ServerMessage&gt;&gt;</h4></section></summary><div class="docblock"><p>Join a connection’s rooms and queue its <code>Welcome</code>, atomically.</p>
 <p>This is the one path that holds the hub lock while taking the conns lock,
 and that nesting is what makes the <code>Welcome</code> provably first. A concurrent

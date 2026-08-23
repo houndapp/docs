@@ -1,0 +1,375 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `services/backend/src/api/community/provision.rs`."><title>provision.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="backend" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">backend/api/community/</div>provision.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Default-layout provisioning: the roles/spaces/settings every fresh (or
+<a href=#2 id=2 data-nosnippet>2</a>//! reset) community starts with. Shared by `POST /community` and
+<a href=#3 id=3 data-nosnippet>3</a>//! `POST /community/{id}/reset` so the two produce identical layouts by
+<a href=#4 id=4 data-nosnippet>4</a>//! construction.
+<a href=#5 id=5 data-nosnippet>5</a>
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>axum::{
+<a href=#7 id=7 data-nosnippet>7</a>    Json,
+<a href=#8 id=8 data-nosnippet>8</a>    extract::{Path, State},
+<a href=#9 id=9 data-nosnippet>9</a>};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>sea_orm::{ColumnTrait, QueryFilter, QuerySelect, Set, TransactionTrait, prelude::<span class="kw-2">*</span>};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>uuid::Uuid;
+<a href=#12 id=12 data-nosnippet>12</a>
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span><span class="kw">crate</span>::api::data::entity::role <span class="kw">as </span>db_role;
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span><span class="kw">crate</span>::api::space::{CommunitySpaceKind, CommunitySpaceSummary};
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span><span class="kw">crate</span>::api::{
+<a href=#16 id=16 data-nosnippet>16</a>    Api, ApiError, ApiResult,
+<a href=#17 id=17 data-nosnippet>17</a>    data::prelude::<span class="kw-2">*</span>,
+<a href=#18 id=18 data-nosnippet>18</a>    middleware::{InstancePerm, perm},
+<a href=#19 id=19 data-nosnippet>19</a>};
+<a href=#20 id=20 data-nosnippet>20</a>
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">super</span>::permission::DEFAULT_EVERYONE_PERMISSIONS;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use super</span>::{CommunityModel, TAG};
+<a href=#23 id=23 data-nosnippet>23</a>
+<a href=#24 id=24 data-nosnippet>24</a><span class="doccomment">/// The rows [`Api::provision_default_layout`] creates, for callers that need to build a
+<a href=#25 id=25 data-nosnippet>25</a>/// response or emit events from them.
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>DefaultLayout {
+<a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">pub</span>(<span class="kw">super</span>) settings: community_settings::Model,
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">pub</span>(<span class="kw">super</span>) general: community_space::Model,
+<a href=#29 id=29 data-nosnippet>29</a>    <span class="kw">pub</span>(<span class="kw">super</span>) voice: community_space::Model,
+<a href=#30 id=30 data-nosnippet>30</a>}
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="attr">#[utoipa::path(
+<a href=#33 id=33 data-nosnippet>33</a>    post,
+<a href=#34 id=34 data-nosnippet>34</a>    path = <span class="string">"/{id}/reset"</span>,
+<a href=#35 id=35 data-nosnippet>35</a>    tag = TAG,
+<a href=#36 id=36 data-nosnippet>36</a>    params(
+<a href=#37 id=37 data-nosnippet>37</a>        (<span class="string">"id" </span>= Uuid, Path, description = <span class="string">"The community ID to reset"</span>),
+<a href=#38 id=38 data-nosnippet>38</a>    ),
+<a href=#39 id=39 data-nosnippet>39</a>    responses(
+<a href=#40 id=40 data-nosnippet>40</a>        (status = <span class="number">200</span>, description = <span class="string">"community reset to a fresh default layout"</span>, body = CommunityModel),
+<a href=#41 id=41 data-nosnippet>41</a>        (status = <span class="number">403</span>, description = <span class="string">"missing ManageCommunities instance permission"</span>),
+<a href=#42 id=42 data-nosnippet>42</a>        (status = <span class="number">404</span>, description = <span class="string">"community not found"</span>),
+<a href=#43 id=43 data-nosnippet>43</a>        (status = <span class="number">422</span>, description = <span class="string">"invalid community ID format"</span>),
+<a href=#44 id=44 data-nosnippet>44</a>        (status = <span class="number">500</span>, description = <span class="string">"failed to reset community"</span>)
+<a href=#45 id=45 data-nosnippet>45</a>    ),
+<a href=#46 id=46 data-nosnippet>46</a>    security(
+<a href=#47 id=47 data-nosnippet>47</a>      (<span class="string">"token" </span>= []</span>)
+<a href=#48 id=48 data-nosnippet>48</a>    ),
+<a href=#49 id=49 data-nosnippet>49</a>)]
+<a href=#50 id=50 data-nosnippet>50</a><span class="doccomment">/// Resets a community to the same default layout `POST /community` produces, while
+<a href=#51 id=51 data-nosnippet>51</a>/// preserving its ID and name. Every space, message, role, member, and community-scoped
+<a href=#52 id=52 data-nosnippet>52</a>/// profile is discarded; the caller becomes the sole member and sole `@organisers` member.
+<a href=#53 id=53 data-nosnippet>53</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>reset_community(
+<a href=#54 id=54 data-nosnippet>54</a>    InstancePerm { claims, .. }: InstancePerm&lt;perm::instance::ManageCommunities&gt;,
+<a href=#55 id=55 data-nosnippet>55</a>    Path(id): Path&lt;Uuid&gt;,
+<a href=#56 id=56 data-nosnippet>56</a>    State(api): State&lt;Api&gt;,
+<a href=#57 id=57 data-nosnippet>57</a>) -&gt; ApiResult&lt;Json&lt;CommunityModel&gt;&gt; {
+<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#59 id=59 data-nosnippet>59</a>
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">let </span>name = CommunitySettings::find()
+<a href=#61 id=61 data-nosnippet>61</a>        .filter(community_settings::Column::CommunityId.eq(id))
+<a href=#62 id=62 data-nosnippet>62</a>        .one(<span class="kw-2">&amp;</span>txn)
+<a href=#63 id=63 data-nosnippet>63</a>        .<span class="kw">await</span><span class="question-mark">?
+<a href=#64 id=64 data-nosnippet>64</a>        </span>.ok_or(ApiError::CommunityNotFound(id))<span class="question-mark">?
+<a href=#65 id=65 data-nosnippet>65</a>        </span>.name;
+<a href=#66 id=66 data-nosnippet>66</a>
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">let </span>old_space_ids: Vec&lt;Uuid&gt; = CommunitySpace::find()
+<a href=#68 id=68 data-nosnippet>68</a>        .filter(community_space::Column::CommunityId.eq(id))
+<a href=#69 id=69 data-nosnippet>69</a>        .select_only()
+<a href=#70 id=70 data-nosnippet>70</a>        .column(community_space::Column::Id)
+<a href=#71 id=71 data-nosnippet>71</a>        .into_tuple()
+<a href=#72 id=72 data-nosnippet>72</a>        .all(<span class="kw-2">&amp;</span>txn)
+<a href=#73 id=73 data-nosnippet>73</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#74 id=74 data-nosnippet>74</a>
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="comment">// Deleting spaces cascades their messages, message history, attachment links, and
+<a href=#76 id=76 data-nosnippet>76</a>    // per-space overwrites; community_settings also cascades away via its default_space
+<a href=#77 id=77 data-nosnippet>77</a>    // FK, which is why `name` was captured above before this point.
+<a href=#78 id=78 data-nosnippet>78</a>    </span>community_space::Entity::delete_many()
+<a href=#79 id=79 data-nosnippet>79</a>        .filter(community_space::Column::CommunityId.eq(id))
+<a href=#80 id=80 data-nosnippet>80</a>        .exec(<span class="kw-2">&amp;</span>txn)
+<a href=#81 id=81 data-nosnippet>81</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="comment">// Idempotent: covers the case where the cascade above didn't already remove it.
+<a href=#83 id=83 data-nosnippet>83</a>    </span>community_settings::Entity::delete_many()
+<a href=#84 id=84 data-nosnippet>84</a>        .filter(community_settings::Column::CommunityId.eq(id))
+<a href=#85 id=85 data-nosnippet>85</a>        .exec(<span class="kw-2">&amp;</span>txn)
+<a href=#86 id=86 data-nosnippet>86</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#87 id=87 data-nosnippet>87</a>    db_role::Entity::delete_many()
+<a href=#88 id=88 data-nosnippet>88</a>        .filter(db_role::Column::CommunityId.eq(id))
+<a href=#89 id=89 data-nosnippet>89</a>        .exec(<span class="kw-2">&amp;</span>txn)
+<a href=#90 id=90 data-nosnippet>90</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#91 id=91 data-nosnippet>91</a>    community_member::Entity::delete_many()
+<a href=#92 id=92 data-nosnippet>92</a>        .filter(community_member::Column::CommunityId.eq(id))
+<a href=#93 id=93 data-nosnippet>93</a>        .exec(<span class="kw-2">&amp;</span>txn)
+<a href=#94 id=94 data-nosnippet>94</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#95 id=95 data-nosnippet>95</a>    profile::Entity::delete_many()
+<a href=#96 id=96 data-nosnippet>96</a>        .filter(profile::Column::CommunityId.eq(id))
+<a href=#97 id=97 data-nosnippet>97</a>        .exec(<span class="kw-2">&amp;</span>txn)
+<a href=#98 id=98 data-nosnippet>98</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let </span>layout = api
+<a href=#101 id=101 data-nosnippet>101</a>        .provision_default_layout(<span class="kw-2">&amp;</span>txn, id, name, <span class="prelude-val">Some</span>(claims.sub))
+<a href=#102 id=102 data-nosnippet>102</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#103 id=103 data-nosnippet>103</a>    txn.commit().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">for </span>old_space_id <span class="kw">in </span>old_space_ids {
+<a href=#106 id=106 data-nosnippet>106</a>        api.emit_space_removed(id, old_space_id).<span class="kw">await</span>;
+<a href=#107 id=107 data-nosnippet>107</a>    }
+<a href=#108 id=108 data-nosnippet>108</a>    api.emit_space_created(<span class="kw-2">&amp;</span>layout.general).<span class="kw">await</span>;
+<a href=#109 id=109 data-nosnippet>109</a>    api.emit_space_created(<span class="kw-2">&amp;</span>layout.voice).<span class="kw">await</span>;
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="prelude-val">Ok</span>(Json(CommunityModel {
+<a href=#112 id=112 data-nosnippet>112</a>        name: layout.settings.name,
+<a href=#113 id=113 data-nosnippet>113</a>        default_space: layout.settings.default_space,
+<a href=#114 id=114 data-nosnippet>114</a>        id,
+<a href=#115 id=115 data-nosnippet>115</a>        spaces: Page::single_page(<span class="macro">vec!</span>[
+<a href=#116 id=116 data-nosnippet>116</a>            CommunitySpaceSummary::from(layout.general),
+<a href=#117 id=117 data-nosnippet>117</a>            CommunitySpaceSummary::from(layout.voice),
+<a href=#118 id=118 data-nosnippet>118</a>        ]),
+<a href=#119 id=119 data-nosnippet>119</a>    }))
+<a href=#120 id=120 data-nosnippet>120</a>}
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a><span class="kw">impl </span>Api {
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">async fn </span>insert_community_settings(
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#125 id=125 data-nosnippet>125</a>        conn: <span class="kw-2">&amp;</span><span class="kw">impl </span>sea_orm::ConnectionTrait,
+<a href=#126 id=126 data-nosnippet>126</a>        community_id: Uuid,
+<a href=#127 id=127 data-nosnippet>127</a>        space_id: Uuid,
+<a href=#128 id=128 data-nosnippet>128</a>        name: String,
+<a href=#129 id=129 data-nosnippet>129</a>    ) -&gt; DbResult&lt;community_settings::Model&gt; {
+<a href=#130 id=130 data-nosnippet>130</a>        community_settings::ActiveModel {
+<a href=#131 id=131 data-nosnippet>131</a>            id: Set(uuid::Uuid::now_v7()),
+<a href=#132 id=132 data-nosnippet>132</a>            name: Set(name),
+<a href=#133 id=133 data-nosnippet>133</a>            community_id: Set(community_id),
+<a href=#134 id=134 data-nosnippet>134</a>            default_space: Set(space_id),
+<a href=#135 id=135 data-nosnippet>135</a>        }
+<a href=#136 id=136 data-nosnippet>136</a>        .insert(conn)
+<a href=#137 id=137 data-nosnippet>137</a>        .<span class="kw">await
+<a href=#138 id=138 data-nosnippet>138</a>    </span>}
+<a href=#139 id=139 data-nosnippet>139</a>
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="doccomment">/// Seeds the default layout for a community: `@organisers`/`@everyone` roles,
+<a href=#141 id=141 data-nosnippet>141</a>    /// `@everyone`'s default channel permissions, `organiser` as a member and the
+<a href=#142 id=142 data-nosnippet>142</a>    /// sole `@organisers` member, the `general`/`voice` spaces, and the
+<a href=#143 id=143 data-nosnippet>143</a>    /// `community_settings` row pointing `default_space` at `general`.
+<a href=#144 id=144 data-nosnippet>144</a>    ///
+<a href=#145 id=145 data-nosnippet>145</a>    /// Shared by community creation and community reset so the two produce
+<a href=#146 id=146 data-nosnippet>146</a>    /// identical layouts by construction.
+<a href=#147 id=147 data-nosnippet>147</a>    ///
+<a href=#148 id=148 data-nosnippet>148</a>    /// `organiser` is `None` only for the instance's boot-provisioned default
+<a href=#149 id=149 data-nosnippet>149</a>    /// community ([`Api::provision_default_community`]), which is created before
+<a href=#150 id=150 data-nosnippet>150</a>    /// any user exists to own it — the layout is otherwise identical, and the
+<a href=#151 id=151 data-nosnippet>151</a>    /// first account to register adopts the empty `@organisers` role (see
+<a href=#152 id=152 data-nosnippet>152</a>    /// [`Api::adopt_default_community_organiser`]).
+<a href=#153 id=153 data-nosnippet>153</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>provision_default_layout(
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#155 id=155 data-nosnippet>155</a>        conn: <span class="kw-2">&amp;</span><span class="kw">impl </span>sea_orm::ConnectionTrait,
+<a href=#156 id=156 data-nosnippet>156</a>        community_id: Uuid,
+<a href=#157 id=157 data-nosnippet>157</a>        name: String,
+<a href=#158 id=158 data-nosnippet>158</a>        organiser: <span class="prelude-ty">Option</span>&lt;Uuid&gt;,
+<a href=#159 id=159 data-nosnippet>159</a>    ) -&gt; DbResult&lt;DefaultLayout&gt; {
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="comment">// Seed special roles before join_community so @everyone exists when the
+<a href=#161 id=161 data-nosnippet>161</a>        // organiser joins.
+<a href=#162 id=162 data-nosnippet>162</a>        </span><span class="kw">let </span>organisers_role = <span class="self">self
+<a href=#163 id=163 data-nosnippet>163</a>            </span>.insert_role(conn, community_id, <span class="string">"@organisers"</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>)
+<a href=#164 id=164 data-nosnippet>164</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span>everyone_role = <span class="self">self
+<a href=#166 id=166 data-nosnippet>166</a>            </span>.insert_role(conn, community_id, <span class="string">"@everyone"</span>, <span class="bool-val">false</span>, <span class="bool-val">true</span>)
+<a href=#167 id=167 data-nosnippet>167</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">for </span>perm <span class="kw">in </span>DEFAULT_EVERYONE_PERMISSIONS {
+<a href=#169 id=169 data-nosnippet>169</a>            role_permission::ActiveModel {
+<a href=#170 id=170 data-nosnippet>170</a>                role_id: Set(everyone_role.id),
+<a href=#171 id=171 data-nosnippet>171</a>                permission: Set(perm),
+<a href=#172 id=172 data-nosnippet>172</a>            }
+<a href=#173 id=173 data-nosnippet>173</a>            .insert(conn)
+<a href=#174 id=174 data-nosnippet>174</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#175 id=175 data-nosnippet>175</a>        }
+<a href=#176 id=176 data-nosnippet>176</a>        <span class="comment">// join_community adds the organiser as a member, creates their profile, and
+<a href=#177 id=177 data-nosnippet>177</a>        // adds them to @everyone.
+<a href=#178 id=178 data-nosnippet>178</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(organiser) = organiser {
+<a href=#179 id=179 data-nosnippet>179</a>            <span class="self">self</span>.join_community(conn, organiser, community_id).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#180 id=180 data-nosnippet>180</a>            <span class="self">self</span>.insert_role_member(conn, organisers_role.id, organiser)
+<a href=#181 id=181 data-nosnippet>181</a>                .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#182 id=182 data-nosnippet>182</a>        }
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span>general = <span class="self">self
+<a href=#184 id=184 data-nosnippet>184</a>            </span>.insert_community_space(
+<a href=#185 id=185 data-nosnippet>185</a>                conn,
+<a href=#186 id=186 data-nosnippet>186</a>                community_id,
+<a href=#187 id=187 data-nosnippet>187</a>                <span class="string">"general"</span>.into(),
+<a href=#188 id=188 data-nosnippet>188</a>                CommunitySpaceKind::Text,
+<a href=#189 id=189 data-nosnippet>189</a>                <span class="bool-val">false</span>,
+<a href=#190 id=190 data-nosnippet>190</a>            )
+<a href=#191 id=191 data-nosnippet>191</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>voice = <span class="self">self
+<a href=#193 id=193 data-nosnippet>193</a>            </span>.insert_community_space(
+<a href=#194 id=194 data-nosnippet>194</a>                conn,
+<a href=#195 id=195 data-nosnippet>195</a>                community_id,
+<a href=#196 id=196 data-nosnippet>196</a>                <span class="string">"voice"</span>.into(),
+<a href=#197 id=197 data-nosnippet>197</a>                CommunitySpaceKind::Voice,
+<a href=#198 id=198 data-nosnippet>198</a>                <span class="bool-val">false</span>,
+<a href=#199 id=199 data-nosnippet>199</a>            )
+<a href=#200 id=200 data-nosnippet>200</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">let </span>settings = <span class="self">self
+<a href=#202 id=202 data-nosnippet>202</a>            </span>.insert_community_settings(conn, community_id, general.id, name)
+<a href=#203 id=203 data-nosnippet>203</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="prelude-val">Ok</span>(DefaultLayout {
+<a href=#205 id=205 data-nosnippet>205</a>            settings,
+<a href=#206 id=206 data-nosnippet>206</a>            general,
+<a href=#207 id=207 data-nosnippet>207</a>            voice,
+<a href=#208 id=208 data-nosnippet>208</a>        })
+<a href=#209 id=209 data-nosnippet>209</a>    }
+<a href=#210 id=210 data-nosnippet>210</a>}
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a><span class="attr">#[cfg(test)]
+<a href=#213 id=213 data-nosnippet>213</a></span><span class="kw">mod </span>tests {
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">use </span>sea_orm::{ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">use </span>uuid::Uuid;
+<a href=#216 id=216 data-nosnippet>216</a>
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">use </span><span class="kw">crate</span>::api::community::{CommunityModel, role};
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">use </span><span class="kw">crate</span>::api::data::entity::sea_orm_active_enums::Permission;
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">use </span><span class="kw">crate</span>::api::data::prelude::<span class="kw-2">*</span>;
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">use </span><span class="kw">crate</span>::api::space::CommunitySpaceKind;
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">use </span><span class="kw">crate</span>::api::testkit::setup;
+<a href=#222 id=222 data-nosnippet>222</a>
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="attr">#[tokio::test]
+<a href=#224 id=224 data-nosnippet>224</a>    </span><span class="kw">async fn </span>reset_restores_default_layout() {
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">use </span><span class="kw">crate</span>::api::space::{PostCommunitySpaceMessageRequest, PostCommunitySpaceRequest};
+<a href=#226 id=226 data-nosnippet>226</a>
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">let </span>(api, server) = <span class="kw">crate</span>::api::test().<span class="kw">await</span>;
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">let </span>(owner, token, community) = setup(<span class="kw-2">&amp;</span>api, <span class="kw-2">&amp;</span>server).<span class="kw">await</span>;
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">let </span>old_space_ids: std::collections::HashSet&lt;Uuid&gt; =
+<a href=#231 id=231 data-nosnippet>231</a>            community.spaces.contents.iter().map(|s| s.id).collect();
+<a href=#232 id=232 data-nosnippet>232</a>
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="comment">// Dirty the community: a second member, messages, an extra space, an extra role.
+<a href=#234 id=234 data-nosnippet>234</a>        </span><span class="kw">let </span>member = api.insert_test_user().<span class="kw">await</span>;
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span>.unwrap();
+<a href=#236 id=236 data-nosnippet>236</a>        api.join_community(<span class="kw-2">&amp;</span>txn, member.id, community.id)
+<a href=#237 id=237 data-nosnippet>237</a>            .<span class="kw">await
+<a href=#238 id=238 data-nosnippet>238</a>            </span>.unwrap();
+<a href=#239 id=239 data-nosnippet>239</a>        txn.commit().<span class="kw">await</span>.unwrap();
+<a href=#240 id=240 data-nosnippet>240</a>
+<a href=#241 id=241 data-nosnippet>241</a>        server
+<a href=#242 id=242 data-nosnippet>242</a>            .post(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"/space/{}/message"</span>, community.default_space))
+<a href=#243 id=243 data-nosnippet>243</a>            .authorization_bearer(<span class="kw-2">&amp;</span>token)
+<a href=#244 id=244 data-nosnippet>244</a>            .json(<span class="kw-2">&amp;</span>PostCommunitySpaceMessageRequest {
+<a href=#245 id=245 data-nosnippet>245</a>                contents: <span class="string">"hello"</span>.into(),
+<a href=#246 id=246 data-nosnippet>246</a>                attachments: <span class="macro">vec!</span>[],
+<a href=#247 id=247 data-nosnippet>247</a>            })
+<a href=#248 id=248 data-nosnippet>248</a>            .<span class="kw">await</span>;
+<a href=#249 id=249 data-nosnippet>249</a>
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="kw">let </span>extra_space: <span class="kw">crate</span>::api::space::CompleteCommunitySpace = server
+<a href=#251 id=251 data-nosnippet>251</a>            .post(<span class="string">"/space"</span>)
+<a href=#252 id=252 data-nosnippet>252</a>            .authorization_bearer(<span class="kw-2">&amp;</span>token)
+<a href=#253 id=253 data-nosnippet>253</a>            .json(<span class="kw-2">&amp;</span>PostCommunitySpaceRequest {
+<a href=#254 id=254 data-nosnippet>254</a>                id: community.id,
+<a href=#255 id=255 data-nosnippet>255</a>                name: <span class="string">"extra"</span>.into(),
+<a href=#256 id=256 data-nosnippet>256</a>                kind: CommunitySpaceKind::Text,
+<a href=#257 id=257 data-nosnippet>257</a>                is_private: <span class="prelude-val">None</span>,
+<a href=#258 id=258 data-nosnippet>258</a>            })
+<a href=#259 id=259 data-nosnippet>259</a>            .<span class="kw">await
+<a href=#260 id=260 data-nosnippet>260</a>            </span>.json();
+<a href=#261 id=261 data-nosnippet>261</a>
+<a href=#262 id=262 data-nosnippet>262</a>        server
+<a href=#263 id=263 data-nosnippet>263</a>            .post(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"/community/{}/role"</span>, community.id))
+<a href=#264 id=264 data-nosnippet>264</a>            .authorization_bearer(<span class="kw-2">&amp;</span>token)
+<a href=#265 id=265 data-nosnippet>265</a>            .json(<span class="kw-2">&amp;</span>role::PostRoleRequest {
+<a href=#266 id=266 data-nosnippet>266</a>                name: <span class="string">"extra-role"</span>.into(),
+<a href=#267 id=267 data-nosnippet>267</a>            })
+<a href=#268 id=268 data-nosnippet>268</a>            .<span class="kw">await</span>;
+<a href=#269 id=269 data-nosnippet>269</a>
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="kw">let </span>response = server
+<a href=#271 id=271 data-nosnippet>271</a>            .post(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"/community/{}/reset"</span>, community.id))
+<a href=#272 id=272 data-nosnippet>272</a>            .authorization_bearer(<span class="kw-2">&amp;</span>token)
+<a href=#273 id=273 data-nosnippet>273</a>            .<span class="kw">await</span>;
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="macro">assert_eq!</span>(response.status_code(), <span class="number">200</span>);
+<a href=#275 id=275 data-nosnippet>275</a>
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>reset: CommunityModel = response.json();
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="macro">assert_eq!</span>(reset.id, community.id);
+<a href=#278 id=278 data-nosnippet>278</a>        <span class="macro">assert_eq!</span>(reset.name, <span class="string">"test-community"</span>);
+<a href=#279 id=279 data-nosnippet>279</a>
+<a href=#280 id=280 data-nosnippet>280</a>        <span class="macro">assert_eq!</span>(reset.spaces.contents.len(), <span class="number">2</span>);
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span>general = reset
+<a href=#282 id=282 data-nosnippet>282</a>            .spaces
+<a href=#283 id=283 data-nosnippet>283</a>            .contents
+<a href=#284 id=284 data-nosnippet>284</a>            .iter()
+<a href=#285 id=285 data-nosnippet>285</a>            .find(|s| s.name == <span class="string">"general"</span>)
+<a href=#286 id=286 data-nosnippet>286</a>            .expect(<span class="string">"general space present"</span>);
+<a href=#287 id=287 data-nosnippet>287</a>        <span class="kw">let </span>voice = reset
+<a href=#288 id=288 data-nosnippet>288</a>            .spaces
+<a href=#289 id=289 data-nosnippet>289</a>            .contents
+<a href=#290 id=290 data-nosnippet>290</a>            .iter()
+<a href=#291 id=291 data-nosnippet>291</a>            .find(|s| s.name == <span class="string">"voice"</span>)
+<a href=#292 id=292 data-nosnippet>292</a>            .expect(<span class="string">"voice space present"</span>);
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(general.kind, CommunitySpaceKind::Text));
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(voice.kind, CommunitySpaceKind::Voice));
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="macro">assert!</span>(!old_space_ids.contains(<span class="kw-2">&amp;</span>general.id));
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="macro">assert!</span>(!old_space_ids.contains(<span class="kw-2">&amp;</span>voice.id));
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="macro">assert_ne!</span>(general.id, extra_space.id);
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="macro">assert_eq!</span>(reset.default_space, general.id);
+<a href=#299 id=299 data-nosnippet>299</a>
+<a href=#300 id=300 data-nosnippet>300</a>        <span class="kw">let </span>roles = api.find_roles_by_community(community.id).<span class="kw">await</span>.unwrap();
+<a href=#301 id=301 data-nosnippet>301</a>        <span class="macro">assert_eq!</span>(roles.len(), <span class="number">2</span>);
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="macro">assert!</span>(roles.iter().any(|r| r.is_organisers));
+<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">let </span>everyone = roles.iter().find(|r| r.is_everyone).unwrap();
+<a href=#304 id=304 data-nosnippet>304</a>
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">let </span>everyone_perms: Vec&lt;Permission&gt; = RolePermission::find()
+<a href=#306 id=306 data-nosnippet>306</a>            .filter(role_permission::Column::RoleId.eq(everyone.id))
+<a href=#307 id=307 data-nosnippet>307</a>            .all(<span class="kw-2">&amp;</span>api.db)
+<a href=#308 id=308 data-nosnippet>308</a>            .<span class="kw">await
+<a href=#309 id=309 data-nosnippet>309</a>            </span>.unwrap()
+<a href=#310 id=310 data-nosnippet>310</a>            .into_iter()
+<a href=#311 id=311 data-nosnippet>311</a>            .map(|p| p.permission)
+<a href=#312 id=312 data-nosnippet>312</a>            .collect();
+<a href=#313 id=313 data-nosnippet>313</a>        <span class="macro">assert_eq!</span>(everyone_perms.len(), <span class="number">3</span>);
+<a href=#314 id=314 data-nosnippet>314</a>        <span class="kw">for </span>perm <span class="kw">in </span>[
+<a href=#315 id=315 data-nosnippet>315</a>            Permission::ViewChannels,
+<a href=#316 id=316 data-nosnippet>316</a>            Permission::SendMessages,
+<a href=#317 id=317 data-nosnippet>317</a>            Permission::ReadHistory,
+<a href=#318 id=318 data-nosnippet>318</a>        ] {
+<a href=#319 id=319 data-nosnippet>319</a>            <span class="macro">assert!</span>(everyone_perms.contains(<span class="kw-2">&amp;</span>perm));
+<a href=#320 id=320 data-nosnippet>320</a>        }
+<a href=#321 id=321 data-nosnippet>321</a>
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">let </span>members = CommunityMember::find()
+<a href=#323 id=323 data-nosnippet>323</a>            .filter(community_member::Column::CommunityId.eq(community.id))
+<a href=#324 id=324 data-nosnippet>324</a>            .all(<span class="kw-2">&amp;</span>api.db)
+<a href=#325 id=325 data-nosnippet>325</a>            .<span class="kw">await
+<a href=#326 id=326 data-nosnippet>326</a>            </span>.unwrap();
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="macro">assert_eq!</span>(members.len(), <span class="number">1</span>);
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="macro">assert_eq!</span>(members[<span class="number">0</span>].user_id, owner.id);
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="macro">assert!</span>(api.is_organiser(community.id, owner.id).<span class="kw">await</span>.unwrap());
+<a href=#330 id=330 data-nosnippet>330</a>
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">let </span>messages = community_space_message::Entity::find()
+<a href=#332 id=332 data-nosnippet>332</a>            .all(<span class="kw-2">&amp;</span>api.db)
+<a href=#333 id=333 data-nosnippet>333</a>            .<span class="kw">await
+<a href=#334 id=334 data-nosnippet>334</a>            </span>.unwrap();
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="macro">assert!</span>(messages.is_empty());
+<a href=#336 id=336 data-nosnippet>336</a>    }
+<a href=#337 id=337 data-nosnippet>337</a>
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="attr">#[tokio::test]
+<a href=#339 id=339 data-nosnippet>339</a>    </span><span class="kw">async fn </span>reset_requires_manage_communities() {
+<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>(api, server) = <span class="kw">crate</span>::api::test().<span class="kw">await</span>;
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">let </span>(_owner, _owner_token, community) = setup(<span class="kw-2">&amp;</span>api, <span class="kw-2">&amp;</span>server).<span class="kw">await</span>;
+<a href=#342 id=342 data-nosnippet>342</a>
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">let </span>member = api.insert_test_user().<span class="kw">await</span>;
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span>.unwrap();
+<a href=#345 id=345 data-nosnippet>345</a>        api.join_community(<span class="kw-2">&amp;</span>txn, member.id, community.id)
+<a href=#346 id=346 data-nosnippet>346</a>            .<span class="kw">await
+<a href=#347 id=347 data-nosnippet>347</a>            </span>.unwrap();
+<a href=#348 id=348 data-nosnippet>348</a>        txn.commit().<span class="kw">await</span>.unwrap();
+<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">let </span>member_token = api.test_access_token(member.id);
+<a href=#350 id=350 data-nosnippet>350</a>
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">let </span>response = server
+<a href=#352 id=352 data-nosnippet>352</a>            .post(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"/community/{}/reset"</span>, community.id))
+<a href=#353 id=353 data-nosnippet>353</a>            .authorization_bearer(<span class="kw-2">&amp;</span>member_token)
+<a href=#354 id=354 data-nosnippet>354</a>            .<span class="kw">await</span>;
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="macro">assert_eq!</span>(response.status_code(), <span class="number">403</span>);
+<a href=#356 id=356 data-nosnippet>356</a>    }
+<a href=#357 id=357 data-nosnippet>357</a>
+<a href=#358 id=358 data-nosnippet>358</a>    <span class="attr">#[tokio::test]
+<a href=#359 id=359 data-nosnippet>359</a>    </span><span class="kw">async fn </span>reset_unknown_community_is_404() {
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span>(api, server) = <span class="kw">crate</span>::api::test().<span class="kw">await</span>;
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>user = api.insert_test_user().<span class="kw">await</span>;
+<a href=#362 id=362 data-nosnippet>362</a>        api.grant_all_instance_permissions(<span class="kw-2">&amp;</span>api.db, user.id)
+<a href=#363 id=363 data-nosnippet>363</a>            .<span class="kw">await
+<a href=#364 id=364 data-nosnippet>364</a>            </span>.unwrap();
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">let </span>token = api.test_access_token(user.id);
+<a href=#366 id=366 data-nosnippet>366</a>
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>response = server
+<a href=#368 id=368 data-nosnippet>368</a>            .post(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"/community/{}/reset"</span>, Uuid::now_v7()))
+<a href=#369 id=369 data-nosnippet>369</a>            .authorization_bearer(<span class="kw-2">&amp;</span>token)
+<a href=#370 id=370 data-nosnippet>370</a>            .<span class="kw">await</span>;
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="macro">assert_eq!</span>(response.status_code(), <span class="number">404</span>);
+<a href=#373 id=373 data-nosnippet>373</a>    }
+<a href=#374 id=374 data-nosnippet>374</a>}
+</code></pre></div></section></main></body></html>

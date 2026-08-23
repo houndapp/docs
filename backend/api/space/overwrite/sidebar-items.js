@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["put_space_overwrites"],"struct":["PutSpaceOverwritesRequest","RoleOverwrite","UserOverwrite"]};

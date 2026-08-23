@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["choice_from","handle_screen_command","note_screen_exit","restart_screen_share","spawn_supervisor","start_screen_pipeline"]};

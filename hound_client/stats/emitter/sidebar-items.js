@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["avg_ms","build_inbound_audio","build_inbound_video","build_peer","build_snapshot","kbps","rate","raw_inbound_audio","raw_inbound_video","spawn_emitter"],"struct":["RawOutAudio","RawOutScreen","RawOutVideo","RawPeer","RawPeerAudio","RawPeerVideo","RawSnapshot","RawTransport","StatsEmitter"]};

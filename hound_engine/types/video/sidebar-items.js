@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PixelFormat","VideoCodec"],"struct":["CapturedSurface","EncodedChunk","RawFrame","VideoCodecCaps"],"type":["SurfaceInner"]};

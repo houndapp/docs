@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CODEC_UPGRADE_DEBOUNCE"],"fn":["codec_bitrate_factor","codec_from_rank","codec_rank","negotiate_codec","video_codec_to_ctl","wire_codec","wire_codec_to_ctl"],"struct":["CodecSwitch"]};

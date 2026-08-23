@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ScreenSource"],"struct":["DisplayId","ScreenCaptureConfig","ScreenSourceInfo","ThumbnailImage","WindowId"]};

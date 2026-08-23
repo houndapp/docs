@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PORTAL_SCREEN_ID","PORTAL_WINDOW_ID"],"fn":["capture_thumbnail","enumerate_sources"]};

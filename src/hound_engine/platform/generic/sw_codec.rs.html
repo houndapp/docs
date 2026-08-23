@@ -75,14 +75,14 @@
 <a href=#75 id=75 data-nosnippet>75</a>    }
 <a href=#76 id=76 data-nosnippet>76</a>
 <a href=#77 id=77 data-nosnippet>77</a>    <span class="doccomment">/// What this device can encode: H.264 only — and only while a SW H.264
-<a href=#78 id=78 data-nosnippet>78</a>    /// implementation actually exists (see [`super::openh264::sw_h264_available`]:
+<a href=#78 id=78 data-nosnippet>78</a>    /// implementation actually exists (see [`super::openh264_blob::sw_h264_available`]:
 <a href=#79 id=79 data-nosnippet>79</a>    /// a shipped build whose Cisco binary has not downloaded yet, or whose user
 <a href=#80 id=80 data-nosnippet>80</a>    /// turned it off, has none, and must not advertise the codec).
 <a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>caps() -&gt; VideoCodecCaps {
 <a href=#82 id=82 data-nosnippet>82</a>        VideoCodecCaps {
 <a href=#83 id=83 data-nosnippet>83</a>            av1: <span class="bool-val">false</span>,
 <a href=#84 id=84 data-nosnippet>84</a>            h265: <span class="bool-val">false</span>,
-<a href=#85 id=85 data-nosnippet>85</a>            h264: <span class="kw">super</span>::openh264::sw_h264_available(),
+<a href=#85 id=85 data-nosnippet>85</a>            h264: <span class="kw">super</span>::openh264_blob::sw_h264_available(),
 <a href=#86 id=86 data-nosnippet>86</a>        }
 <a href=#87 id=87 data-nosnippet>87</a>    }
 <a href=#88 id=88 data-nosnippet>88</a>}
@@ -143,7 +143,7 @@
 <a href=#143 id=143 data-nosnippet>143</a>        VideoCodecCaps {
 <a href=#144 id=144 data-nosnippet>144</a>            av1: sw_av1::available(),
 <a href=#145 id=145 data-nosnippet>145</a>            h265: <span class="bool-val">false</span>,
-<a href=#146 id=146 data-nosnippet>146</a>            h264: <span class="kw">super</span>::openh264::sw_h264_available(),
+<a href=#146 id=146 data-nosnippet>146</a>            h264: <span class="kw">super</span>::openh264_blob::sw_h264_available(),
 <a href=#147 id=147 data-nosnippet>147</a>        }
 <a href=#148 id=148 data-nosnippet>148</a>    }
 <a href=#149 id=149 data-nosnippet>149</a>}

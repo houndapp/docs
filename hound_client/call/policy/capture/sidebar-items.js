@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ENCODER_REBUILD_RETRY","OPEN_RETRY_DENIED","OPEN_RETRY_MAX","OPEN_RETRY_MIN","SCREEN_DRY_RESTART_LIMIT","SOURCE_LIVENESS_IDLE","SOURCE_LIVENESS_INTERVAL"],"enum":["OpenFailure"],"fn":["first_frame_overdue","low_screen_dims","screen_restarts_exhausted","source_probe_due"],"struct":["OpenRetry","RebuildRetry","ResizeWatch"]};

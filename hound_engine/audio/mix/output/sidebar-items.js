@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CUSHION_HYSTERESIS_MS","OUTPUT_CUSHION_MS","REOPEN_BACKOFF","REOPEN_BACKOFF_MAX","ROUTE_SETTLE"],"fn":["chunks_for_tick","cpal_sink_factory","open_sink","prefill_output","synthetic_sink_factory","warmup_reopen_at"],"struct":["OutputHealth","RouteSettle"],"type":["SinkFactory"]};

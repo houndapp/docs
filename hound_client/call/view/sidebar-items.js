@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ConnectionState"],"fn":["build_participants","mark_hidden"],"struct":["CallParticipant","CallTrack","CallView","HiddenTiles","LevelsView"],"type":["PeerIdentities","SharedScreenQuality"]};

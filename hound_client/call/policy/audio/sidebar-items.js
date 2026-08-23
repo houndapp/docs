@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CADENCE_WINDOW_FRAMES","DTX_MAX_BYTES","KEEPALIVE_INTERVAL","MAX_PLC_FRAMES","MIC_SILENCE_WARN_FRAMES","RESUME_AFTER","SUPPRESS_AFTER"],"enum":["AudioGap"],"fn":["apply_gain","classify_audio_gap","frames_missing","reported_audio_level"],"struct":["CadenceDiag","CadenceWindow","MicRouteWarmup","MicSilenceWatch","SilenceGate"]};

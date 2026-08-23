@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["app_snapshot","init_sentry","sentry_app_role","sentry_launch_id","sentry_set_user"],"static":["SENTRY_GUARD"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["audio_devices","camera_format","convert","cpal_io","h264_annexb","mf_format","openh264","pcm_framer","resample","ring","screen_filter","sw_av1","sw_codec","synthetic","synthetic_audio","synthetic_audio_output"]};
+window.SIDEBAR_ITEMS = {"mod":["audio_devices","camera_format","convert","cpal_io","downmix","h264_annexb","mf_format","openh264","openh264_blob","pcm_framer","playback_ring","resample","ring","scale","screen_filter","sw_av1","sw_codec","synthetic","synthetic_audio","synthetic_audio_output"]};

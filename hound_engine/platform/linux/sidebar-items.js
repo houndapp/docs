@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["pw_init_once"],"mod":["camera","input_volume","portal","portal_screen","pw_audio"]};
+window.SIDEBAR_ITEMS = {"fn":["pw_init_once"],"mod":["app_match","app_mixer","camera","input_volume","portal","portal_screen","portal_sources","pw_audio"]};

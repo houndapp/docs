@@ -21,91 +21,114 @@
 <a href=#21 id=21 data-nosnippet>21</a>//!   fragments back, tolerating reorder, duplicates, and loss).
 <a href=#22 id=22 data-nosnippet>22</a>//! * [`clock`] — [`clock::CaptureClock`], one monotonic timestamp source shared
 <a href=#23 id=23 data-nosnippet>23</a>//!   by audio and video capture so their timestamps share a timeline (A/V sync).
-<a href=#24 id=24 data-nosnippet>24</a>//! * [`jitter`] — [`jitter::PlayoutBuffer`], releases frames in timestamp order
+<a href=#24 id=24 data-nosnippet>24</a>//! * [`playout`] — [`playout::PlayoutBuffer`], releases frames in timestamp order
 <a href=#25 id=25 data-nosnippet>25</a>//!   on a playout schedule (absorbs jitter/reorder; not gated on audio).
-<a href=#26 id=26 data-nosnippet>26</a>//! * [`recovery`] — [`recovery::NackGenerator`] / [`recovery::RetransmitBuffer`],
-<a href=#27 id=27 data-nosnippet>27</a>//!   NACK-based loss recovery (repair lost packets without waiting for a keyframe).
-<a href=#28 id=28 data-nosnippet>28</a>//! * [`keyframe`] — [`keyframe::KeyframeRequester`] / [`keyframe::KeyframeThrottle`],
-<a href=#29 id=29 data-nosnippet>29</a>//!   PLI keyframe requests + coalesced, rate-limited keyframe generation (the
-<a href=#30 id=30 data-nosnippet>30</a>//!   recovery path when loss is unrepairable by NACK).
-<a href=#31 id=31 data-nosnippet>31</a>//! * [`congestion`] — [`congestion::RateController`] (loss-based bandwidth
-<a href=#32 id=32 data-nosnippet>32</a>//!   estimate) + [`congestion::QualityLadder`] (adaptive video rung selection).
-<a href=#33 id=33 data-nosnippet>33</a>//! * [`downlink`] — [`downlink::DownlinkDemand`], the RECEIVER's bandwidth-driven
-<a href=#34 id=34 data-nosnippet>34</a>//!   half of demand-driven simulcast (complements [`layer::tile_quality_request`],
-<a href=#35 id=35 data-nosnippet>35</a>//!   the size-driven half): folds per-track `frame_seq` gaps into a
-<a href=#36 id=36 data-nosnippet>36</a>//!   [`congestion::QualityRequest`] with source/4 and source/2 hysteresis.
-<a href=#37 id=37 data-nosnippet>37</a>//! * [`allocate`] — [`allocate::allocate_video`] + [`allocate::VideoBudget`], the
-<a href=#38 id=38 data-nosnippet>38</a>//!   RECEIVER's cross-track budget: every other demand signal here is per-track, so
-<a href=#39 id=39 data-nosnippet>39</a>//!   N tiles that each fit the link can still overshoot it N-fold. Ranks the visible
-<a href=#40 id=40 data-nosnippet>40</a>//!   tiles (screen &gt; ranked speakers &gt; unknown &gt; silent) and hands each one a rung
-<a href=#41 id=41 data-nosnippet>41</a>//!   against one AIMD-controlled total. The receive-side twin of [`send_budget`].
-<a href=#42 id=42 data-nosnippet>42</a>//! * [`send_budget`] — [`send_budget::SendBudget`] (AIMD estimate of the shared
-<a href=#43 id=43 data-nosnippet>43</a>//!   connection's total send rate from aggregate publish-drop backpressure) +
-<a href=#44 id=44 data-nosnippet>44</a>//!   [`send_budget::allocate_send_budget`] (max-min-fair split across the local
-<a href=#45 id=45 data-nosnippet>45</a>//!   video tracks with a floor), so the per-track controllers can't oversubscribe
-<a href=#46 id=46 data-nosnippet>46</a>//!   one shared QUIC uplink.
-<a href=#47 id=47 data-nosnippet>47</a>//! * [`speaking`] — [`speaking::SpeakerRanking`], receiver-side dominant-speaker
-<a href=#48 id=48 data-nosnippet>48</a>//!   ranking (Jitsi's Last-N anti-flap over a coarse control-plane level series),
-<a href=#49 id=49 data-nosnippet>49</a>//!   which modulates the size-derived rung via [`layer::speaker_adjusted`].
-<a href=#50 id=50 data-nosnippet>50</a>//! * [`sim`] — a deterministic network-impairment simulator (loss/jitter/
-<a href=#51 id=51 data-nosnippet>51</a>//!   reorder/duplication/bandwidth) for testing the engine without sockets.
-<a href=#52 id=52 data-nosnippet>52</a>//!
-<a href=#53 id=53 data-nosnippet>53</a>//! Transport (iroh), congestion control, jitter buffering, and codecs live
-<a href=#54 id=54 data-nosnippet>54</a>//! elsewhere and are pumped with the types defined here.
-<a href=#55 id=55 data-nosnippet>55</a>
-<a href=#56 id=56 data-nosnippet>56</a></span><span class="kw">pub mod </span>adapt;
-<a href=#57 id=57 data-nosnippet>57</a><span class="kw">pub mod </span>allocate;
-<a href=#58 id=58 data-nosnippet>58</a><span class="kw">pub mod </span>bwe_delay;
-<a href=#59 id=59 data-nosnippet>59</a><span class="kw">pub mod </span>clock;
-<a href=#60 id=60 data-nosnippet>60</a><span class="kw">pub mod </span>congestion;
-<a href=#61 id=61 data-nosnippet>61</a><span class="kw">pub mod </span>downlink;
-<a href=#62 id=62 data-nosnippet>62</a><span class="kw">pub mod </span>fragment;
-<a href=#63 id=63 data-nosnippet>63</a><span class="kw">pub mod </span>framerate;
-<a href=#64 id=64 data-nosnippet>64</a><span class="kw">pub mod </span>jitter;
-<a href=#65 id=65 data-nosnippet>65</a><span class="kw">pub mod </span>keyframe;
-<a href=#66 id=66 data-nosnippet>66</a><span class="kw">pub mod </span>latency;
-<a href=#67 id=67 data-nosnippet>67</a><span class="kw">pub mod </span>layer;
-<a href=#68 id=68 data-nosnippet>68</a><span class="kw">pub mod </span>packet;
-<a href=#69 id=69 data-nosnippet>69</a><span class="kw">pub mod </span>recovery;
-<a href=#70 id=70 data-nosnippet>70</a><span class="kw">pub mod </span>send_budget;
-<a href=#71 id=71 data-nosnippet>71</a><span class="kw">pub mod </span>sim;
-<a href=#72 id=72 data-nosnippet>72</a><span class="kw">pub mod </span>speaking;
-<a href=#73 id=73 data-nosnippet>73</a>
-<a href=#74 id=74 data-nosnippet>74</a><span class="kw">pub use </span>adapt::{
-<a href=#75 id=75 data-nosnippet>75</a>    AdaptConfig, AdaptDecision, AdaptSignals, GEOMETRY_REBUILD_DWELL_US, GeometryDwell, RungTarget,
-<a href=#76 id=76 data-nosnippet>76</a>    VideoAdaptation, fit_encode_area, fit_encode_dims,
-<a href=#77 id=77 data-nosnippet>77</a>};
-<a href=#78 id=78 data-nosnippet>78</a><span class="kw">pub use </span>allocate::{
-<a href=#79 id=79 data-nosnippet>79</a>    BudgetConfig, BudgetObservation, MIN_VIDEO_BUDGET_BPS, TileRequest, TrackDelivery,
-<a href=#80 id=80 data-nosnippet>80</a>    VIDEO_BUDGET_START_BPS, VIDEO_BUDGET_START_CAP_BPS, VideoAllocation, VideoBudget,
-<a href=#81 id=81 data-nosnippet>81</a>    allocate_video, cpu_crisis_cap, demand_ceiling_bps, downlink_deficient, floor_cost_bps,
-<a href=#82 id=82 data-nosnippet>82</a>    request_bps, served_order,
-<a href=#83 id=83 data-nosnippet>83</a>};
-<a href=#84 id=84 data-nosnippet>84</a><span class="kw">pub use </span>bwe_delay::{DelayBasedBwe, TrendlineEstimator, Usage};
-<a href=#85 id=85 data-nosnippet>85</a><span class="kw">pub use </span>clock::CaptureClock;
-<a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub use </span>congestion::{
-<a href=#87 id=87 data-nosnippet>87</a>    DegradePriority, LayerPlan, MaxResolution, Quality, QualityLadder, QualityRequest, RateConfig,
-<a href=#88 id=88 data-nosnippet>88</a>    RateController, Rung, ScreenQuality, SimulcastPlanner, plan_layers, screen_rungs,
-<a href=#89 id=89 data-nosnippet>89</a>    screen_rungs_for_source,
-<a href=#90 id=90 data-nosnippet>90</a>};
-<a href=#91 id=91 data-nosnippet>91</a><span class="kw">pub use </span>downlink::{DownlinkConfig, DownlinkDemand, FrameSeqWindow, TEMPORAL_BASE_STRIDE};
-<a href=#92 id=92 data-nosnippet>92</a><span class="kw">pub use </span>fragment::{Frame, Packetizer, Reassembler};
-<a href=#93 id=93 data-nosnippet>93</a><span class="kw">pub use </span>framerate::FrameRateGate;
-<a href=#94 id=94 data-nosnippet>94</a><span class="kw">pub use </span>jitter::{AdaptiveJitter, JitterEstimator, PlayoutBuffer, Timestamped};
-<a href=#95 id=95 data-nosnippet>95</a><span class="kw">pub use </span>keyframe::{KeyframeConfig, KeyframeRequester, KeyframeThrottle, KeyframeThrottleConfig};
-<a href=#96 id=96 data-nosnippet>96</a><span class="kw">pub use </span>latency::LatencyHistogram;
-<a href=#97 id=97 data-nosnippet>97</a><span class="kw">pub use </span>layer::{
-<a href=#98 id=98 data-nosnippet>98</a>    BASE_LAYER_BITRATE_DEN, BASE_LAYER_BITRATE_NUM, CAM_SOURCE_BPS, LOW_RUNG, SCREEN_LOW_RUNG,
-<a href=#99 id=99 data-nosnippet>99</a>    SCREEN_MID_RUNG, SCREEN_SOURCE_BPS, SPEAKER_DEMOTE_MIN_PEERS, SpatialLayer,
-<a href=#100 id=100 data-nosnippet>100</a>    TEMPORAL_BASE_SUFFIX, TEMPORAL_ID_MASK, THUMB_RUNG, TemporalLayer, TemporalView, VideoRung,
-<a href=#101 id=101 data-nosnippet>101</a>    VideoSource, base_only_bps, base_track_name, base_view_offered, is_base_track_name,
-<a href=#102 id=102 data-nosnippet>102</a>    low_rung_for_cap, most_constrained, rung_bps, source_bps, speaker_adjusted,
-<a href=#103 id=103 data-nosnippet>103</a>    tile_quality_request, track_kind, track_name, track_name_for,
+<a href=#26 id=26 data-nosnippet>26</a>//! * [`jitter`] — [`jitter::JitterEstimator`] / [`jitter::AdaptiveJitter`], the
+<a href=#27 id=27 data-nosnippet>27</a>//!   measured-jitter estimate that drives the playout buffer's depth.
+<a href=#28 id=28 data-nosnippet>28</a>//! * [`recovery`] — [`recovery::NackGenerator`] / [`recovery::RetransmitBuffer`],
+<a href=#29 id=29 data-nosnippet>29</a>//!   NACK-based loss recovery (repair lost packets without waiting for a keyframe).
+<a href=#30 id=30 data-nosnippet>30</a>//! * [`keyframe`] — [`keyframe::KeyframeRequester`] / [`keyframe::KeyframeThrottle`],
+<a href=#31 id=31 data-nosnippet>31</a>//!   PLI keyframe requests + coalesced, rate-limited keyframe generation (the
+<a href=#32 id=32 data-nosnippet>32</a>//!   recovery path when loss is unrepairable by NACK).
+<a href=#33 id=33 data-nosnippet>33</a>//! * [`rate`] — [`rate::RateController`], the loss-based bandwidth estimate.
+<a href=#34 id=34 data-nosnippet>34</a>//! * [`ladder`] — [`ladder::QualityLadder`], adaptive video rung selection, plus
+<a href=#35 id=35 data-nosnippet>35</a>//!   the screen/camera rung bitrate models and [`ladder::ScreenQuality`] rung
+<a href=#36 id=36 data-nosnippet>36</a>//!   construction.
+<a href=#37 id=37 data-nosnippet>37</a>//! * [`quality`] — [`quality::QualityRequest`], the shared receiver→sender
+<a href=#38 id=38 data-nosnippet>38</a>//!   demand vocabulary (mirrored in `hound_control::proto`).
+<a href=#39 id=39 data-nosnippet>39</a>//! * [`simulcast`] — [`simulcast::plan_layers`] / [`simulcast::SimulcastPlanner`],
+<a href=#40 id=40 data-nosnippet>40</a>//!   the sender's demand-driven layer plan.
+<a href=#41 id=41 data-nosnippet>41</a>//! * [`geometry`] — [`geometry::GeometryDwell`] + the encode-geometry fitting
+<a href=#42 id=42 data-nosnippet>42</a>//!   helpers (source aspect, never upscale, dwell-debounced encoder rebuilds).
+<a href=#43 id=43 data-nosnippet>43</a>//! * [`downlink`] — [`downlink::DownlinkDemand`], the RECEIVER's bandwidth-driven
+<a href=#44 id=44 data-nosnippet>44</a>//!   half of demand-driven simulcast (complements [`layer::tile_quality_request`],
+<a href=#45 id=45 data-nosnippet>45</a>//!   the size-driven half): folds per-track `frame_seq` gaps into a
+<a href=#46 id=46 data-nosnippet>46</a>//!   [`quality::QualityRequest`] with source/4 and source/2 hysteresis.
+<a href=#47 id=47 data-nosnippet>47</a>//! * [`allocate`] — [`allocate::allocate_video`], the RECEIVER's cross-track
+<a href=#48 id=48 data-nosnippet>48</a>//!   budget: every other demand signal here is per-track, so N tiles that each fit
+<a href=#49 id=49 data-nosnippet>49</a>//!   the link can still overshoot it N-fold. Ranks the visible tiles (screen &gt;
+<a href=#50 id=50 data-nosnippet>50</a>//!   ranked speakers &gt; unknown &gt; silent) and hands each one a rung against one
+<a href=#51 id=51 data-nosnippet>51</a>//!   AIMD-controlled total. The receive-side twin of [`send_budget`].
+<a href=#52 id=52 data-nosnippet>52</a>//! * [`video_budget`] — [`video_budget::VideoBudget`], the AIMD controller on the
+<a href=#53 id=53 data-nosnippet>53</a>//!   receiver's total video budget (the estimate [`allocate`] spends).
+<a href=#54 id=54 data-nosnippet>54</a>//! * [`send_budget`] — [`send_budget::SendBudget`] (AIMD estimate of the shared
+<a href=#55 id=55 data-nosnippet>55</a>//!   connection's total send rate from aggregate publish-drop backpressure) +
+<a href=#56 id=56 data-nosnippet>56</a>//!   [`send_budget::allocate_send_budget`] (max-min-fair split across the local
+<a href=#57 id=57 data-nosnippet>57</a>//!   video tracks with a floor), so the per-track controllers can't oversubscribe
+<a href=#58 id=58 data-nosnippet>58</a>//!   one shared QUIC uplink.
+<a href=#59 id=59 data-nosnippet>59</a>//! * [`speaking`] — [`speaking::SpeakerRanking`], receiver-side dominant-speaker
+<a href=#60 id=60 data-nosnippet>60</a>//!   ranking (Jitsi's Last-N anti-flap over a coarse control-plane level series),
+<a href=#61 id=61 data-nosnippet>61</a>//!   which modulates the size-derived rung via [`layer::speaker_adjusted`].
+<a href=#62 id=62 data-nosnippet>62</a>//! * [`sim`] — a deterministic network-impairment simulator (loss/jitter/
+<a href=#63 id=63 data-nosnippet>63</a>//!   reorder/duplication/bandwidth) for testing the engine without sockets.
+<a href=#64 id=64 data-nosnippet>64</a>//!
+<a href=#65 id=65 data-nosnippet>65</a>//! Transport (iroh), congestion control, jitter buffering, and codecs live
+<a href=#66 id=66 data-nosnippet>66</a>//! elsewhere and are pumped with the types defined here.
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a></span><span class="kw">pub mod </span>adapt;
+<a href=#69 id=69 data-nosnippet>69</a><span class="kw">pub mod </span>allocate;
+<a href=#70 id=70 data-nosnippet>70</a><span class="kw">pub mod </span>bwe_delay;
+<a href=#71 id=71 data-nosnippet>71</a><span class="kw">pub mod </span>clock;
+<a href=#72 id=72 data-nosnippet>72</a><span class="kw">pub mod </span>downlink;
+<a href=#73 id=73 data-nosnippet>73</a><span class="kw">pub mod </span>fragment;
+<a href=#74 id=74 data-nosnippet>74</a><span class="kw">pub mod </span>framerate;
+<a href=#75 id=75 data-nosnippet>75</a><span class="kw">pub mod </span>geometry;
+<a href=#76 id=76 data-nosnippet>76</a><span class="kw">pub mod </span>jitter;
+<a href=#77 id=77 data-nosnippet>77</a><span class="kw">pub mod </span>keyframe;
+<a href=#78 id=78 data-nosnippet>78</a><span class="kw">pub mod </span>ladder;
+<a href=#79 id=79 data-nosnippet>79</a><span class="kw">pub mod </span>latency;
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">pub mod </span>layer;
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">pub mod </span>packet;
+<a href=#82 id=82 data-nosnippet>82</a><span class="kw">pub mod </span>playout;
+<a href=#83 id=83 data-nosnippet>83</a><span class="kw">pub mod </span>quality;
+<a href=#84 id=84 data-nosnippet>84</a><span class="kw">pub mod </span>rate;
+<a href=#85 id=85 data-nosnippet>85</a><span class="kw">pub mod </span>recovery;
+<a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub mod </span>send_budget;
+<a href=#87 id=87 data-nosnippet>87</a><span class="kw">pub mod </span>sim;
+<a href=#88 id=88 data-nosnippet>88</a><span class="kw">pub mod </span>simulcast;
+<a href=#89 id=89 data-nosnippet>89</a><span class="kw">pub mod </span>speaking;
+<a href=#90 id=90 data-nosnippet>90</a><span class="kw">pub mod </span>video_budget;
+<a href=#91 id=91 data-nosnippet>91</a>
+<a href=#92 id=92 data-nosnippet>92</a><span class="kw">pub use </span>adapt::{AdaptConfig, AdaptDecision, AdaptSignals, VideoAdaptation};
+<a href=#93 id=93 data-nosnippet>93</a><span class="kw">pub use </span>allocate::{
+<a href=#94 id=94 data-nosnippet>94</a>    TileRequest, VideoAllocation, allocate_video, cpu_crisis_cap, demand_ceiling_bps,
+<a href=#95 id=95 data-nosnippet>95</a>    floor_cost_bps, request_bps, served_order,
+<a href=#96 id=96 data-nosnippet>96</a>};
+<a href=#97 id=97 data-nosnippet>97</a><span class="kw">pub use </span>bwe_delay::{DelayBasedBwe, TrendlineEstimator, Usage};
+<a href=#98 id=98 data-nosnippet>98</a><span class="kw">pub use </span>clock::CaptureClock;
+<a href=#99 id=99 data-nosnippet>99</a><span class="kw">pub use </span>downlink::{DownlinkConfig, DownlinkDemand, FrameSeqWindow, TEMPORAL_BASE_STRIDE};
+<a href=#100 id=100 data-nosnippet>100</a><span class="kw">pub use </span>fragment::{Frame, Packetizer, Reassembler};
+<a href=#101 id=101 data-nosnippet>101</a><span class="kw">pub use </span>framerate::FrameRateGate;
+<a href=#102 id=102 data-nosnippet>102</a><span class="kw">pub use </span>geometry::{
+<a href=#103 id=103 data-nosnippet>103</a>    GEOMETRY_REBUILD_DWELL_US, GeometryDwell, RungTarget, fit_encode_area, fit_encode_dims,
 <a href=#104 id=104 data-nosnippet>104</a>};
-<a href=#105 id=105 data-nosnippet>105</a><span class="kw">pub use </span>packet::{Codec, HEADER_LEN, PROTOCOL_VERSION, PacketError, PacketHeader, TrackKind};
-<a href=#106 id=106 data-nosnippet>106</a><span class="kw">pub use </span>recovery::{NackConfig, NackGenerator, RetransmitBuffer};
-<a href=#107 id=107 data-nosnippet>107</a><span class="kw">pub use </span>send_budget::{MIN_VIDEO_BPS, SendBudget, allocate_send_budget};
-<a href=#108 id=108 data-nosnippet>108</a><span class="kw">pub use </span>speaking::{
-<a href=#109 id=109 data-nosnippet>109</a>    SpeakerRanking, SpeakerTier, SpeakerTiers, subband_from_level <span class="kw">as </span>speaking_subband,
+<a href=#105 id=105 data-nosnippet>105</a><span class="kw">pub use </span>jitter::{AdaptiveJitter, JitterEstimator};
+<a href=#106 id=106 data-nosnippet>106</a><span class="kw">pub use </span>keyframe::{KeyframeConfig, KeyframeRequester, KeyframeThrottle, KeyframeThrottleConfig};
+<a href=#107 id=107 data-nosnippet>107</a><span class="kw">pub use </span>ladder::{
+<a href=#108 id=108 data-nosnippet>108</a>    DegradePriority, MaxResolution, Quality, QualityLadder, Rung, ScreenQuality, screen_rungs,
+<a href=#109 id=109 data-nosnippet>109</a>    screen_rungs_for_source,
 <a href=#110 id=110 data-nosnippet>110</a>};
+<a href=#111 id=111 data-nosnippet>111</a><span class="kw">pub use </span>latency::LatencyHistogram;
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">pub use </span>layer::{
+<a href=#113 id=113 data-nosnippet>113</a>    BASE_LAYER_BITRATE_DEN, BASE_LAYER_BITRATE_NUM, CAM_SOURCE_BPS, LOW_RUNG, SCREEN_LOW_RUNG,
+<a href=#114 id=114 data-nosnippet>114</a>    SCREEN_MID_RUNG, SCREEN_SOURCE_BPS, SPEAKER_DEMOTE_MIN_PEERS, SpatialLayer,
+<a href=#115 id=115 data-nosnippet>115</a>    TEMPORAL_BASE_SUFFIX, TEMPORAL_ID_MASK, THUMB_RUNG, TemporalLayer, TemporalView, VideoRung,
+<a href=#116 id=116 data-nosnippet>116</a>    VideoSource, base_only_bps, base_track_name, base_view_offered, is_base_track_name,
+<a href=#117 id=117 data-nosnippet>117</a>    low_rung_for_cap, most_constrained, rung_bps, source_bps, speaker_adjusted,
+<a href=#118 id=118 data-nosnippet>118</a>    tile_quality_request, track_kind, track_name, track_name_for,
+<a href=#119 id=119 data-nosnippet>119</a>};
+<a href=#120 id=120 data-nosnippet>120</a><span class="kw">pub use </span>packet::{Codec, HEADER_LEN, PROTOCOL_VERSION, PacketError, PacketHeader, TrackKind};
+<a href=#121 id=121 data-nosnippet>121</a><span class="kw">pub use </span>playout::{PlayoutBuffer, Timestamped};
+<a href=#122 id=122 data-nosnippet>122</a><span class="kw">pub use </span>quality::QualityRequest;
+<a href=#123 id=123 data-nosnippet>123</a><span class="kw">pub use </span>rate::{RateConfig, RateController};
+<a href=#124 id=124 data-nosnippet>124</a><span class="kw">pub use </span>recovery::{NackConfig, NackGenerator, RetransmitBuffer};
+<a href=#125 id=125 data-nosnippet>125</a><span class="kw">pub use </span>send_budget::{MIN_VIDEO_BPS, SendBudget, allocate_send_budget};
+<a href=#126 id=126 data-nosnippet>126</a><span class="kw">pub use </span>simulcast::{LayerPlan, SimulcastPlanner, plan_layers};
+<a href=#127 id=127 data-nosnippet>127</a><span class="kw">pub use </span>speaking::{
+<a href=#128 id=128 data-nosnippet>128</a>    SpeakerRanking, SpeakerTier, SpeakerTiers, subband_from_level <span class="kw">as </span>speaking_subband,
+<a href=#129 id=129 data-nosnippet>129</a>};
+<a href=#130 id=130 data-nosnippet>130</a><span class="kw">pub use </span>video_budget::{
+<a href=#131 id=131 data-nosnippet>131</a>    BudgetConfig, BudgetObservation, MIN_VIDEO_BUDGET_BPS, TrackDelivery, VIDEO_BUDGET_START_BPS,
+<a href=#132 id=132 data-nosnippet>132</a>    VIDEO_BUDGET_START_CAP_BPS, VideoBudget, downlink_deficient,
+<a href=#133 id=133 data-nosnippet>133</a>};
 </code></pre></div></section></main></body></html>

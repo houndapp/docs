@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CHANNELS","FRAME_MS","SAMPLES_PER_FRAME","SAMPLE_RATE"],"struct":["OpusPacket","PcmFrame"]};

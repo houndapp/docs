@@ -3,7 +3,7 @@
     budget_bps: <a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.u64.html">u64</a>,
     decode_budget: <a class="enum" href="https://doc.rust-lang.org/1.93.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.93.0/std/primitive.usize.html">usize</a>&gt;,
 ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="struct.VideoAllocation.html" title="struct hound_media::allocate::VideoAllocation">VideoAllocation</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Hand every visible tile the richest rung the <strong>total</strong> <code>budget_bps</code> can pay for,
-in priority order. Returns one <a href="../congestion/enum.QualityRequest.html" title="enum hound_media::congestion::QualityRequest"><code>QualityRequest</code></a> per input, in input order.</p>
+in priority order. Returns one <a href="../quality/enum.QualityRequest.html" title="enum hound_media::quality::QualityRequest"><code>QualityRequest</code></a> per input, in input order.</p>
 <p>Three phases, all in rung space:</p>
 <ol>
 <li><strong>Floor</strong> — every visible tile is guaranteed its cheapest rung. A call does not

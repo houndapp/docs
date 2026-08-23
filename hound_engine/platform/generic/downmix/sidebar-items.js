@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DOMINANCE_ENTER_DB","DOMINANCE_EXIT_DB","DOWNMIX_ENERGY_TAU_MS","DOWNMIX_SETTLE_MS","DOWNMIX_SILENCE_ENERGY"],"enum":["DownmixMode"],"fn":["to_mono_i16"],"struct":["Downmix"]};

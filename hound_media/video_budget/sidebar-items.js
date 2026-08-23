@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MIN_VIDEO_BUDGET_BPS","VIDEO_BUDGET_START_BPS","VIDEO_BUDGET_START_CAP_BPS"],"fn":["downlink_deficient"],"struct":["BudgetConfig","BudgetObservation","TrackDelivery","VideoBudget"]};

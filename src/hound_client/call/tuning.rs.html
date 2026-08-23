@@ -1,0 +1,179 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/app/client/src/call/tuning.rs`."><title>tuning.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_client" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_client/call/</div>tuning.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Cross-module tuning constants — the call's rates, geometries, cadences,
+<a href=#2 id=2 data-nosnippet>2</a>//! track names and wire priorities — plus the broadcast-path scheme they attach
+<a href=#3 id=3 data-nosnippet>3</a>//! to. One flat namespace of numbers so a change to the call's shape is a
+<a href=#4 id=4 data-nosnippet>4</a>//! one-file diff.
+<a href=#5 id=5 data-nosnippet>5</a>
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>uuid::Uuid;
+<a href=#7 id=7 data-nosnippet>7</a>
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>hound_control::PeerId;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>hound_engine::types::{Bitrate, Dimensions, Fps, KeyframeCadence};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>hound_media::Frame <span class="kw">as </span>WireFrame;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>hound_transport::MoqTrackPublisher;
+<a href=#12 id=12 data-nosnippet>12</a>
+<a href=#13 id=13 data-nosnippet>13</a><span class="doccomment">/// Per-peer jitter-buffer depth floor the adaptive jitter grows from. 80 ms buys
+<a href=#14 id=14 data-nosnippet>14</a>/// headroom so a brief fill-thread scheduling hiccup under heavy video load can't
+<a href=#15 id=15 data-nosnippet>15</a>/// drain the buffer before the next frame lands — defense in depth behind the RT
+<a href=#16 id=16 data-nosnippet>16</a>/// audio runtime (which is what actually prevents starvation). The adaptive
+<a href=#17 id=17 data-nosnippet>17</a>/// estimator still grows above this on a jittery link; the extra baseline latency
+<a href=#18 id=18 data-nosnippet>18</a>/// is inaudible for conversation and buys a full Opus frame of slack.
+<a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>PLAYOUT_TARGET_US: i64 = <span class="number">80_000</span>;
+<a href=#20 id=20 data-nosnippet>20</a><span class="doccomment">/// Self-view / camera publish geometry. The engine scales native → this.
+<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>CAM_DIMS: Dimensions = Dimensions::new(<span class="number">1280</span>, <span class="number">720</span>);
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>CAM_FPS: Fps = Fps::new(<span class="number">30</span>);
+<a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// Camera publish bitrate ceiling.
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>CAM_BITRATE: Bitrate = Bitrate::kbps(<span class="number">1500</span>);
+<a href=#25 id=25 data-nosnippet>25</a><span class="comment">// The LOW simulcast layer's camera geometry is NOT a constant: it is derived from
+<a href=#26 id=26 data-nosnippet>26</a>// the coalesced receiver cap (`hound_media::low_rung_for_cap` → `fit_encode_dims`
+<a href=#27 id=27 data-nosnippet>27</a>// against `CAM_DIMS`), so a call rendered as a grid of thumbnails runs the low
+<a href=#28 id=28 data-nosnippet>28</a>// encoder at 320×180@15 rather than 640×360@30. See `camera_tx.rs`'s low path.
+<a href=#29 id=29 data-nosnippet>29</a></span><span class="doccomment">/// Screen-share publish geometry: capture is native, scaled to this 1080p-class
+<a href=#30 id=30 data-nosnippet>30</a>/// cap preserving aspect (text stays legible without 4K uplink cost).
+<a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_MAX_W: u32 = <span class="number">1920</span>;
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_MAX_H: u32 = <span class="number">1080</span>;
+<a href=#33 id=33 data-nosnippet>33</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_FPS: Fps = Fps::new(<span class="number">30</span>);
+<a href=#34 id=34 data-nosnippet>34</a><span class="comment">// The LOW simulcast layer's screen geometry is NOT a constant either: the screen
+<a href=#35 id=35 data-nosnippet>35</a>// ladder has two below-source rungs (`hound_media::SCREEN_LOW_RUNG` 360p15 and
+<a href=#36 id=36 data-nosnippet>36</a>// `SCREEN_MID_RUNG` 720p30), and the capture thread inverts the coalesced receiver
+<a href=#37 id=37 data-nosnippet>37</a>// cap into one of them and fits its PIXEL budget to the share's own aspect
+<a href=#38 id=38 data-nosnippet>38</a>// (`policy::low_screen_dims`). A long-edge budget mispriced every non-16:9 share;
+<a href=#39 id=39 data-nosnippet>39</a>// see that function. The screen ladder's rungs also differ in FRAME RATE, so the
+<a href=#40 id=40 data-nosnippet>40</a>// low path's fps gate follows the settled rung — see `screen_tx.rs`'s low path.
+<a href=#41 id=41 data-nosnippet>41</a>
+<a href=#42 id=42 data-nosnippet>42</a></span><span class="doccomment">/// Camera keyframe cadence: a periodic IDR. Camera content changes wholesale
+<a href=#43 id=43 data-nosnippet>43</a>/// (deltas are already large), so the periodic refresh is cheap insurance for
+<a href=#44 id=44 data-nosnippet>44</a>/// loss recovery.
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>CAM_KEYFRAME_CADENCE: KeyframeCadence = KeyframeCadence::MOTION;
+<a href=#46 id=46 data-nosnippet>46</a><span class="doccomment">/// Screen keyframe cadence: IDRs **on demand only** (a subscriber's
+<a href=#47 id=47 data-nosnippet>47</a>/// `RequestKeyframe` — sent at subscribe and re-sent by the receiver's
+<a href=#48 id=48 data-nosnippet>48</a>/// awaiting-keyframe nag — or a PLI), plus a slow safety net. Screen content is
+<a href=#49 id=49 data-nosnippet>49</a>/// mostly static, and a periodic IDR of an unchanged 1080p frame is pure
+<a href=#50 id=50 data-nosnippet>50</a>/// redundancy — a short fixed cadence would dominate the data cost of a static
+<a href=#51 id=51 data-nosnippet>51</a>/// share (hundreds of kbps for zero new information).
+<a href=#52 id=52 data-nosnippet>52</a>/// `max_gop_frames = 900`: one GOP = one moq group, and moq-net evicts a group
+<a href=#53 id=53 data-nosnippet>53</a>/// past 1024 objects (a fatal `CacheFull` for the drain) — 900 bounds the GOP
+<a href=#54 id=54 data-nosnippet>54</a>/// safely under that cap even at sustained 60 fps (≈15 s), while the 60 s
+<a href=#55 id=55 data-nosnippet>55</a>/// safety interval governs low-fps/static content (tiny groups).
+<a href=#56 id=56 data-nosnippet>56</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_KEYFRAME_CADENCE: KeyframeCadence = KeyframeCadence::OnDemand {
+<a href=#57 id=57 data-nosnippet>57</a>    safety_seconds: <span class="number">60</span>,
+<a href=#58 id=58 data-nosnippet>58</a>    max_gop_frames: <span class="number">900</span>,
+<a href=#59 id=59 data-nosnippet>59</a>};
+<a href=#60 id=60 data-nosnippet>60</a><span class="doccomment">/// Screen publish bitrate seed — the initial encoder target before the BWE
+<a href=#61 id=61 data-nosnippet>61</a>/// adaptation settles onto a ladder rung. Matches the 1080p30 SCREEN rung
+<a href=#62 id=62 data-nosnippet>62</a>/// (~2.4 Mbps, see `screen_bitrate_bps`) — a screen-content target, NOT a
+<a href=#63 id=63 data-nosnippet>63</a>/// camera-video one. A camera-grade seed (several Mbps) would saturate the shared
+<a href=#64 id=64 data-nosnippet>64</a>/// QUIC connection before BWE reacts and starve audio/other video, while screen
+<a href=#65 id=65 data-nosnippet>65</a>/// content (mostly static, text) looks crisp in H.265 at this rate. The BWE climbs
+<a href=#66 id=66 data-nosnippet>66</a>/// from here if the link genuinely has headroom.
+<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_BITRATE: Bitrate = Bitrate::kbps(<span class="number">2500</span>);
+<a href=#68 id=68 data-nosnippet>68</a><span class="doccomment">/// Mic Opus bitrate. 48 kbps mono fullband VOIP is effectively transparent for
+<a href=#69 id=69 data-nosnippet>69</a>/// speech — Discord's 64 kbps default buys nothing audible over it on a mono mic
+<a href=#70 id=70 data-nosnippet>70</a>/// track — while DTX + the publisher silence gate keep the idle cost near zero.
+<a href=#71 id=71 data-nosnippet>71</a>/// Fixed for the call: audio is the "sacred" plane the send budget carves out
+<a href=#72 id=72 data-nosnippet>72</a>/// first (`adapt.rs`), never the release valve; if audio ever must degrade under
+<a href=#73 id=73 data-nosnippet>73</a>/// congestion, `OpusEncoder::set_bitrate` is the live lever (floor ~24 kbps).
+<a href=#74 id=74 data-nosnippet>74</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>MIC_BITRATE: Bitrate = Bitrate::kbps(<span class="number">48</span>);
+<a href=#75 id=75 data-nosnippet>75</a>
+<a href=#76 id=76 data-nosnippet>76</a><span class="doccomment">/// App-audio Opus bitrate for a shared window's audio. This is music/system
+<a href=#77 id=77 data-nosnippet>77</a>/// audio, not a mic — encoded in `OpusProfile::Music` (general-audio) mode, so it
+<a href=#78 id=78 data-nosnippet>78</a>/// needs a music-grade rate: speech-grade rates (~32 kbps) audibly crush music.
+<a href=#79 id=79 data-nosnippet>79</a>/// 96 kbps mono is near-transparent for general audio.
+<a href=#80 id=80 data-nosnippet>80</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_AUDIO_BITRATE: Bitrate = Bitrate::kbps(<span class="number">96</span>);
+<a href=#81 id=81 data-nosnippet>81</a><span class="doccomment">/// Damage-driven screen capture: bounded wait for a frame (a static screen
+<a href=#82 id=82 data-nosnippet>82</a>/// produces none) so the loop can re-emit a cached frame for new subscribers.
+<a href=#83 id=83 data-nosnippet>83</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(<span class="number">100</span>);
+<a href=#84 id=84 data-nosnippet>84</a><span class="doccomment">/// Re-emit the last screen frame at least this often (timestamp advanced) so a
+<a href=#85 id=85 data-nosnippet>85</a>/// static share still delivers pixels to a freshly-subscribed peer.
+<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_STATIC_REFRESH: std::time::Duration = std::time::Duration::from_secs(<span class="number">1</span>);
+<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// How long a changed window size must hold before the share restarts at the new
+<a href=#88 id=88 data-nosnippet>88</a>/// geometry — one restart when a live drag-resize settles, not dozens.
+<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_RESIZE_DEBOUNCE: std::time::Duration =
+<a href=#90 id=90 data-nosnippet>90</a>    std::time::Duration::from_millis(<span class="number">700</span>);
+<a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// Backoff the screen capture thread sleeps before signalling `Retry` after a
+<a href=#92 id=92 data-nosnippet>92</a>/// transient capture error/panic — bounds the restart rate if the source keeps
+<a href=#93 id=93 data-nosnippet>93</a>/// faulting immediately (the share restart itself paces it further).
+<a href=#94 id=94 data-nosnippet>94</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(<span class="number">500</span>);
+<a href=#95 id=95 data-nosnippet>95</a><span class="doccomment">/// How long a screen capture may run without EVER delivering a frame before the
+<a href=#96 id=96 data-nosnippet>96</a>/// capture thread gives up and asks for a restart (`policy::first_frame_overdue`).
+<a href=#97 id=97 data-nosnippet>97</a>/// A source that never produces frame #1 (Windows WGC can do this indefinitely)
+<a href=#98 id=98 data-nosnippet>98</a>/// errs on nothing: no frames, no error, and the liveness probe still sees a live
+<a href=#99 id=99 data-nosnippet>99</a>/// handle, so the loop would idle forever behind a black self-preview.
+<a href=#100 id=100 data-nosnippet>100</a>///
+<a href=#101 id=101 data-nosnippet>101</a>/// **5 s, deliberately longer than the engine's 3 s first-frame deadline at open.**
+<a href=#102 id=102 data-nosnippet>102</a>/// The engine's own deadline is the precise instrument — it fires a typed open
+<a href=#103 id=103 data-nosnippet>103</a>/// error the UI can route — and this backstop must not race ahead of it and turn a
+<a href=#104 id=104 data-nosnippet>104</a>/// diagnosable open failure into an anonymous restart. This catches only what the
+<a href=#105 id=105 data-nosnippet>105</a>/// engine-side deadline cannot see: a source that opens, satisfies the engine, and
+<a href=#106 id=106 data-nosnippet>106</a>/// then never delivers.
+<a href=#107 id=107 data-nosnippet>107</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_FIRST_FRAME_DEADLINE: std::time::Duration =
+<a href=#108 id=108 data-nosnippet>108</a>    std::time::Duration::from_secs(<span class="number">5</span>);
+<a href=#109 id=109 data-nosnippet>109</a><span class="doccomment">/// moq-net track names (one per source) under the per-peer broadcast path.
+<a href=#110 id=110 data-nosnippet>110</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>MIC_TRACK: <span class="kw-2">&amp;</span>str = <span class="string">"mic"</span>;
+<a href=#111 id=111 data-nosnippet>111</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>CAM_TRACK: <span class="kw-2">&amp;</span>str = <span class="string">"cam"</span>;
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_TRACK: <span class="kw-2">&amp;</span>str = <span class="string">"screen"</span>;
+<a href=#113 id=113 data-nosnippet>113</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>SCREEN_AUDIO_TRACK: <span class="kw-2">&amp;</span>str = <span class="string">"screen_audio"</span>;
+<a href=#114 id=114 data-nosnippet>114</a><span class="doccomment">/// moq-net delivery priorities — **audio must strictly outrank video on the wire** so
+<a href=#115 id=115 data-nosnippet>115</a>/// a high-bitrate screenshare can never delay/burst the Opus streams on the SHARED
+<a href=#116 id=116 data-nosnippet>116</a>/// QUIC connection (the "audio is sacred" wire guarantee).
+<a href=#117 id=117 data-nosnippet>117</a>///
+<a href=#118 id=118 data-nosnippet>118</a>/// ⚠️ COUNTERINTUITIVE VALUES — they compensate for an inversion in moq-net 0.1.9.
+<a href=#119 id=119 data-nosnippet>119</a>/// moq-net ranks tracks by *descending* `track` value into a vec and hands quinn the
+<a href=#120 id=120 data-nosnippet>120</a>/// vec **index** (`lite/priority.rs:138`, `new_priority = idx`, 0 = top rank). But
+<a href=#121 id=121 data-nosnippet>121</a>/// quinn schedules the **largest** i32 first (`quinn-proto streams: BinaryHeap` max-
+<a href=#122 id=122 data-nosnippet>122</a>/// heap). So a *smaller* `track` value → higher vec index → larger quinn priority →
+<a href=#123 id=123 data-nosnippet>123</a>/// **served first**. Audio therefore takes the SMALLER value. If moq-net ever corrects
+<a href=#124 id=124 data-nosnippet>124</a>/// the mapping, this inverts and audio would drop to lowest priority — the
+<a href=#125 id=125 data-nosnippet>125</a>/// `audio_strictly_outranks_video_on_the_wire` guard test (`subscribe.rs`) fails
+<a href=#126 id=126 data-nosnippet>126</a>/// loudly if that regression lands, and `moq-net` is pinned `=0.1.9` against it. Only
+<a href=#127 id=127 data-nosnippet>127</a>/// the relative order matters (the value is used as an ordinal rank), not the
+<a href=#128 id=128 data-nosnippet>128</a>/// magnitude. Used on BOTH subscribe (relay→us downlink) and publish (us→relay
+<a href=#129 id=129 data-nosnippet>129</a>/// uplink), so it governs every audio/video contention point.
+<a href=#130 id=130 data-nosnippet>130</a>///
+<a href=#131 id=131 data-nosnippet>131</a>/// Two bands, not three — **no dominant-speaker band on the wire**, evaluated and
+<a href=#132 id=132 data-nosnippet>132</a>/// rejected. A subscriber's priority is a SUBSCRIBE-time value in moq-lite (the
+<a href=#133 id=133 data-nosnippet>133</a>/// SUBSCRIBE message carries it; there is no update message), so a dominance band
+<a href=#134 id=134 data-nosnippet>134</a>/// can only be latched when a pipeline starts. That leaves two equally bad options:
+<a href=#135 id=135 data-nosnippet>135</a>/// latch it and never revisit — every pipeline of a fresh establish is created
+<a href=#136 id=136 data-nosnippet>136</a>/// before the ranker has any evidence, so the band is unreachable in steady state,
+<a href=#137 id=137 data-nosnippet>137</a>/// while a pipeline that happens to start while its peer is dominant keeps the
+<a href=#138 id=138 data-nosnippet>138</a>/// promotion forever and preempts the *actual* speaker — or resubscribe on every
+<a href=#139 id=139 data-nosnippet>139</a>/// handover, which is exactly the shared-connection churn that has taken VOICE down
+<a href=#140 id=140 data-nosnippet>140</a>/// (a wedged video sub churning the shared QUIC session). It also applies per PEER,
+<a href=#141 id=141 data-nosnippet>141</a>/// so a dominant presenter's multi-Mbps screen share would outrank every camera in
+<a href=#142 id=142 data-nosnippet>142</a>/// the call.
+<a href=#143 id=143 data-nosnippet>143</a>///
+<a href=#144 id=144 data-nosnippet>144</a>/// The P4 allocator (`hound_media::allocate`) has since landed and deliberately did
+<a href=#145 id=145 data-nosnippet>145</a>/// NOT supply the bounded re-subscription path this was waiting on: it ranks tiles
+<a href=#146 id=146 data-nosnippet>146</a>/// and emits RUNGS, so a ranking change moves a cap and nothing else — pinned by
+<a href=#147 id=147 data-nosnippet>147</a>/// `subscribe::taking_the_floor_moves_the_cap_and_never_the_track`. It does move the
+<a href=#148 id=148 data-nosnippet>148</a>/// layer axis (its deficit phase can demote a tile to `Hidden`), but only through
+<a href=#149 id=149 data-nosnippet>149</a>/// `LayerHysteresis`'s debounce and dwell and only on a link that is genuinely short,
+<a href=#150 id=150 data-nosnippet>150</a>/// which is not a per-handover path. So the premise here is unchanged, and P3's rung
+<a href=#151 id=151 data-nosnippet>151</a>/// promotion (`hound_media::speaker_adjusted`) remains the whole quality lever.
+<a href=#152 id=152 data-nosnippet>152</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>AUDIO_PRIORITY: u8 = <span class="number">2</span>;
+<a href=#153 id=153 data-nosnippet>153</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>VIDEO_PRIORITY: u8 = <span class="number">4</span>;
+<a href=#154 id=154 data-nosnippet>154</a><span class="doccomment">/// Heartbeat cadence (keeps the backend's voice-membership alive).
+<a href=#155 id=155 data-nosnippet>155</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>HEARTBEAT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(<span class="number">15</span>);
+<a href=#156 id=156 data-nosnippet>156</a><span class="doccomment">/// Sender-side BWE/congestion adaptation tick cadence: one decision per second
+<a href=#157 id=157 data-nosnippet>157</a>/// folds RTT + the worst receiver-reported loss into a target bitrate/rung the
+<a href=#158 id=158 data-nosnippet>158</a>/// encode loop applies.
+<a href=#159 id=159 data-nosnippet>159</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const </span>ADAPT_TICK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(<span class="number">1</span>);
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a><span class="doccomment">/// The per-peer broadcast path under the relay token's `space/{id}` scope.
+<a href=#162 id=162 data-nosnippet>162</a>///
+<a href=#163 id=163 data-nosnippet>163</a>/// `user_id` is the AUTHENTICATED identity the SFU always enforces the ingest
+<a href=#164 id=164 data-nosnippet>164</a>/// half of this namespace against — for a SELF path it is this client's own
+<a href=#165 id=165 data-nosnippet>165</a>/// logged-in user id; for a REMOTE path it must come from
+<a href=#166 id=166 data-nosnippet>166</a>/// the control-plane roster's `PeerInfo::user_id` (never the realtime-derived
+<a href=#167 id=167 data-nosnippet>167</a>/// [`PeerIdentities`] map, which is racy relative to the control plane). The
+<a href=#168 id=168 data-nosnippet>168</a>/// trailing `peer.0` keeps same-user-multi-device paths distinct.
+<a href=#169 id=169 data-nosnippet>169</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>broadcast_path(space_id: Uuid, user_id: Uuid, peer: PeerId, track: <span class="kw-2">&amp;</span>str) -&gt; String {
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="macro">format!</span>(<span class="string">"space/{space_id}/peer/{user_id}/{}/{track}"</span>, peer.<span class="number">0</span>)
+<a href=#171 id=171 data-nosnippet>171</a>}
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>publish_one(
+<a href=#174 id=174 data-nosnippet>174</a>    publisher: <span class="kw-2">&amp;mut </span>MoqTrackPublisher,
+<a href=#175 id=175 data-nosnippet>175</a>    frame: <span class="kw-2">&amp;</span>WireFrame,
+<a href=#176 id=176 data-nosnippet>176</a>) -&gt; std::result::Result&lt;(), String&gt; {
+<a href=#177 id=177 data-nosnippet>177</a>    publisher.publish_frame(frame).map_err(|e| e.to_string())
+<a href=#178 id=178 data-nosnippet>178</a>}
+</code></pre></div></section></main></body></html>

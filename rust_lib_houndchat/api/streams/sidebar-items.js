@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["project_frame_sizes","project_levels","watch_auth_state","watch_call_state","watch_communities","watch_connection","watch_frame_sizes","watch_levels","watch_messages","watch_roster","watch_screen_error","watch_stats"],"struct":["FrameSizesDto","LevelsDto"]};

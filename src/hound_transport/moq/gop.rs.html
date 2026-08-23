@@ -1,0 +1,272 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/media/transport/src/moq/gop.rs`."><title>gop.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_transport" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_transport/moq/</div>gop.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! The shared GOP↔group/object mapping and the drain disciplines.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! The single publish path (keyframe rolls the group; audio rolls by count) and
+<a href=#4 id=4 data-nosnippet>4</a>//! the single subscribe drain (priority-drop across groups, ordered within one)
+<a href=#5 id=5 data-nosnippet>5</a>//! that every publisher/subscriber-shaped type in this crate is built on — see
+<a href=#6 id=6 data-nosnippet>6</a>//! the module docs on [`crate::moq`] for the frame ↔ group/object model.
+<a href=#7 id=7 data-nosnippet>7</a>
+<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>hound_media::Frame;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>moq_net::{Group, TrackConsumer, TrackProducer};
+<a href=#10 id=10 data-nosnippet>10</a>
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">super</span>::MoqError;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span><span class="kw">super</span>::envelope::{decode_object, encode_object};
+<a href=#13 id=13 data-nosnippet>13</a>
+<a href=#14 id=14 data-nosnippet>14</a><span class="doccomment">/// Map one encoded [`Frame`] onto the MoQ GOP/object model on `track`, advancing
+<a href=#15 id=15 data-nosnippet>15</a>/// `open_group`/`next_group_seq`. The single GOP-publish code path shared by the
+<a href=#16 id=16 data-nosnippet>16</a>/// per-track [`crate::MoqPublisher`] and the multiplexed [`crate::MoqTrackPublisher`] — see
+<a href=#17 id=17 data-nosnippet>17</a>/// [`crate::MoqPublisher::publish_frame`] for the keyframe-rolls-the-group contract.
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>gop_publish_frame(
+<a href=#19 id=19 data-nosnippet>19</a>    track: <span class="kw-2">&amp;mut </span>TrackProducer,
+<a href=#20 id=20 data-nosnippet>20</a>    open_group: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;moq_net::GroupProducer&gt;,
+<a href=#21 id=21 data-nosnippet>21</a>    next_group_seq: <span class="kw-2">&amp;mut </span>u64,
+<a href=#22 id=22 data-nosnippet>22</a>    frame: <span class="kw-2">&amp;</span>Frame,
+<a href=#23 id=23 data-nosnippet>23</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), MoqError&gt; {
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span>object = encode_object(frame);
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">if </span>frame.keyframe {
+<a href=#26 id=26 data-nosnippet>26</a>        <span class="comment">// Roll the GOP boundary: a stale group is dropped *whole* at its boundary
+<a href=#27 id=27 data-nosnippet>27</a>        // by the subscriber, so a fresh keyframe is never queued behind an older
+<a href=#28 id=28 data-nosnippet>28</a>        // group's retransmits.
+<a href=#29 id=29 data-nosnippet>29</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>prev) = open_group.take() {
+<a href=#30 id=30 data-nosnippet>30</a>            prev.finish()
+<a href=#31 id=31 data-nosnippet>31</a>                .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"finish prev group: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#32 id=32 data-nosnippet>32</a>        }
+<a href=#33 id=33 data-nosnippet>33</a>        <span class="kw">let </span><span class="kw-2">mut </span>group = track
+<a href=#34 id=34 data-nosnippet>34</a>            .create_group(Group::from(<span class="kw-2">*</span>next_group_seq))
+<a href=#35 id=35 data-nosnippet>35</a>            .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"create_group: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#36 id=36 data-nosnippet>36</a>        group
+<a href=#37 id=37 data-nosnippet>37</a>            .write_frame(object)
+<a href=#38 id=38 data-nosnippet>38</a>            .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"write keyframe object: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#39 id=39 data-nosnippet>39</a>        <span class="kw-2">*</span>next_group_seq += <span class="number">1</span>;
+<a href=#40 id=40 data-nosnippet>40</a>        <span class="kw-2">*</span>open_group = <span class="prelude-val">Some</span>(group);
+<a href=#41 id=41 data-nosnippet>41</a>    } <span class="kw">else </span>{
+<a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">let </span>group = open_group.as_mut().ok_or(MoqError::DeltaBeforeKeyframe)<span class="question-mark">?</span>;
+<a href=#43 id=43 data-nosnippet>43</a>        group
+<a href=#44 id=44 data-nosnippet>44</a>            .write_frame(object)
+<a href=#45 id=45 data-nosnippet>45</a>            .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"write delta object: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#46 id=46 data-nosnippet>46</a>    }
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="prelude-val">Ok</span>(())
+<a href=#48 id=48 data-nosnippet>48</a>}
+<a href=#49 id=49 data-nosnippet>49</a>
+<a href=#50 id=50 data-nosnippet>50</a><span class="doccomment">/// Audio objects per group before rolling the group boundary (the **ordered audio
+<a href=#51 id=51 data-nosnippet>51</a>/// substream** model). Audio is sequential and stateful — not GOP-structured like
+<a href=#52 id=52 data-nosnippet>52</a>/// video — so instead of one group (= one QUIC uni-stream) PER FRAME (which gives ~50
+<a href=#53 id=53 data-nosnippet>53</a>/// unordered racing streams/s whose cross-stream reordering corrupts playout),
+<a href=#54 id=54 data-nosnippet>54</a>/// successive Opus frames are appended as objects to ONE group so QUIC delivers them
+<a href=#55 id=55 data-nosnippet>55</a>/// **in order**. The group is rolled every `AUDIO_GROUP_OBJECTS` frames because a single
+<a href=#56 id=56 data-nosnippet>56</a>/// never-rolled group is not viable in moq-net 0.1.9 (the 1024-object / 32 MB eviction
+<a href=#57 id=57 data-nosnippet>57</a>/// cap → fatal `CacheFull`; late-join only attaches at a group boundary; and a lost
+<a href=#58 id=58 data-nosnippet>58</a>/// object head-of-line-blocks the whole group until retransmit).
+<a href=#59 id=59 data-nosnippet>59</a>///
+<a href=#60 id=60 data-nosnippet>60</a>/// The window size is the **HoL blast radius**: under connection congestion (e.g. a
+<a href=#61 id=61 data-nosnippet>61</a>/// high-bitrate screenshare surge sharing the link) a lost audio group's stream stalls
+<a href=#62 id=62 data-nosnippet>62</a>/// until QUIC retransmit, so a whole window of audio arrives too late and is dropped —
+<a href=#63 id=63 data-nosnippet>63</a>/// one audible hole the size of the window. At 20 ms/frame, 4 objects ≈ 80 ms: within
+<a href=#64 id=64 data-nosnippet>64</a>/// the jitter buffer's absorption (the receiver's reorder buffer mops up the extra
+<a href=#65 id=65 data-nosnippet>65</a>/// cross-group boundaries), while still cutting stream churn ~4× vs per-frame and
+<a href=#66 id=66 data-nosnippet>66</a>/// staying far under the eviction cap.
+<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">const </span>AUDIO_GROUP_OBJECTS: usize = <span class="number">4</span>;
+<a href=#68 id=68 data-nosnippet>68</a>
+<a href=#69 id=69 data-nosnippet>69</a><span class="doccomment">/// Publish one audio frame as an object in a COUNT-ROLLED group (the ordered-substream
+<a href=#70 id=70 data-nosnippet>70</a>/// model — see [`AUDIO_GROUP_OBJECTS`]). The first frame and every `AUDIO_GROUP_OBJECTS`-th
+<a href=#71 id=71 data-nosnippet>71</a>/// frame opens a fresh group (new ordered QUIC stream); the rest append to the open
+<a href=#72 id=72 data-nosnippet>72</a>/// group, so a window of frames rides one in-order stream. The frame's `keyframe` bit is
+<a href=#73 id=73 data-nosnippet>73</a>/// IGNORED — every Opus frame is independently decodable, so audio grouping is driven by
+<a href=#74 id=74 data-nosnippet>74</a>/// count, not by a keyframe flag. Shared by [`crate::MoqPublisher`] and [`crate::MoqTrackPublisher`].
+<a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>gop_publish_audio_frame(
+<a href=#76 id=76 data-nosnippet>76</a>    track: <span class="kw-2">&amp;mut </span>TrackProducer,
+<a href=#77 id=77 data-nosnippet>77</a>    open_group: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;moq_net::GroupProducer&gt;,
+<a href=#78 id=78 data-nosnippet>78</a>    next_group_seq: <span class="kw-2">&amp;mut </span>u64,
+<a href=#79 id=79 data-nosnippet>79</a>    objects_in_group: <span class="kw-2">&amp;mut </span>usize,
+<a href=#80 id=80 data-nosnippet>80</a>    frame: <span class="kw-2">&amp;</span>Frame,
+<a href=#81 id=81 data-nosnippet>81</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), MoqError&gt; {
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">let </span>object = encode_object(frame);
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="comment">// Roll on the first frame (no open group) or once the window is full.
+<a href=#84 id=84 data-nosnippet>84</a>    </span><span class="kw">if </span>open_group.is_none() || <span class="kw-2">*</span>objects_in_group &gt;= AUDIO_GROUP_OBJECTS {
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>prev) = open_group.take() {
+<a href=#86 id=86 data-nosnippet>86</a>            prev.finish()
+<a href=#87 id=87 data-nosnippet>87</a>                .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"finish prev audio group: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#88 id=88 data-nosnippet>88</a>        }
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let </span><span class="kw-2">mut </span>group = track
+<a href=#90 id=90 data-nosnippet>90</a>            .create_group(Group::from(<span class="kw-2">*</span>next_group_seq))
+<a href=#91 id=91 data-nosnippet>91</a>            .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"create audio group: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#92 id=92 data-nosnippet>92</a>        group
+<a href=#93 id=93 data-nosnippet>93</a>            .write_frame(object)
+<a href=#94 id=94 data-nosnippet>94</a>            .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"write audio group-open object: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw-2">*</span>next_group_seq += <span class="number">1</span>;
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw-2">*</span>objects_in_group = <span class="number">1</span>;
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw-2">*</span>open_group = <span class="prelude-val">Some</span>(group);
+<a href=#98 id=98 data-nosnippet>98</a>    } <span class="kw">else </span>{
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>group = open_group
+<a href=#100 id=100 data-nosnippet>100</a>            .as_mut()
+<a href=#101 id=101 data-nosnippet>101</a>            .expect(<span class="string">"the roll branch covers the None case"</span>);
+<a href=#102 id=102 data-nosnippet>102</a>        group
+<a href=#103 id=103 data-nosnippet>103</a>            .write_frame(object)
+<a href=#104 id=104 data-nosnippet>104</a>            .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"write audio object: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw-2">*</span>objects_in_group += <span class="number">1</span>;
+<a href=#106 id=106 data-nosnippet>106</a>    }
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="prelude-val">Ok</span>(())
+<a href=#108 id=108 data-nosnippet>108</a>}
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a><span class="doccomment">/// Finish the open GOP group (if any) then the track, so the subscriber's drain
+<a href=#111 id=111 data-nosnippet>111</a>/// terminates cleanly. Shared by [`crate::MoqPublisher`] and [`crate::MoqTrackPublisher`].
+<a href=#112 id=112 data-nosnippet>112</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>gop_finish(
+<a href=#113 id=113 data-nosnippet>113</a>    track: <span class="kw-2">&amp;mut </span>TrackProducer,
+<a href=#114 id=114 data-nosnippet>114</a>    open_group: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;moq_net::GroupProducer&gt;,
+<a href=#115 id=115 data-nosnippet>115</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), MoqError&gt; {
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>group) = open_group.take() {
+<a href=#117 id=117 data-nosnippet>117</a>        group
+<a href=#118 id=118 data-nosnippet>118</a>            .finish()
+<a href=#119 id=119 data-nosnippet>119</a>            .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"finish open group: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#120 id=120 data-nosnippet>120</a>    }
+<a href=#121 id=121 data-nosnippet>121</a>    track
+<a href=#122 id=122 data-nosnippet>122</a>        .finish()
+<a href=#123 id=123 data-nosnippet>123</a>        .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"finish track: {e}"</span>)))
+<a href=#124 id=124 data-nosnippet>124</a>}
+<a href=#125 id=125 data-nosnippet>125</a>
+<a href=#126 id=126 data-nosnippet>126</a><span class="doccomment">/// The outcome of a stall-bounded video pull ([`crate::MoqTrackSubscriber::next_frame_stalled`]).
+<a href=#127 id=127 data-nosnippet>127</a></span><span class="kw">pub enum </span>VideoPull {
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// One reassembled frame.
+<a href=#129 id=129 data-nosnippet>129</a>    </span>Frame(Frame),
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="doccomment">/// Nothing arrived within the stall bound. If a group was mid-drain it has
+<a href=#131 id=131 data-nosnippet>131</a>    /// been ABANDONED (its remaining objects are skipped), so the next delivery
+<a href=#132 id=132 data-nosnippet>132</a>    /// resumes at a fresh group boundary — the caller should request a keyframe
+<a href=#133 id=133 data-nosnippet>133</a>    /// so the producer rolls one.
+<a href=#134 id=134 data-nosnippet>134</a>    </span>Stalled,
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// End of track.
+<a href=#136 id=136 data-nosnippet>136</a>    </span>End,
+<a href=#137 id=137 data-nosnippet>137</a>}
+<a href=#138 id=138 data-nosnippet>138</a>
+<a href=#139 id=139 data-nosnippet>139</a><span class="doccomment">/// Shared group/object drain used by [`crate::MoqSubscriber`] and
+<a href=#140 id=140 data-nosnippet>140</a>/// [`crate::MoqRelaySubscriber`] — the only difference between the two is how the
+<a href=#141 id=141 data-nosnippet>141</a>/// `TrackConsumer` was obtained (direct `Server::accept` vs. `Client::connect`
+<a href=#142 id=142 data-nosnippet>142</a>/// to the relay); the priority-drop drain discipline is identical.
+<a href=#143 id=143 data-nosnippet>143</a>///
+<a href=#144 id=144 data-nosnippet>144</a>/// Drains one group (GOP) at a time via [`TrackConsumer::next_group`]
+<a href=#145 id=145 data-nosnippet>145</a>/// (priority-drop: a stale group is discarded at its boundary rather than
+<a href=#146 id=146 data-nosnippet>146</a>/// head-of-line-blocking a newer keyframe); within a group, objects are read in
+<a href=#147 id=147 data-nosnippet>147</a>/// order. Each object's `OBJ_HEADER_LEN`-byte envelope is decoded back into a
+<a href=#148 id=148 data-nosnippet>148</a>/// `Frame` and the encoded payload handed out verbatim.
+<a href=#149 id=149 data-nosnippet>149</a>///
+<a href=#150 id=150 data-nosnippet>150</a>/// ## Known limitation — within-GOP head-of-line stall under heavy loss
+<a href=#151 id=151 data-nosnippet>151</a>///
+<a href=#152 id=152 data-nosnippet>152</a>/// `next_group`'s priority-drop only fires at a *group boundary*: it discards a
+<a href=#153 id=153 data-nosnippet>153</a>/// stale group instead of head-of-line-blocking a newer keyframe, but only once
+<a href=#154 id=154 data-nosnippet>154</a>/// the current group has drained. A subscriber already part-way through group K
+<a href=#155 id=155 data-nosnippet>155</a>/// can still **stall inside K** if an early object of K is lost — QUIC
+<a href=#156 id=156 data-nosnippet>156</a>/// retransmits it, but moq-net prioritises the *newest* streams, so under
+<a href=#157 id=157 data-nosnippet>157</a>/// continuous production K's retransmit can be starved behind newer GOPs and the
+<a href=#158 id=158 data-nosnippet>158</a>/// inner `GroupConsumer::read_frame` blocks. Recovery is then bounded by QUIC
+<a href=#159 id=159 data-nosnippet>159</a>/// eventually retransmitting K's missing object, which under a sustained,
+<a href=#160 id=160 data-nosnippet>160</a>/// contiguous downstream loss burst can be slow. Preemptively abandoning the
+<a href=#161 id=161 data-nosnippet>161</a>/// stalled GOP to jump to the next keyframe does not reliably help: when the
+<a href=#162 id=162 data-nosnippet>162</a>/// burst also drops the *newer* GOP's opener, `next_group` has nothing newer to
+<a href=#163 id=163 data-nosnippet>163</a>/// offer either. The fault-injection e2e
+<a href=#164 id=164 data-nosnippet>164</a>/// (`services/sfu/tests/moq_relay_faults.rs`) characterises the recoverable
+<a href=#165 id=165 data-nosnippet>165</a>/// regime; see its module docs.
+<a href=#166 id=166 data-nosnippet>166</a>///
+<a href=#167 id=167 data-nosnippet>167</a>/// `reorder_ok = true` drains via [`TrackConsumer::recv_group`] (ARRIVAL order, never
+<a href=#168 id=168 data-nosnippet>168</a>/// discards) instead of [`TrackConsumer::next_group`] (monotonic, drops a group whose
+<a href=#169 id=169 data-nosnippet>169</a>/// sequence ≤ one already returned). Set it for AUDIO: audio groups are small and
+<a href=#170 id=170 data-nosnippet>170</a>/// frequent, and on the shared connection a high-bitrate screenshare reorders those
+<a href=#171 id=171 data-nosnippet>171</a>/// tiny audio streams, so `next_group`'s staleness rule would silently drop reordered
+<a href=#172 id=172 data-nosnippet>172</a>/// ones — fatal, since a slightly-reordered Opus frame is perfectly playable (the
+<a href=#173 id=173 data-nosnippet>173</a>/// jitter buffer reorders by timestamp and the decoder skips truly-stale frames). Video
+<a href=#174 id=174 data-nosnippet>174</a>/// keeps `next_group`: a stale GOP genuinely should be dropped for a newer keyframe.
+<a href=#175 id=175 data-nosnippet>175</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>drain_next_frame(
+<a href=#176 id=176 data-nosnippet>176</a>    track: <span class="kw-2">&amp;mut </span>TrackConsumer,
+<a href=#177 id=177 data-nosnippet>177</a>    current: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;moq_net::GroupConsumer&gt;,
+<a href=#178 id=178 data-nosnippet>178</a>    sender: u16,
+<a href=#179 id=179 data-nosnippet>179</a>    reorder_ok: bool,
+<a href=#180 id=180 data-nosnippet>180</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Frame&gt;, MoqError&gt; {
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">loop </span>{
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="comment">// Finish draining the currently open group's objects first.
+<a href=#183 id=183 data-nosnippet>183</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(group) = current.as_mut() {
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">match </span>group.read_frame().<span class="kw">await </span>{
+<a href=#185 id=185 data-nosnippet>185</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(object)) =&gt; <span class="kw">return </span>decode_object(sender, <span class="kw-2">&amp;</span>object).map(<span class="prelude-val">Some</span>),
+<a href=#186 id=186 data-nosnippet>186</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {
+<a href=#187 id=187 data-nosnippet>187</a>                    <span class="kw-2">*</span>current = <span class="prelude-val">None</span>; <span class="comment">// group exhausted; advance
+<a href=#188 id=188 data-nosnippet>188</a>                </span>}
+<a href=#189 id=189 data-nosnippet>189</a>                <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#190 id=190 data-nosnippet>190</a>                    <span class="comment">// A group-level reset is a NORMAL boundary, not a pipeline
+<a href=#191 id=191 data-nosnippet>191</a>                    // error: when a new keyframe group appears, the relay's
+<a href=#192 id=192 data-nosnippet>192</a>                    // per-subscriber forwarding priority-drops the stale group
+<a href=#193 id=193 data-nosnippet>193</a>                    // by resetting its stream ("remote error: code=0" /
+<a href=#194 id=194 data-nosnippet>194</a>                    // "cancelled" mid-read). Treating that as fatal would tear
+<a href=#195 id=195 data-nosnippet>195</a>                    // the session down on every PLI-forced keyframe roll.
+<a href=#196 id=196 data-nosnippet>196</a>                    // Abandon the group and pull the next one; only
+<a href=#197 id=197 data-nosnippet>197</a>                    // `next_group` / session-level errors below propagate.
+<a href=#198 id=198 data-nosnippet>198</a>                    </span><span class="macro">tracing::debug!</span>(<span class="string">"moq: group abandoned mid-read (boundary): {e}"</span>);
+<a href=#199 id=199 data-nosnippet>199</a>                    <span class="kw-2">*</span>current = <span class="prelude-val">None</span>;
+<a href=#200 id=200 data-nosnippet>200</a>                }
+<a href=#201 id=201 data-nosnippet>201</a>            }
+<a href=#202 id=202 data-nosnippet>202</a>        }
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="comment">// No open group: pull the next one. Audio takes EVERY group in arrival order
+<a href=#205 id=205 data-nosnippet>205</a>        // (`recv_group`); video priority-drops stale groups (`next_group`).
+<a href=#206 id=206 data-nosnippet>206</a>        </span><span class="kw">let </span>next = <span class="kw">if </span>reorder_ok {
+<a href=#207 id=207 data-nosnippet>207</a>            track.recv_group().<span class="kw">await
+<a href=#208 id=208 data-nosnippet>208</a>        </span>} <span class="kw">else </span>{
+<a href=#209 id=209 data-nosnippet>209</a>            track.next_group().<span class="kw">await
+<a href=#210 id=210 data-nosnippet>210</a>        </span>}
+<a href=#211 id=211 data-nosnippet>211</a>        .map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"next_group: {e}"</span>)))<span class="question-mark">?</span>;
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">match </span>next {
+<a href=#213 id=213 data-nosnippet>213</a>            <span class="prelude-val">Some</span>(group) =&gt; <span class="kw-2">*</span>current = <span class="prelude-val">Some</span>(group),
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>), <span class="comment">// track finished
+<a href=#215 id=215 data-nosnippet>215</a>        </span>}
+<a href=#216 id=216 data-nosnippet>216</a>    }
+<a href=#217 id=217 data-nosnippet>217</a>}
+<a href=#218 id=218 data-nosnippet>218</a>
+<a href=#219 id=219 data-nosnippet>219</a><span class="doccomment">/// [`drain_next_frame`] bounded by a stall budget, for VIDEO tracks.
+<a href=#220 id=220 data-nosnippet>220</a>///
+<a href=#221 id=221 data-nosnippet>221</a>/// With on-demand keyframes a GOP (= one group) can span many seconds, and a
+<a href=#222 id=222 data-nosnippet>222</a>/// lost object inside the group being drained head-of-line-blocks every frame
+<a href=#223 id=223 data-nosnippet>223</a>/// behind it until QUIC retransmits — the tile freezes, then fast-forwards.
+<a href=#224 id=224 data-nosnippet>224</a>/// This pull instead treats "no object within `stall`" as a stuck group:
+<a href=#225 id=225 data-nosnippet>225</a>/// abandon it (skip its remaining objects) and report [`VideoPull::Stalled`] so
+<a href=#226 id=226 data-nosnippet>226</a>/// the caller can request a keyframe; the producer's IDR opens a fresh group
+<a href=#227 id=227 data-nosnippet>227</a>/// that `next_group` jumps to, bounding the freeze at ~`stall` instead of a
+<a href=#228 id=228 data-nosnippet>228</a>/// retransmit tail.
+<a href=#229 id=229 data-nosnippet>229</a>///
+<a href=#230 id=230 data-nosnippet>230</a>/// Cancel-safe: the moq-net consumers are poll-based state machines whose
+<a href=#231 id=231 data-nosnippet>231</a>/// cursors advance only on `Ready`, so the timed-out future is dropped without
+<a href=#232 id=232 data-nosnippet>232</a>/// losing a frame — and a mid-object timeout only ever discards the group it
+<a href=#233 id=233 data-nosnippet>233</a>/// abandons. Never use for audio (audio must drain every group).
+<a href=#234 id=234 data-nosnippet>234</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>drain_next_frame_stalled(
+<a href=#235 id=235 data-nosnippet>235</a>    track: <span class="kw-2">&amp;mut </span>TrackConsumer,
+<a href=#236 id=236 data-nosnippet>236</a>    current: <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;moq_net::GroupConsumer&gt;,
+<a href=#237 id=237 data-nosnippet>237</a>    sender: u16,
+<a href=#238 id=238 data-nosnippet>238</a>    stall: std::time::Duration,
+<a href=#239 id=239 data-nosnippet>239</a>) -&gt; <span class="prelude-ty">Result</span>&lt;VideoPull, MoqError&gt; {
+<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">loop </span>{
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(group) = current.as_mut() {
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">match </span>tokio::time::timeout(stall, group.read_frame()).<span class="kw">await </span>{
+<a href=#243 id=243 data-nosnippet>243</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(object))) =&gt; {
+<a href=#244 id=244 data-nosnippet>244</a>                    <span class="kw">return </span>decode_object(sender, <span class="kw-2">&amp;</span>object).map(VideoPull::Frame);
+<a href=#245 id=245 data-nosnippet>245</a>                }
+<a href=#246 id=246 data-nosnippet>246</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)) =&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>                    <span class="kw-2">*</span>current = <span class="prelude-val">None</span>; <span class="comment">// group exhausted; advance
+<a href=#248 id=248 data-nosnippet>248</a>                </span>}
+<a href=#249 id=249 data-nosnippet>249</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
+<a href=#250 id=250 data-nosnippet>250</a>                    <span class="comment">// Group reset at a keyframe roll — a normal boundary (see
+<a href=#251 id=251 data-nosnippet>251</a>                    // `drain_next_frame`); advance to the next group.
+<a href=#252 id=252 data-nosnippet>252</a>                    </span><span class="macro">tracing::debug!</span>(<span class="string">"moq: group abandoned mid-read (boundary): {e}"</span>);
+<a href=#253 id=253 data-nosnippet>253</a>                    <span class="kw-2">*</span>current = <span class="prelude-val">None</span>;
+<a href=#254 id=254 data-nosnippet>254</a>                }
+<a href=#255 id=255 data-nosnippet>255</a>                <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#256 id=256 data-nosnippet>256</a>                    <span class="macro">tracing::debug!</span>(<span class="string">"moq: group stalled mid-drain — abandoning for next keyframe"</span>);
+<a href=#257 id=257 data-nosnippet>257</a>                    <span class="kw-2">*</span>current = <span class="prelude-val">None</span>;
+<a href=#258 id=258 data-nosnippet>258</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(VideoPull::Stalled);
+<a href=#259 id=259 data-nosnippet>259</a>                }
+<a href=#260 id=260 data-nosnippet>260</a>            }
+<a href=#261 id=261 data-nosnippet>261</a>            <span class="kw">continue</span>;
+<a href=#262 id=262 data-nosnippet>262</a>        }
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">match </span>tokio::time::timeout(stall, track.next_group()).<span class="kw">await </span>{
+<a href=#264 id=264 data-nosnippet>264</a>            <span class="prelude-val">Ok</span>(r) =&gt; <span class="kw">match </span>r.map_err(|e| MoqError::Moq(<span class="macro">format!</span>(<span class="string">"next_group: {e}"</span>)))<span class="question-mark">? </span>{
+<a href=#265 id=265 data-nosnippet>265</a>                <span class="prelude-val">Some</span>(group) =&gt; <span class="kw-2">*</span>current = <span class="prelude-val">Some</span>(group),
+<a href=#266 id=266 data-nosnippet>266</a>                <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(VideoPull::End),
+<a href=#267 id=267 data-nosnippet>267</a>            },
+<a href=#268 id=268 data-nosnippet>268</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(VideoPull::Stalled),
+<a href=#269 id=269 data-nosnippet>269</a>        }
+<a href=#270 id=270 data-nosnippet>270</a>    }
+<a href=#271 id=271 data-nosnippet>271</a>}
+</code></pre></div></section></main></body></html>

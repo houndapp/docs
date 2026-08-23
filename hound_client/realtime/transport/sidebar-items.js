@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Leg"],"fn":["connect_leg","connect_ws","connect_wt","dns_overrides","pinned_addr","realtime_ws_url","redact","ws_authority","ws_config","ws_error","wt_dial_url","wt_error"],"struct":["GateState","RestDialer","WsPipe","WtGate","WtPipe"],"trait":["Dial","Probe"]};

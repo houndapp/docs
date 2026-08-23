@@ -11,7 +11,7 @@ sender and this receiver</strong> — unlike a raw delivered-bytes rate, it is n
 confounded by the sender’s own encoder adapting its bitrate (which changes how
 BIG frames are, not how many of them arrive). <a href="struct.FrameSeqWindow.html" title="struct hound_media::downlink::FrameSeqWindow"><code>FrameSeqWindow</code></a> folds arrivals
 into a windowed <code>(received, expected)</code> count; <a href="struct.DownlinkDemand.html" title="struct hound_media::downlink::DownlinkDemand"><code>DownlinkDemand</code></a> turns that
-ratio into a <a href="../congestion/enum.QualityRequest.html" title="enum hound_media::congestion::QualityRequest"><code>QualityRequest</code></a>.</p>
+ratio into a <a href="../quality/enum.QualityRequest.html" title="enum hound_media::quality::QualityRequest"><code>QualityRequest</code></a>.</p>
 <h3 id="thresholds-retuned-after-a-cratering-regression"><a class="doc-anchor" href="#thresholds-retuned-after-a-cratering-regression">§</a>Thresholds: retuned after a cratering regression</h3>
 <p>An earlier receive-side decider (<code>DownlinkEstimator</code>/<code>QualityRequestDecider</code>,
 removed as dead code — see commit history) capped a receiver at 0.85× the
@@ -20,26 +20,26 @@ source bitrate. That turned a MINOR dip into a resolution cliff: a healthy 1:1
 below “normal” jitter in the estimate. This decider caps only a <strong>genuinely
 poor</strong> link:</p>
 <ul>
-<li>drop to <a href="../congestion/enum.QualityRequest.html#variant.Capped" title="variant hound_media::congestion::QualityRequest::Capped"><code>QualityRequest::Capped</code></a> once delivery falls below <strong>1/4</strong> of source</li>
-<li>restore <a href="../congestion/enum.QualityRequest.html#variant.Source" title="variant hound_media::congestion::QualityRequest::Source"><code>QualityRequest::Source</code></a> only once delivery climbs back above <strong>1/2</strong>
+<li>drop to <a href="../quality/enum.QualityRequest.html#variant.Capped" title="variant hound_media::quality::QualityRequest::Capped"><code>QualityRequest::Capped</code></a> once delivery falls below <strong>1/4</strong> of source</li>
+<li>restore <a href="../quality/enum.QualityRequest.html#variant.Source" title="variant hound_media::quality::QualityRequest::Source"><code>QualityRequest::Source</code></a> only once delivery climbs back above <strong>1/2</strong>
 of source</li>
 </ul>
 <p>The wide <code>[1/4, 1/2]</code> band is deliberate anti-flap hysteresis — a link
 wobbling anywhere in that band (including the specific case of ~76% delivery,
 which the OLD 0.85 threshold would have capped) holds its current demand. Note
 also: with a single receiver, the <em>sender’s own</em> loss-based AIMD
-(<a href="../congestion/struct.RateController.html" title="struct hound_media::congestion::RateController"><code>crate::congestion::RateController</code></a>, driven by <code>MediaFeedback</code> reports)
+(<a href="../rate/struct.RateController.html" title="struct hound_media::rate::RateController"><code>crate::rate::RateController</code></a>, driven by <code>MediaFeedback</code> reports)
 already right-sizes the one stream it’s publishing — this decider only earns
 its keep once a call has enough heterogeneous receivers that no single
 sender-side rate can serve everyone (see the module docs on the call site for
 how demand is gated).</p>
 <p>Sans-IO: time enters only as an explicit <code>now_us</code> argument (mirrors
-<a href="../congestion/struct.RateController.html" title="struct hound_media::congestion::RateController"><code>crate::congestion::RateController</code></a> / <a href="../send_budget/struct.SendBudget.html" title="struct hound_media::send_budget::SendBudget"><code>crate::send_budget::SendBudget</code></a>);
+<a href="../rate/struct.RateController.html" title="struct hound_media::rate::RateController"><code>crate::rate::RateController</code></a> / <a href="../send_budget/struct.SendBudget.html" title="struct hound_media::send_budget::SendBudget"><code>crate::send_budget::SendBudget</code></a>);
 no clock reads, no I/O.</p>
 </div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.DownlinkConfig.html" title="struct hound_media::downlink::DownlinkConfig">Downlink<wbr>Config</a></dt><dd>Tunables for <a href="struct.DownlinkDemand.html" title="struct hound_media::downlink::DownlinkDemand"><code>DownlinkDemand</code></a>.</dd><dt><a class="struct" href="struct.DownlinkDemand.html" title="struct hound_media::downlink::DownlinkDemand">Downlink<wbr>Demand</a></dt><dd>The receiver’s bandwidth-driven demand for one subscribed video track. Folds
 arriving frames’ <code>frame_seq</code> into a <a href="struct.FrameSeqWindow.html" title="struct hound_media::downlink::FrameSeqWindow"><code>FrameSeqWindow</code></a> and, once per
 <a href="struct.DownlinkConfig.html#structfield.eval_interval_us" title="field hound_media::downlink::DownlinkConfig::eval_interval_us"><code>DownlinkConfig::eval_interval_us</code></a>, turns the window’s delivery ratio into a
-<a href="../congestion/enum.QualityRequest.html" title="enum hound_media::congestion::QualityRequest"><code>QualityRequest</code></a> with the <code>[source/4, source/2]</code> hysteresis band described in
+<a href="../quality/enum.QualityRequest.html" title="enum hound_media::quality::QualityRequest"><code>QualityRequest</code></a> with the <code>[source/4, source/2]</code> hysteresis band described in
 the module docs. Windows are evaluated by whichever of <a href="struct.DownlinkDemand.html#method.observe_frame" title="method hound_media::downlink::DownlinkDemand::observe_frame"><code>Self::observe_frame</code></a>
 (a frame arrived) or <a href="struct.DownlinkDemand.html#method.on_tick" title="method hound_media::downlink::DownlinkDemand::on_tick"><code>Self::on_tick</code></a> (time passed, possibly with no frames at
 all) crosses the due time first. Pure/sans-IO — both take <code>now_us</code> and
@@ -54,7 +54,7 @@ the producer with a new cap every eval tick.</dd><dt><a class="constant" href="c
 millions of lost frames — far above any gap a live call could produce (a
 stalled pipeline is reaped and re-subscribed long before <code>frame_seq</code> could
 legitimately jump this far).</dd><dt><a class="constant" href="constant.MIN_CAP_BPS.html" title="constant hound_media::downlink::MIN_CAP_BPS">MIN_<wbr>CAP_<wbr>BPS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>A <code>Capped</code> request never asks for less than this — mirrors
-<a href="../congestion/struct.RateConfig.html" title="struct hound_media::congestion::RateConfig"><code>crate::congestion::RateConfig</code></a>’s default <code>min_bps</code> floor, so a genuinely
+<a href="../rate/struct.RateConfig.html" title="struct hound_media::rate::RateConfig"><code>crate::rate::RateConfig</code></a>’s default <code>min_bps</code> floor, so a genuinely
 terrible link still asks for a minimally-useful low layer instead of
 degenerating toward zero.</dd><dt><a class="constant" href="constant.TEMPORAL_BASE_STRIDE.html" title="constant hound_media::downlink::TEMPORAL_BASE_STRIDE">TEMPORAL_<wbr>BASE_<wbr>STRIDE</a></dt><dd>The <code>frame_seq</code> stride of a relay-derived base-layer-only (<code>_t0</code>) subscription:
 <strong>2</strong>, because the encoder’s <code>BaseLayerFrameRateFraction</code> is 0.5 — every other

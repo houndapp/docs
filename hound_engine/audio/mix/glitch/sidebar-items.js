@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GLITCH_RING_CAP","NO_PEER_TAG"],"enum":["GlitchKind"],"fn":["record_glitch"],"struct":["AudioGlitch","PushStatus"]};

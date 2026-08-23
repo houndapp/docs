@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CameraInner","MicrophoneInner","ScreenShareInner"],"struct":["Camera","DeviceDescriptor","Engine","InputVolumeHandle","Microphone","ScreenAudio","ScreenShare","SyntheticSilence","VideoDecoder","VideoEncoder"]};
+window.SIDEBAR_ITEMS = {"constant":["ENCODE_PRIORITY"],"enum":["CameraInner","MicrophoneInner","ScreenShareInner"],"fn":["pick_encode_codec"],"struct":["Camera","DeviceDescriptor","Engine","InputVolumeHandle","Microphone","ScreenAudio","ScreenShare","SyntheticSilence","VideoDecoder","VideoEncoder"]};
