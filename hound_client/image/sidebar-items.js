@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["JXL_CODESTREAM_SIGNATURE","JXL_CONTAINER_SIGNATURE","MAX_PIXELS"],"fn":["alpha_is_associated","budgeted_pixels","decode_image","is_jpeg_xl","to_rgba8","unassociate"],"struct":["DecodedImage"]};
