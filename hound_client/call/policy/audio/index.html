@@ -9,7 +9,7 @@ are read individually by a human reading a log line, and <code>plc</code> vs <co
 other is the whole point of the pair.</dd><dt><a class="struct" href="struct.MicRouteWarmup.html" title="struct hound_client::call::policy::audio::MicRouteWarmup">MicRoute<wbr>Warmup</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>One-shot mic route warmup: a non-48 kHz capture device (a Bluetooth headset in
 HFP mode) may open onto an SCO route that is not carrying audio yet — the
 stream runs, delivering silence, and no error ever fires. Reopening once,
-[<code>hound_engine::api::ROUTE_WARMUP_DELAY</code>] after open, lands on the settled
+<a href="../../../../hound_engine/audio/constant.ROUTE_WARMUP_DELAY.html" title="constant hound_engine::audio::ROUTE_WARMUP_DELAY"><code>hound_engine::api::ROUTE_WARMUP_DELAY</code></a> after open, lands on the settled
 route; 48 kHz devices never arm. The playout side has the same policy inside
 the mix bus; this is the capture-side half.</dd><dt><a class="struct" href="struct.MicSilenceWatch.html" title="struct hound_client::call::policy::audio::MicSilenceWatch">MicSilence<wbr>Watch</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Detects a dead-silent capture stream (see <a href="constant.MIC_SILENCE_WARN_FRAMES.html" title="constant hound_client::call::policy::audio::MIC_SILENCE_WARN_FRAMES"><code>MIC_SILENCE_WARN_FRAMES</code></a>).
 <a href="struct.MicSilenceWatch.html#method.observe" title="method hound_client::call::policy::audio::MicSilenceWatch::observe"><code>Self::observe</code></a> returns <code>true</code> exactly once per silent streak, at the
