@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BLOCKED_PORTS","USER_AGENT"],"enum":["FetchError","Hop"],"fn":["check_url_shape","elapsed_ms","is_public_ip","is_public_v4","is_public_v6","read_capped","step_err"],"struct":["FetchLimits","Fetched","SafeFetcher"]};
+window.SIDEBAR_ITEMS = {"constant":["BLOCKED_PORTS","HEAD_CLOSE","USER_AGENT"],"enum":["FetchError","Hop"],"fn":["check_url_shape","elapsed_ms","find_ascii_ci","is_public_ip","is_public_v4","is_public_v6","read_capped","step_err"],"struct":["FetchLimits","Fetched","SafeFetcher"]};
