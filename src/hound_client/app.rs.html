@@ -475,5 +475,17 @@
 <a href=#475 id=475 data-nosnippet>475</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#476 id=476 data-nosnippet>476</a>        <span class="prelude-val">Ok</span>(())
 <a href=#477 id=477 data-nosnippet>477</a>    }
-<a href=#478 id=478 data-nosnippet>478</a>}
+<a href=#478 id=478 data-nosnippet>478</a>
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="doccomment">/// Unfurl `url` through the server's embed pipeline and return the full
+<a href=#480 id=480 data-nosnippet>480</a>    /// trace — every HTTP hop, every metadata key seen, and what the precedence
+<a href=#481 id=481 data-nosnippet>481</a>    /// rules made of them.
+<a href=#482 id=482 data-nosnippet>482</a>    ///
+<a href=#483 id=483 data-nosnippet>483</a>    /// The embed debugger in developer settings. Nothing here fetches anything
+<a href=#484 id=484 data-nosnippet>484</a>    /// locally: the client has no business making outbound requests to a URL
+<a href=#485 id=485 data-nosnippet>485</a>    /// somebody typed, and the point of the tool is to see what *the server*
+<a href=#486 id=486 data-nosnippet>486</a>    /// does, which is what a message would get.
+<a href=#487 id=487 data-nosnippet>487</a>    </span><span class="kw">pub async fn </span>debug_embed(<span class="kw-2">&amp;</span><span class="self">self</span>, url: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;hound_types::EmbedDebugReport&gt; {
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="self">self</span>.rest.debug_embed(url).<span class="kw">await
+<a href=#489 id=489 data-nosnippet>489</a>    </span>}
+<a href=#490 id=490 data-nosnippet>490</a>}
 </code></pre></div></section></main></body></html>

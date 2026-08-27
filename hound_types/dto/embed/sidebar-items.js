@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_DESCRIPTION_CHARS","MAX_EMBED_IMAGES","MAX_LABEL_CHARS","MAX_MESSAGE_EMBEDS","MAX_TITLE_CHARS"],"enum":["EmbedKind","EmbedSource"],"struct":["EmbedAuthor","EmbedDebugReport","EmbedDebugRequest","EmbedFetchStep","EmbedMedia","EmbedProvider","EmbedRawField","EmbedVideo","LinkEmbed"]};

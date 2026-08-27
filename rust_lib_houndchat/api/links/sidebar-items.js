@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["debug_embed","open_external_url"]};

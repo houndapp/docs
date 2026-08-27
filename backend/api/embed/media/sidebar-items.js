@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ALLOWED_TYPES","CACHE_MAX_BYTES","CACHE_MAX_ENTRIES","CLIENT_CACHE_SECS"],"fn":["assign_proxy_urls","get_embed_media","parse_range","proxy_url","resolve_type","serve","slot","sniff"],"struct":["CachedMedia","Inner","MediaCache"]};

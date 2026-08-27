@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["charset_from_content_type","decode_html","first","parse_icon_size","scrape","sniff_meta_charset"],"struct":["IconLink","PageMetadata"]};

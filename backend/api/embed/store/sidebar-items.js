@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["TTL_EMPTY","TTL_ERROR","TTL_OK"],"enum":["EmbedStatus"],"fn":["decode_payload","url_hash"],"struct":["CachedEmbed"]};

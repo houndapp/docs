@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["absolute","build_video","classify","clean_block","clean_line","collect_structured","finish","from_html","from_media","guess_video_mime","is_forbidden","name_or_handle","normalise_hex_colour","parse_timestamp","pick","pick_label","pick_line","raw_fields","truncate_for_log"],"struct":["Scraped","Structured"]};
