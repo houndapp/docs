@@ -2,7 +2,7 @@
     subscriber: MoqTrackSubscriber,
     peer: PeerId,
     source: <a class="enum" href="../../enum.Source.html" title="enum hound_client::Source">Source</a>,
-    playout_bus: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;PlayoutBus&gt;,
+    playout_bus: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="../../../hound_engine/audio/mix/struct.PlayoutBus.html" title="struct hound_engine::audio::mix::PlayoutBus">PlayoutBus</a>&gt;,
     levels: Sender&lt;<a class="struct" href="../struct.LevelsView.html" title="struct hound_client::call::LevelsView">LevelsView</a>&gt;,
     clock: CaptureClock,
     stop: <a class="struct" href="https://doc.rust-lang.org/1.93.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.93.0/core/sync/atomic/struct.AtomicBool.html" title="struct core::sync::atomic::AtomicBool">AtomicBool</a>&gt;,

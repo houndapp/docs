@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["init_log","log_file_path","log_sink_slot","mirrors_logs_to_stderr","open_log_file"],"static":["LOG_SINK"],"struct":["LogSink"]};
+window.SIDEBAR_ITEMS = {"enum":["DartLogLevel"],"fn":["init_log","log_file_path","log_from_dart","log_sink_slot","mirrors_logs_to_stderr","open_log_file"],"static":["LOG_SINK"],"struct":["LogSink"]};

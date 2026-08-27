@@ -1,222 +1,267 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/app/frb/src/api/log.rs`."><title>log.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="rust_lib_houndchat" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">rust_lib_houndchat/api/</div>log.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Log bridge: Rust `tracing` → Dart (plus the stderr mirror for CI smoke runs
-<a href=#2 id=2 data-nosnippet>2</a>//! and the persistent log file's bridge commands). The file mechanics themselves
-<a href=#3 id=3 data-nosnippet>3</a>//! live in [`crate::logfile`]; this is the bridge half.
-<a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span>std::sync::Arc;
-<a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>hound_client::error::{HoundError, InternalCode, StateCode};
-<a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span><span class="kw">crate</span>::frb_generated::StreamSink;
-<a href=#10 id=10 data-nosnippet>10</a>
-<a href=#11 id=11 data-nosnippet>11</a><span class="doccomment">/// The live Dart log sink. Swapped on each [`init_log`] (e.g. a hot restart hands us
-<a href=#12 id=12 data-nosnippet>12</a>/// a fresh sink); the tracing layer — installed exactly once — reads this per event,
-<a href=#13 id=13 data-nosnippet>13</a>/// so it always forwards to the current sink and never to a dead one.
-<a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">static </span>LOG_SINK: std::sync::OnceLock&lt;std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;Arc&lt;StreamSink&lt;String&gt;&gt;&gt;&gt;&gt; =
-<a href=#15 id=15 data-nosnippet>15</a>    std::sync::OnceLock::new();
-<a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">fn </span>log_sink_slot() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;Arc&lt;StreamSink&lt;String&gt;&gt;&gt;&gt; {
-<a href=#18 id=18 data-nosnippet>18</a>    LOG_SINK.get_or_init(|| std::sync::Mutex::new(<span class="prelude-val">None</span>))
-<a href=#19 id=19 data-nosnippet>19</a>}
-<a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// Install a `tracing` subscriber that forwards every formatted Rust log line to
-<a href=#22 id=22 data-nosnippet>22</a>/// Dart over `sink`. WITHOUT this, the core's `tracing::{info,warn,error}!` (the
-<a href=#23 id=23 data-nosnippet>23</a>/// call/transport/engine diagnostics) have no subscriber and are silently dropped.
-<a href=#24 id=24 data-nosnippet>24</a>///
-<a href=#25 id=25 data-nosnippet>25</a>/// **Must stay running**: a flutter_rust_bridge `StreamSink` is closed as soon as its
-<a href=#26 id=26 data-nosnippet>26</a>/// function RETURNS, so a synchronous installer would tear the stream down and every
-<a href=#27 id=27 data-nosnippet>27</a>/// later `sink.add` would no-op. So this is `async`
-<a href=#28 id=28 data-nosnippet>28</a>/// and parks forever — the FRB stream stays open for the process lifetime while the
-<a href=#29 id=29 data-nosnippet>29</a>/// layer forwards to the sink stored above.
-<a href=#30 id=30 data-nosnippet>30</a>///
-<a href=#31 id=31 data-nosnippet>31</a>/// Level filter comes from the `RUST_LOG` env if set, else a debug-on-the-call-path
-<a href=#32 id=32 data-nosnippet>32</a>/// default. The subscriber is installed once (`try_init`); re-calls just re-point the
-<a href=#33 id=33 data-nosnippet>33</a>/// sink (handles hot restart).
-<a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">pub async fn </span>init_log(sink: StreamSink&lt;String&gt;) {
-<a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">use </span>tracing_subscriber::layer::{Layer, SubscriberExt};
-<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">use </span>tracing_subscriber::util::SubscriberInitExt;
-<a href=#37 id=37 data-nosnippet>37</a>    <span class="kw">use </span>tracing_subscriber::{EnvFilter, filter::LevelFilter, fmt};
-<a href=#38 id=38 data-nosnippet>38</a>
-<a href=#39 id=39 data-nosnippet>39</a>    <span class="kw-2">*</span>log_sink_slot().lock().unwrap() = <span class="prelude-val">Some</span>(Arc::new(sink));
-<a href=#40 id=40 data-nosnippet>40</a>
-<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">let </span>filter = EnvFilter::try_from_default_env().unwrap_or_else(|<span class="kw">_</span>| {
-<a href=#42 id=42 data-nosnippet>42</a>        <span class="comment">// NB: this crate's tracing target is its LIB name (`rust_lib_houndchat`),
-<a href=#43 id=43 data-nosnippet>43</a>        // not the package name `hound-frb`.
-<a href=#44 id=44 data-nosnippet>44</a>        </span>EnvFilter::new(
-<a href=#45 id=45 data-nosnippet>45</a>            <span class="string">"info,hound_client=debug,hound_transport=debug,hound_media=debug,hound_engine=debug,rust_lib_houndchat=debug"</span>,
-<a href=#46 id=46 data-nosnippet>46</a>        )
-<a href=#47 id=47 data-nosnippet>47</a>    });
-<a href=#48 id=48 data-nosnippet>48</a>    <span class="comment">// Rust-side Sentry, separate from the Dart sink below: TWO Sentry clients
-<a href=#49 id=49 data-nosnippet>49</a>    // exist (Dart's, initialised by `SentryFlutter.init`; Rust's, by
-<a href=#50 id=50 data-nosnippet>50</a>    // `init_sentry`), each with its own breadcrumb ring, and each only
-<a href=#51 id=51 data-nosnippet>51</a>    // attaches to crashes on ITS side (a Dart exception vs. a Rust panic).
-<a href=#52 id=52 data-nosnippet>52</a>    // Which level becomes an event vs. a breadcrumb is [`telemetry::event_filter`]'s
-<a href=#53 id=53 data-nosnippet>53</a>    // call; this cap only decides what reaches it at all.
-<a href=#54 id=54 data-nosnippet>54</a>    //
-<a href=#55 id=55 data-nosnippet>55</a>    // It MUST admit INFO. The `info!` lines are the app's narrative, and they are
-<a href=#56 id=56 data-nosnippet>56</a>    // what a Rust event's breadcrumb trail is made of — capping at WARN (as this
-<a href=#57 id=57 data-nosnippet>57</a>    // did) left every Rust event with an empty trail, saying what broke and never
-<a href=#58 id=58 data-nosnippet>58</a>    // how it got there. DEBUG/TRACE stay out: too voluminous for a 100-entry ring,
-<a href=#59 id=59 data-nosnippet>59</a>    // and they still reach the Dart sink above unaffected.
-<a href=#60 id=60 data-nosnippet>60</a>    //
-<a href=#61 id=61 data-nosnippet>61</a>    // A safe no-op when `init_sentry` was never called: `sentry-core`'s calls no-op
-<a href=#62 id=62 data-nosnippet>62</a>    // with no bound client.
-<a href=#63 id=63 data-nosnippet>63</a>    </span><span class="kw">let </span>sentry_layer = sentry::integrations::tracing::layer()
-<a href=#64 id=64 data-nosnippet>64</a>        .event_filter(<span class="kw">crate</span>::telemetry::event_filter)
-<a href=#65 id=65 data-nosnippet>65</a>        .with_filter(LevelFilter::INFO);
-<a href=#66 id=66 data-nosnippet>66</a>    <span class="comment">// One formatted line per event (buffered in the writer, flushed on Drop — fmt
-<a href=#67 id=67 data-nosnippet>67</a>    // makes a fresh writer per event), forwarded to the live Dart sink.
-<a href=#68 id=68 data-nosnippet>68</a>    // CI smoke runs assert on engine log lines in the captured stdio (the
-<a href=#69 id=69 data-nosnippet>69</a>    // nightly launch gate greps for `session restore:`). Those must not depend
-<a href=#70 id=70 data-nosnippet>70</a>    // on the Dart relay above — its delivery in a release-mode Flutter build is
-<a href=#71 id=71 data-nosnippet>71</a>    // an embedder detail — so a runner-role process also writes every line to
-<a href=#72 id=72 data-nosnippet>72</a>    // stderr, which provably reaches the harness (native SDK output does).
-<a href=#73 id=73 data-nosnippet>73</a>    // Never on for real users: stderr is unobserved there, and `app_role` is
-<a href=#74 id=74 data-nosnippet>74</a>    // fixed at process start (see telemetry::app_role).
-<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">let </span>stderr_layer = mirrors_logs_to_stderr(<span class="kw">crate</span>::telemetry::app_role())
-<a href=#76 id=76 data-nosnippet>76</a>        .then(|| fmt::layer().with_ansi(<span class="bool-val">false</span>).with_writer(std::io::stderr));
-<a href=#77 id=77 data-nosnippet>77</a>    <span class="comment">// The same lines again, into this instance's file under the OS log directory
-<a href=#78 id=78 data-nosnippet>78</a>    // (see [`crate::logfile`] for the location, the per-launch rotation and the
-<a href=#79 id=79 data-nosnippet>79</a>    // five-file retention). The Dart sink above dies with the app, so this is the
-<a href=#80 id=80 data-nosnippet>80</a>    // only copy a user can attach to a report about last night's call.
-<a href=#81 id=81 data-nosnippet>81</a>    //
-<a href=#82 id=82 data-nosnippet>82</a>    // It sits UNDER the shared `filter` like every other layer, so `RUST_LOG` and
-<a href=#83 id=83 data-nosnippet>83</a>    // the default policy govern the file exactly as they govern Dart and stderr —
-<a href=#84 id=84 data-nosnippet>84</a>    // a second level policy here is a second thing to be wrong. `ansi(false)`
-<a href=#85 id=85 data-nosnippet>85</a>    // because a file is not a terminal; timestamps are `fmt`'s default (UTC), which
-<a href=#86 id=86 data-nosnippet>86</a>    // is also what the rotated file NAMES are stamped in.
-<a href=#87 id=87 data-nosnippet>87</a>    //
-<a href=#88 id=88 data-nosnippet>88</a>    // `None` when file logging could not come up: the other layers are untouched,
-<a href=#89 id=89 data-nosnippet>89</a>    // and `state.problem` is warned about below — after `try_init`, since until
-<a href=#90 id=90 data-nosnippet>90</a>    // then there is no subscriber to warn to.
-<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">let </span>state = <span class="kw">crate</span>::logfile::init();
-<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">let </span>file_layer = state
-<a href=#93 id=93 data-nosnippet>93</a>        .writer()
-<a href=#94 id=94 data-nosnippet>94</a>        .map(|writer| fmt::layer().with_ansi(<span class="bool-val">false</span>).with_writer(writer));
-<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">let _ </span>= tracing_subscriber::registry()
-<a href=#96 id=96 data-nosnippet>96</a>        .with(filter)
-<a href=#97 id=97 data-nosnippet>97</a>        .with(
-<a href=#98 id=98 data-nosnippet>98</a>            fmt::layer()
-<a href=#99 id=99 data-nosnippet>99</a>                .with_ansi(<span class="bool-val">false</span>)
-<a href=#100 id=100 data-nosnippet>100</a>                .with_writer(|| LogSink { buf: String::new() }),
-<a href=#101 id=101 data-nosnippet>101</a>        )
-<a href=#102 id=102 data-nosnippet>102</a>        .with(file_layer)
-<a href=#103 id=103 data-nosnippet>103</a>        .with(stderr_layer)
-<a href=#104 id=104 data-nosnippet>104</a>        .with(sentry_layer)
-<a href=#105 id=105 data-nosnippet>105</a>        .try_init();
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="comment">// Say where the file is, in the file and in every other sink: a log that does
-<a href=#108 id=108 data-nosnippet>108</a>    // not name itself leaves "send me your logs" as a support conversation.
-<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="kw">match </span>state.path() {
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="prelude-val">Some</span>(path) =&gt; <span class="macro">tracing::info!</span>(<span class="string">"log file: {}"</span>, path.display()),
-<a href=#111 id=111 data-nosnippet>111</a>        <span class="prelude-val">None </span>=&gt; <span class="macro">tracing::warn!</span>(<span class="string">"no log file this session"</span>),
-<a href=#112 id=112 data-nosnippet>112</a>    }
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(problem) = <span class="kw-2">&amp;</span>state.problem {
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="macro">tracing::warn!</span>(<span class="string">"log file: {problem}"</span>);
-<a href=#115 id=115 data-nosnippet>115</a>    }
-<a href=#116 id=116 data-nosnippet>116</a>
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="comment">// Keep the FRB stream open for the process lifetime.
-<a href=#118 id=118 data-nosnippet>118</a>    </span>std::future::pending::&lt;()&gt;().<span class="kw">await</span>;
-<a href=#119 id=119 data-nosnippet>119</a>}
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a><span class="doccomment">/// Whether this process mirrors every engine log line to stderr. The CI launch
-<a href=#122 id=122 data-nosnippet>122</a>/// smoke's pass/fail contract greps captured stdio for `session restore:`, so
-<a href=#123 id=123 data-nosnippet>123</a>/// the marker's visibility must not hinge on the Dart-side relay.
-<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">fn </span>mirrors_logs_to_stderr(role: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#125 id=125 data-nosnippet>125</a>    role == <span class="string">"ci-smoke"
-<a href=#126 id=126 data-nosnippet>126</a></span>}
+<a href=#2 id=2 data-nosnippet>2</a>//! and the persistent log file's bridge commands), and Dart → `tracing` back the
+<a href=#3 id=3 data-nosnippet>3</a>//! other way. The file mechanics themselves live in [`crate::logfile`]; this is
+<a href=#4 id=4 data-nosnippet>4</a>//! the bridge half.
+<a href=#5 id=5 data-nosnippet>5</a>//!
+<a href=#6 id=6 data-nosnippet>6</a>//! ## Why the return leg exists
+<a href=#7 id=7 data-nosnippet>7</a>//!
+<a href=#8 id=8 data-nosnippet>8</a>//! The rotating log file is written by the Rust `tracing` subscriber, and until
+<a href=#9 id=9 data-nosnippet>9</a>//! [`log_from_dart`] there was no way for anything that happened in Dart to
+<a href=#10 id=10 data-nosnippet>10</a>//! reach it. Dart-side failures went to `debugPrint`, which in a bundled app
+<a href=#11 id=11 data-nosnippet>11</a>//! goes to a console nobody is reading — so the file a user is asked to send to
+<a href=#12 id=12 data-nosnippet>12</a>//! support, and that Settings offers to open, was structurally incapable of
+<a href=#13 id=13 data-nosnippet>13</a>//! containing half the client's failures. A silently broken image was the case
+<a href=#14 id=14 data-nosnippet>14</a>//! that made that concrete.
+<a href=#15 id=15 data-nosnippet>15</a>
+<a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">use </span>std::sync::Arc;
+<a href=#17 id=17 data-nosnippet>17</a>
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>hound_client::error::{HoundError, InternalCode, StateCode};
+<a href=#19 id=19 data-nosnippet>19</a>
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::frb_generated::StreamSink;
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a><span class="doccomment">/// The live Dart log sink. Swapped on each [`init_log`] (e.g. a hot restart hands us
+<a href=#23 id=23 data-nosnippet>23</a>/// a fresh sink); the tracing layer — installed exactly once — reads this per event,
+<a href=#24 id=24 data-nosnippet>24</a>/// so it always forwards to the current sink and never to a dead one.
+<a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">static </span>LOG_SINK: std::sync::OnceLock&lt;std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;Arc&lt;StreamSink&lt;String&gt;&gt;&gt;&gt;&gt; =
+<a href=#26 id=26 data-nosnippet>26</a>    std::sync::OnceLock::new();
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">fn </span>log_sink_slot() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;Arc&lt;StreamSink&lt;String&gt;&gt;&gt;&gt; {
+<a href=#29 id=29 data-nosnippet>29</a>    LOG_SINK.get_or_init(|| std::sync::Mutex::new(<span class="prelude-val">None</span>))
+<a href=#30 id=30 data-nosnippet>30</a>}
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Install a `tracing` subscriber that forwards every formatted Rust log line to
+<a href=#33 id=33 data-nosnippet>33</a>/// Dart over `sink`. WITHOUT this, the core's `tracing::{info,warn,error}!` (the
+<a href=#34 id=34 data-nosnippet>34</a>/// call/transport/engine diagnostics) have no subscriber and are silently dropped.
+<a href=#35 id=35 data-nosnippet>35</a>///
+<a href=#36 id=36 data-nosnippet>36</a>/// **Must stay running**: a flutter_rust_bridge `StreamSink` is closed as soon as its
+<a href=#37 id=37 data-nosnippet>37</a>/// function RETURNS, so a synchronous installer would tear the stream down and every
+<a href=#38 id=38 data-nosnippet>38</a>/// later `sink.add` would no-op. So this is `async`
+<a href=#39 id=39 data-nosnippet>39</a>/// and parks forever — the FRB stream stays open for the process lifetime while the
+<a href=#40 id=40 data-nosnippet>40</a>/// layer forwards to the sink stored above.
+<a href=#41 id=41 data-nosnippet>41</a>///
+<a href=#42 id=42 data-nosnippet>42</a>/// Level filter comes from the `RUST_LOG` env if set, else a debug-on-the-call-path
+<a href=#43 id=43 data-nosnippet>43</a>/// default. The subscriber is installed once (`try_init`); re-calls just re-point the
+<a href=#44 id=44 data-nosnippet>44</a>/// sink (handles hot restart).
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub async fn </span>init_log(sink: StreamSink&lt;String&gt;) {
+<a href=#46 id=46 data-nosnippet>46</a>    <span class="kw">use </span>tracing_subscriber::layer::{Layer, SubscriberExt};
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="kw">use </span>tracing_subscriber::util::SubscriberInitExt;
+<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">use </span>tracing_subscriber::{EnvFilter, filter::LevelFilter, fmt};
+<a href=#49 id=49 data-nosnippet>49</a>
+<a href=#50 id=50 data-nosnippet>50</a>    <span class="kw-2">*</span>log_sink_slot().lock().unwrap() = <span class="prelude-val">Some</span>(Arc::new(sink));
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">let </span>filter = EnvFilter::try_from_default_env().unwrap_or_else(|<span class="kw">_</span>| {
+<a href=#53 id=53 data-nosnippet>53</a>        <span class="comment">// NB: this crate's tracing target is its LIB name (`rust_lib_houndchat`),
+<a href=#54 id=54 data-nosnippet>54</a>        // not the package name `hound-frb`.
+<a href=#55 id=55 data-nosnippet>55</a>        </span>EnvFilter::new(
+<a href=#56 id=56 data-nosnippet>56</a>            <span class="string">"info,hound_client=debug,hound_transport=debug,hound_media=debug,hound_engine=debug,rust_lib_houndchat=debug"</span>,
+<a href=#57 id=57 data-nosnippet>57</a>        )
+<a href=#58 id=58 data-nosnippet>58</a>    });
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="comment">// Rust-side Sentry, separate from the Dart sink below: TWO Sentry clients
+<a href=#60 id=60 data-nosnippet>60</a>    // exist (Dart's, initialised by `SentryFlutter.init`; Rust's, by
+<a href=#61 id=61 data-nosnippet>61</a>    // `init_sentry`), each with its own breadcrumb ring, and each only
+<a href=#62 id=62 data-nosnippet>62</a>    // attaches to crashes on ITS side (a Dart exception vs. a Rust panic).
+<a href=#63 id=63 data-nosnippet>63</a>    // Which level becomes an event vs. a breadcrumb is [`telemetry::event_filter`]'s
+<a href=#64 id=64 data-nosnippet>64</a>    // call; this cap only decides what reaches it at all.
+<a href=#65 id=65 data-nosnippet>65</a>    //
+<a href=#66 id=66 data-nosnippet>66</a>    // It MUST admit INFO. The `info!` lines are the app's narrative, and they are
+<a href=#67 id=67 data-nosnippet>67</a>    // what a Rust event's breadcrumb trail is made of — capping at WARN (as this
+<a href=#68 id=68 data-nosnippet>68</a>    // did) left every Rust event with an empty trail, saying what broke and never
+<a href=#69 id=69 data-nosnippet>69</a>    // how it got there. DEBUG/TRACE stay out: too voluminous for a 100-entry ring,
+<a href=#70 id=70 data-nosnippet>70</a>    // and they still reach the Dart sink above unaffected.
+<a href=#71 id=71 data-nosnippet>71</a>    //
+<a href=#72 id=72 data-nosnippet>72</a>    // A safe no-op when `init_sentry` was never called: `sentry-core`'s calls no-op
+<a href=#73 id=73 data-nosnippet>73</a>    // with no bound client.
+<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">let </span>sentry_layer = sentry::integrations::tracing::layer()
+<a href=#75 id=75 data-nosnippet>75</a>        .event_filter(<span class="kw">crate</span>::telemetry::event_filter)
+<a href=#76 id=76 data-nosnippet>76</a>        .with_filter(LevelFilter::INFO);
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="comment">// One formatted line per event (buffered in the writer, flushed on Drop — fmt
+<a href=#78 id=78 data-nosnippet>78</a>    // makes a fresh writer per event), forwarded to the live Dart sink.
+<a href=#79 id=79 data-nosnippet>79</a>    // CI smoke runs assert on engine log lines in the captured stdio (the
+<a href=#80 id=80 data-nosnippet>80</a>    // nightly launch gate greps for `session restore:`). Those must not depend
+<a href=#81 id=81 data-nosnippet>81</a>    // on the Dart relay above — its delivery in a release-mode Flutter build is
+<a href=#82 id=82 data-nosnippet>82</a>    // an embedder detail — so a runner-role process also writes every line to
+<a href=#83 id=83 data-nosnippet>83</a>    // stderr, which provably reaches the harness (native SDK output does).
+<a href=#84 id=84 data-nosnippet>84</a>    // Never on for real users: stderr is unobserved there, and `app_role` is
+<a href=#85 id=85 data-nosnippet>85</a>    // fixed at process start (see telemetry::app_role).
+<a href=#86 id=86 data-nosnippet>86</a>    </span><span class="kw">let </span>stderr_layer = mirrors_logs_to_stderr(<span class="kw">crate</span>::telemetry::app_role())
+<a href=#87 id=87 data-nosnippet>87</a>        .then(|| fmt::layer().with_ansi(<span class="bool-val">false</span>).with_writer(std::io::stderr));
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="comment">// The same lines again, into this instance's file under the OS log directory
+<a href=#89 id=89 data-nosnippet>89</a>    // (see [`crate::logfile`] for the location, the per-launch rotation and the
+<a href=#90 id=90 data-nosnippet>90</a>    // five-file retention). The Dart sink above dies with the app, so this is the
+<a href=#91 id=91 data-nosnippet>91</a>    // only copy a user can attach to a report about last night's call.
+<a href=#92 id=92 data-nosnippet>92</a>    //
+<a href=#93 id=93 data-nosnippet>93</a>    // It sits UNDER the shared `filter` like every other layer, so `RUST_LOG` and
+<a href=#94 id=94 data-nosnippet>94</a>    // the default policy govern the file exactly as they govern Dart and stderr —
+<a href=#95 id=95 data-nosnippet>95</a>    // a second level policy here is a second thing to be wrong. `ansi(false)`
+<a href=#96 id=96 data-nosnippet>96</a>    // because a file is not a terminal; timestamps are `fmt`'s default (UTC), which
+<a href=#97 id=97 data-nosnippet>97</a>    // is also what the rotated file NAMES are stamped in.
+<a href=#98 id=98 data-nosnippet>98</a>    //
+<a href=#99 id=99 data-nosnippet>99</a>    // `None` when file logging could not come up: the other layers are untouched,
+<a href=#100 id=100 data-nosnippet>100</a>    // and `state.problem` is warned about below — after `try_init`, since until
+<a href=#101 id=101 data-nosnippet>101</a>    // then there is no subscriber to warn to.
+<a href=#102 id=102 data-nosnippet>102</a>    </span><span class="kw">let </span>state = <span class="kw">crate</span>::logfile::init();
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">let </span>file_layer = state
+<a href=#104 id=104 data-nosnippet>104</a>        .writer()
+<a href=#105 id=105 data-nosnippet>105</a>        .map(|writer| fmt::layer().with_ansi(<span class="bool-val">false</span>).with_writer(writer));
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">let _ </span>= tracing_subscriber::registry()
+<a href=#107 id=107 data-nosnippet>107</a>        .with(filter)
+<a href=#108 id=108 data-nosnippet>108</a>        .with(
+<a href=#109 id=109 data-nosnippet>109</a>            fmt::layer()
+<a href=#110 id=110 data-nosnippet>110</a>                .with_ansi(<span class="bool-val">false</span>)
+<a href=#111 id=111 data-nosnippet>111</a>                .with_writer(|| LogSink { buf: String::new() }),
+<a href=#112 id=112 data-nosnippet>112</a>        )
+<a href=#113 id=113 data-nosnippet>113</a>        .with(file_layer)
+<a href=#114 id=114 data-nosnippet>114</a>        .with(stderr_layer)
+<a href=#115 id=115 data-nosnippet>115</a>        .with(sentry_layer)
+<a href=#116 id=116 data-nosnippet>116</a>        .try_init();
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="comment">// Say where the file is, in the file and in every other sink: a log that does
+<a href=#119 id=119 data-nosnippet>119</a>    // not name itself leaves "send me your logs" as a support conversation.
+<a href=#120 id=120 data-nosnippet>120</a>    </span><span class="kw">match </span>state.path() {
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="prelude-val">Some</span>(path) =&gt; <span class="macro">tracing::info!</span>(<span class="string">"log file: {}"</span>, path.display()),
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="prelude-val">None </span>=&gt; <span class="macro">tracing::warn!</span>(<span class="string">"no log file this session"</span>),
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(problem) = <span class="kw-2">&amp;</span>state.problem {
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="macro">tracing::warn!</span>(<span class="string">"log file: {problem}"</span>);
+<a href=#126 id=126 data-nosnippet>126</a>    }
 <a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a><span class="doccomment">/// A `std::io::Write` that accumulates a formatted log event and pushes it to the live
-<a href=#129 id=129 data-nosnippet>129</a>/// Dart `StreamSink` as one line when dropped (fmt drops the writer per event).
-<a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">struct </span>LogSink {
-<a href=#131 id=131 data-nosnippet>131</a>    buf: String,
-<a href=#132 id=132 data-nosnippet>132</a>}
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a><span class="kw">impl </span>std::io::Write <span class="kw">for </span>LogSink {
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; std::io::Result&lt;usize&gt; {
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="self">self</span>.buf.push_str(<span class="kw-2">&amp;</span>String::from_utf8_lossy(bytes));
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="prelude-val">Ok</span>(bytes.len())
-<a href=#138 id=138 data-nosnippet>138</a>    }
-<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;()&gt; {
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="prelude-val">Ok</span>(())
-<a href=#141 id=141 data-nosnippet>141</a>    }
-<a href=#142 id=142 data-nosnippet>142</a>}
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a><span class="kw">impl </span>Drop <span class="kw">for </span>LogSink {
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="kw">let </span>line = <span class="self">self</span>.buf.trim_end();
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">if </span>line.is_empty() {
-<a href=#148 id=148 data-nosnippet>148</a>            <span class="kw">return</span>;
-<a href=#149 id=149 data-nosnippet>149</a>        }
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="comment">// Clone the Arc out and release the lock BEFORE `add` so a log emitted from
-<a href=#151 id=151 data-nosnippet>151</a>        // within `add` can't deadlock on the same non-reentrant mutex.
-<a href=#152 id=152 data-nosnippet>152</a>        </span><span class="kw">let </span>sink = log_sink_slot()
-<a href=#153 id=153 data-nosnippet>153</a>            .lock()
-<a href=#154 id=154 data-nosnippet>154</a>            .ok()
-<a href=#155 id=155 data-nosnippet>155</a>            .and_then(|g| g.as_ref().cloned());
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(sink) = sink <span class="kw">else </span>{ <span class="kw">return </span>};
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">if </span>sink.add(line.to_owned()).is_err() {
-<a href=#158 id=158 data-nosnippet>158</a>            <span class="comment">// Dart dropped the log stream (shutdown / hot restart before the new
-<a href=#159 id=159 data-nosnippet>159</a>            // `init_log` lands). Drop our reference so later lines stop paying a
-<a href=#160 id=160 data-nosnippet>160</a>            // doomed post — the lock is re-acquired only AFTER `add` returned, never
-<a href=#161 id=161 data-nosnippet>161</a>            // held across it, so the deadlock rule above still holds. Only clear the
-<a href=#162 id=162 data-nosnippet>162</a>            // slot if it still holds THIS sink: a concurrent `init_log` may already
-<a href=#163 id=163 data-nosnippet>163</a>            // have installed a live one.
-<a href=#164 id=164 data-nosnippet>164</a>            </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>slot) = log_sink_slot().lock()
-<a href=#165 id=165 data-nosnippet>165</a>                &amp;&amp; slot.as_ref().is_some_and(|cur| Arc::ptr_eq(cur, <span class="kw-2">&amp;</span>sink))
-<a href=#166 id=166 data-nosnippet>166</a>            {
-<a href=#167 id=167 data-nosnippet>167</a>                <span class="kw-2">*</span>slot = <span class="prelude-val">None</span>;
-<a href=#168 id=168 data-nosnippet>168</a>            }
-<a href=#169 id=169 data-nosnippet>169</a>        }
-<a href=#170 id=170 data-nosnippet>170</a>    }
-<a href=#171 id=171 data-nosnippet>171</a>}
-<a href=#172 id=172 data-nosnippet>172</a>
-<a href=#173 id=173 data-nosnippet>173</a><span class="doccomment">/// Absolute path of the file this instance's logs are written to, or `None` when
-<a href=#174 id=174 data-nosnippet>174</a>/// file logging could not be brought up (no usable OS log directory — see
-<a href=#175 id=175 data-nosnippet>175</a>/// [`crate::logfile`]). Settings shows it so the path can be typed into a support
-<a href=#176 id=176 data-nosnippet>176</a>/// thread or pasted into a file dialog; `None` is why the reveal button is hidden.
-<a href=#177 id=177 data-nosnippet>177</a>///
-<a href=#178 id=178 data-nosnippet>178</a>/// Only meaningful after [`init_log`] has run — which the Dart bootstrap does
-<a href=#179 id=179 data-nosnippet>179</a>/// before anything can call this.
-<a href=#180 id=180 data-nosnippet>180</a></span><span class="kw">pub fn </span>log_file_path() -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">crate</span>::logfile::path().map(|path| path.display().to_string())
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="comment">// Keep the FRB stream open for the process lifetime.
+<a href=#129 id=129 data-nosnippet>129</a>    </span>std::future::pending::&lt;()&gt;().<span class="kw">await</span>;
+<a href=#130 id=130 data-nosnippet>130</a>}
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a><span class="doccomment">/// Whether this process mirrors every engine log line to stderr. The CI launch
+<a href=#133 id=133 data-nosnippet>133</a>/// smoke's pass/fail contract greps captured stdio for `session restore:`, so
+<a href=#134 id=134 data-nosnippet>134</a>/// the marker's visibility must not hinge on the Dart-side relay.
+<a href=#135 id=135 data-nosnippet>135</a></span><span class="kw">fn </span>mirrors_logs_to_stderr(role: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#136 id=136 data-nosnippet>136</a>    role == <span class="string">"ci-smoke"
+<a href=#137 id=137 data-nosnippet>137</a></span>}
+<a href=#138 id=138 data-nosnippet>138</a>
+<a href=#139 id=139 data-nosnippet>139</a><span class="doccomment">/// A `std::io::Write` that accumulates a formatted log event and pushes it to the live
+<a href=#140 id=140 data-nosnippet>140</a>/// Dart `StreamSink` as one line when dropped (fmt drops the writer per event).
+<a href=#141 id=141 data-nosnippet>141</a></span><span class="kw">struct </span>LogSink {
+<a href=#142 id=142 data-nosnippet>142</a>    buf: String,
+<a href=#143 id=143 data-nosnippet>143</a>}
+<a href=#144 id=144 data-nosnippet>144</a>
+<a href=#145 id=145 data-nosnippet>145</a><span class="kw">impl </span>std::io::Write <span class="kw">for </span>LogSink {
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; std::io::Result&lt;usize&gt; {
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="self">self</span>.buf.push_str(<span class="kw-2">&amp;</span>String::from_utf8_lossy(bytes));
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="prelude-val">Ok</span>(bytes.len())
+<a href=#149 id=149 data-nosnippet>149</a>    }
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; std::io::Result&lt;()&gt; {
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="prelude-val">Ok</span>(())
+<a href=#152 id=152 data-nosnippet>152</a>    }
+<a href=#153 id=153 data-nosnippet>153</a>}
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a><span class="kw">impl </span>Drop <span class="kw">for </span>LogSink {
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">let </span>line = <span class="self">self</span>.buf.trim_end();
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">if </span>line.is_empty() {
+<a href=#159 id=159 data-nosnippet>159</a>            <span class="kw">return</span>;
+<a href=#160 id=160 data-nosnippet>160</a>        }
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="comment">// Clone the Arc out and release the lock BEFORE `add` so a log emitted from
+<a href=#162 id=162 data-nosnippet>162</a>        // within `add` can't deadlock on the same non-reentrant mutex.
+<a href=#163 id=163 data-nosnippet>163</a>        </span><span class="kw">let </span>sink = log_sink_slot()
+<a href=#164 id=164 data-nosnippet>164</a>            .lock()
+<a href=#165 id=165 data-nosnippet>165</a>            .ok()
+<a href=#166 id=166 data-nosnippet>166</a>            .and_then(|g| g.as_ref().cloned());
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(sink) = sink <span class="kw">else </span>{ <span class="kw">return </span>};
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">if </span>sink.add(line.to_owned()).is_err() {
+<a href=#169 id=169 data-nosnippet>169</a>            <span class="comment">// Dart dropped the log stream (shutdown / hot restart before the new
+<a href=#170 id=170 data-nosnippet>170</a>            // `init_log` lands). Drop our reference so later lines stop paying a
+<a href=#171 id=171 data-nosnippet>171</a>            // doomed post — the lock is re-acquired only AFTER `add` returned, never
+<a href=#172 id=172 data-nosnippet>172</a>            // held across it, so the deadlock rule above still holds. Only clear the
+<a href=#173 id=173 data-nosnippet>173</a>            // slot if it still holds THIS sink: a concurrent `init_log` may already
+<a href=#174 id=174 data-nosnippet>174</a>            // have installed a live one.
+<a href=#175 id=175 data-nosnippet>175</a>            </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>slot) = log_sink_slot().lock()
+<a href=#176 id=176 data-nosnippet>176</a>                &amp;&amp; slot.as_ref().is_some_and(|cur| Arc::ptr_eq(cur, <span class="kw-2">&amp;</span>sink))
+<a href=#177 id=177 data-nosnippet>177</a>            {
+<a href=#178 id=178 data-nosnippet>178</a>                <span class="kw-2">*</span>slot = <span class="prelude-val">None</span>;
+<a href=#179 id=179 data-nosnippet>179</a>            }
+<a href=#180 id=180 data-nosnippet>180</a>        }
+<a href=#181 id=181 data-nosnippet>181</a>    }
 <a href=#182 id=182 data-nosnippet>182</a>}
 <a href=#183 id=183 data-nosnippet>183</a>
-<a href=#184 id=184 data-nosnippet>184</a><span class="doccomment">/// Open the current log file with the OS default handler (Console/Notepad/whatever
-<a href=#185 id=185 data-nosnippet>185</a>/// the desktop associates with `.log`) — the settings screen's "open logs" action.
-<a href=#186 id=186 data-nosnippet>186</a>///
-<a href=#187 id=187 data-nosnippet>187</a>/// Detached, like the browser-login launcher: the handler is a foreign GUI app and
-<a href=#188 id=188 data-nosnippet>188</a>/// awaiting it would block an FRB worker for as long as the user leaves the window
-<a href=#189 id=189 data-nosnippet>189</a>/// open. So the `Ok` means "handed to the OS", not "the user saw it" — a launcher
-<a href=#190 id=190 data-nosnippet>190</a>/// that fails *after* forking is indistinguishable from success here, which is why
-<a href=#191 id=191 data-nosnippet>191</a>/// [`log_file_path`] is shown alongside as the fallback.
-<a href=#192 id=192 data-nosnippet>192</a></span><span class="kw">pub fn </span>open_log_file() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span>path = <span class="kw">crate</span>::logfile::path().ok_or_else(|| {
-<a href=#194 id=194 data-nosnippet>194</a>        HoundError::invalid_state(
-<a href=#195 id=195 data-nosnippet>195</a>            StateCode::NotInitialised,
-<a href=#196 id=196 data-nosnippet>196</a>            <span class="string">"there is no log file this session"</span>,
-<a href=#197 id=197 data-nosnippet>197</a>        )
-<a href=#198 id=198 data-nosnippet>198</a>    })<span class="question-mark">?</span>;
-<a href=#199 id=199 data-nosnippet>199</a>    open::that_detached(path).map_err(|e| {
-<a href=#200 id=200 data-nosnippet>200</a>        HoundError::internal(
-<a href=#201 id=201 data-nosnippet>201</a>            InternalCode::Unclassified,
-<a href=#202 id=202 data-nosnippet>202</a>            <span class="macro">format!</span>(<span class="string">"could not open {}: {e}"</span>, path.display()),
-<a href=#203 id=203 data-nosnippet>203</a>        )
-<a href=#204 id=204 data-nosnippet>204</a>    })
-<a href=#205 id=205 data-nosnippet>205</a>}
-<a href=#206 id=206 data-nosnippet>206</a>
-<a href=#207 id=207 data-nosnippet>207</a><span class="attr">#[cfg(test)]
-<a href=#208 id=208 data-nosnippet>208</a></span><span class="kw">mod </span>tests {
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#210 id=210 data-nosnippet>210</a>
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="doccomment">/// The smoke's log-marker contract: a runner-role process mirrors engine
-<a href=#212 id=212 data-nosnippet>212</a>    /// logs to stderr; a user's never does. Regression guard for the nightly
-<a href=#213 id=213 data-nosnippet>213</a>    /// launch gate going blind on release builds (where the Dart relay's
-<a href=#214 id=214 data-nosnippet>214</a>    /// delivery is an embedder detail).
-<a href=#215 id=215 data-nosnippet>215</a>    </span><span class="attr">#[test]
-<a href=#216 id=216 data-nosnippet>216</a>    </span><span class="kw">fn </span>only_the_ci_smoke_role_mirrors_logs_to_stderr() {
-<a href=#217 id=217 data-nosnippet>217</a>        <span class="macro">assert!</span>(mirrors_logs_to_stderr(<span class="string">"ci-smoke"</span>));
-<a href=#218 id=218 data-nosnippet>218</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">"user"</span>));
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">""</span>));
-<a href=#220 id=220 data-nosnippet>220</a>    }
-<a href=#221 id=221 data-nosnippet>221</a>}
+<a href=#184 id=184 data-nosnippet>184</a><span class="doccomment">/// Severity for [`log_from_dart`]. A plain enum rather than a string so a typo
+<a href=#185 id=185 data-nosnippet>185</a>/// cannot silently downgrade an error to a debug line nobody reads.
+<a href=#186 id=186 data-nosnippet>186</a></span><span class="kw">pub enum </span>DartLogLevel {
+<a href=#187 id=187 data-nosnippet>187</a>    Error,
+<a href=#188 id=188 data-nosnippet>188</a>    Warn,
+<a href=#189 id=189 data-nosnippet>189</a>    Info,
+<a href=#190 id=190 data-nosnippet>190</a>    Debug,
+<a href=#191 id=191 data-nosnippet>191</a>}
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a><span class="doccomment">/// Emit a Dart-side diagnostic through the Rust `tracing` subscriber, so it
+<a href=#194 id=194 data-nosnippet>194</a>/// lands wherever every other engine log does: the rotating log file, the Dart
+<a href=#195 id=195 data-nosnippet>195</a>/// sink, and (in a CI smoke run) stderr.
+<a href=#196 id=196 data-nosnippet>196</a>///
+<a href=#197 id=197 data-nosnippet>197</a>/// `target` names the Dart origin — a widget, a provider, a subsystem — and is
+<a href=#198 id=198 data-nosnippet>198</a>/// carried as a field rather than as the tracing target, which has to be a
+<a href=#199 id=199 data-nosnippet>199</a>/// compile-time constant. Events are emitted under the `dart` target so the two
+<a href=#200 id=200 data-nosnippet>200</a>/// halves of the log stay separable.
+<a href=#201 id=201 data-nosnippet>201</a>///
+<a href=#202 id=202 data-nosnippet>202</a>/// Deliberately synchronous: callers are error handlers and `errorBuilder`s,
+<a href=#203 id=203 data-nosnippet>203</a>/// which have no business awaiting, and the work is a formatted write to a
+<a href=#204 id=204 data-nosnippet>204</a>/// subscriber that is already in memory.
+<a href=#205 id=205 data-nosnippet>205</a>///
+<a href=#206 id=206 data-nosnippet>206</a>/// A call made before `init_log` has installed the subscriber is dropped by
+<a href=#207 id=207 data-nosnippet>207</a>/// `tracing` itself, which is why the Dart side buffers the earliest lines and
+<a href=#208 id=208 data-nosnippet>208</a>/// flushes them once the bridge is up.
+<a href=#209 id=209 data-nosnippet>209</a></span><span class="kw">pub fn </span>log_from_dart(level: DartLogLevel, target: String, message: String) {
+<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">match </span>level {
+<a href=#211 id=211 data-nosnippet>211</a>        DartLogLevel::Error =&gt; <span class="macro">tracing::error!</span>(target: <span class="string">"dart"</span>, origin = %target, <span class="string">"{message}"</span>),
+<a href=#212 id=212 data-nosnippet>212</a>        DartLogLevel::Warn =&gt; <span class="macro">tracing::warn!</span>(target: <span class="string">"dart"</span>, origin = %target, <span class="string">"{message}"</span>),
+<a href=#213 id=213 data-nosnippet>213</a>        DartLogLevel::Info =&gt; <span class="macro">tracing::info!</span>(target: <span class="string">"dart"</span>, origin = %target, <span class="string">"{message}"</span>),
+<a href=#214 id=214 data-nosnippet>214</a>        DartLogLevel::Debug =&gt; <span class="macro">tracing::debug!</span>(target: <span class="string">"dart"</span>, origin = %target, <span class="string">"{message}"</span>),
+<a href=#215 id=215 data-nosnippet>215</a>    }
+<a href=#216 id=216 data-nosnippet>216</a>}
+<a href=#217 id=217 data-nosnippet>217</a>
+<a href=#218 id=218 data-nosnippet>218</a><span class="doccomment">/// Absolute path of the file this instance's logs are written to, or `None` when
+<a href=#219 id=219 data-nosnippet>219</a>/// file logging could not be brought up (no usable OS log directory — see
+<a href=#220 id=220 data-nosnippet>220</a>/// [`crate::logfile`]). Settings shows it so the path can be typed into a support
+<a href=#221 id=221 data-nosnippet>221</a>/// thread or pasted into a file dialog; `None` is why the reveal button is hidden.
+<a href=#222 id=222 data-nosnippet>222</a>///
+<a href=#223 id=223 data-nosnippet>223</a>/// Only meaningful after [`init_log`] has run — which the Dart bootstrap does
+<a href=#224 id=224 data-nosnippet>224</a>/// before anything can call this.
+<a href=#225 id=225 data-nosnippet>225</a></span><span class="kw">pub fn </span>log_file_path() -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">crate</span>::logfile::path().map(|path| path.display().to_string())
+<a href=#227 id=227 data-nosnippet>227</a>}
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a><span class="doccomment">/// Open the current log file with the OS default handler (Console/Notepad/whatever
+<a href=#230 id=230 data-nosnippet>230</a>/// the desktop associates with `.log`) — the settings screen's "open logs" action.
+<a href=#231 id=231 data-nosnippet>231</a>///
+<a href=#232 id=232 data-nosnippet>232</a>/// Detached, like the browser-login launcher: the handler is a foreign GUI app and
+<a href=#233 id=233 data-nosnippet>233</a>/// awaiting it would block an FRB worker for as long as the user leaves the window
+<a href=#234 id=234 data-nosnippet>234</a>/// open. So the `Ok` means "handed to the OS", not "the user saw it" — a launcher
+<a href=#235 id=235 data-nosnippet>235</a>/// that fails *after* forking is indistinguishable from success here, which is why
+<a href=#236 id=236 data-nosnippet>236</a>/// [`log_file_path`] is shown alongside as the fallback.
+<a href=#237 id=237 data-nosnippet>237</a></span><span class="kw">pub fn </span>open_log_file() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">let </span>path = <span class="kw">crate</span>::logfile::path().ok_or_else(|| {
+<a href=#239 id=239 data-nosnippet>239</a>        HoundError::invalid_state(
+<a href=#240 id=240 data-nosnippet>240</a>            StateCode::NotInitialised,
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="string">"there is no log file this session"</span>,
+<a href=#242 id=242 data-nosnippet>242</a>        )
+<a href=#243 id=243 data-nosnippet>243</a>    })<span class="question-mark">?</span>;
+<a href=#244 id=244 data-nosnippet>244</a>    open::that_detached(path).map_err(|e| {
+<a href=#245 id=245 data-nosnippet>245</a>        HoundError::internal(
+<a href=#246 id=246 data-nosnippet>246</a>            InternalCode::Unclassified,
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="macro">format!</span>(<span class="string">"could not open {}: {e}"</span>, path.display()),
+<a href=#248 id=248 data-nosnippet>248</a>        )
+<a href=#249 id=249 data-nosnippet>249</a>    })
+<a href=#250 id=250 data-nosnippet>250</a>}
+<a href=#251 id=251 data-nosnippet>251</a>
+<a href=#252 id=252 data-nosnippet>252</a><span class="attr">#[cfg(test)]
+<a href=#253 id=253 data-nosnippet>253</a></span><span class="kw">mod </span>tests {
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#255 id=255 data-nosnippet>255</a>
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// The smoke's log-marker contract: a runner-role process mirrors engine
+<a href=#257 id=257 data-nosnippet>257</a>    /// logs to stderr; a user's never does. Regression guard for the nightly
+<a href=#258 id=258 data-nosnippet>258</a>    /// launch gate going blind on release builds (where the Dart relay's
+<a href=#259 id=259 data-nosnippet>259</a>    /// delivery is an embedder detail).
+<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="attr">#[test]
+<a href=#261 id=261 data-nosnippet>261</a>    </span><span class="kw">fn </span>only_the_ci_smoke_role_mirrors_logs_to_stderr() {
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="macro">assert!</span>(mirrors_logs_to_stderr(<span class="string">"ci-smoke"</span>));
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">"user"</span>));
+<a href=#264 id=264 data-nosnippet>264</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">""</span>));
+<a href=#265 id=265 data-nosnippet>265</a>    }
+<a href=#266 id=266 data-nosnippet>266</a>}
 </code></pre></div></section></main></body></html>
