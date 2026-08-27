@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEBUG_RATE_LIMIT","DEBUG_RATE_WINDOW_MS","TAG"],"fn":["media_router","post_embed_debug","router"],"mod":["build","guard","media","oembed","parse","store","unfurl"],"struct":["DebugRateLimiter"]};
+window.SIDEBAR_ITEMS = {"constant":["DEBUG_RATE_LIMIT","DEBUG_RATE_WINDOW_MS","TAG"],"fn":["media_router","post_embed_debug","router"],"mod":["build","guard","media","oembed","parse","providers","store","unfurl"],"struct":["DebugRateLimiter"]};

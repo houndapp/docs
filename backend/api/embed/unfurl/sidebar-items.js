@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["PAGE_ACCEPT"],"enum":["Outcome"],"fn":["describe","extract_urls","fetch_oembed","unfurl","unfurl_traced"],"struct":["Trace"]};
+window.SIDEBAR_ITEMS = {"constant":["PAGE_ACCEPT"],"enum":["Outcome"],"fn":["describe","extract_urls","fetch_oembed","provider_only","unfurl","unfurl_traced"],"struct":["Trace"]};
