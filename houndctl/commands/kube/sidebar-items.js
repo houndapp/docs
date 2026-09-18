@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["substitute_env_refs"],"mod":["imp"],"struct":["ClusterArgs","ClusterDb"]};
+window.SIDEBAR_ITEMS = {"fn":["internal_secret","substitute_env_refs"],"mod":["imp"],"struct":["ClusterArgs","ClusterDb"]};

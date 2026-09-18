@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PG_INDEX","SQLITE_CREATE_FTS","SQLITE_REBUILD","SQLITE_TRIGGERS"],"struct":["Migration"]};

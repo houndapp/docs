@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["IndexHintScope","IndexHintType","MySqlType"],"struct":["IndexHint"],"trait":["MySqlSelectStatementExt"],"type":["IndexName"]};
+window.SIDEBAR_ITEMS = {"enum":["ExplainTable","IndexHintScope","IndexHintType","MySqlType"],"struct":["IndexHint"],"trait":["MySqlSelectStatementExt"],"type":["IndexName"]};

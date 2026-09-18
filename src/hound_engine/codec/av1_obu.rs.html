@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/media/engine/src/codec/av1_obu.rs`."><title>av1_obu.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_engine/codec/</div>av1_obu.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # AV1 OBU parsing + `av1C` configuration-record synthesis
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/media/engine/src/codec/av1_obu.rs`."><title>av1_obu.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="hound_engine" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">hound_engine/codec/</div>av1_obu.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # AV1 OBU parsing + `av1C` configuration-record synthesis
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! VideoToolbox can decode AV1 in hardware (A17 Pro / M3 and later), but unlike
 <a href=#4 id=4 data-nosnippet>4</a>//! H.264/HEVC there is **no** `CMVideoFormatDescriptionCreateFromAV1ParameterSets`
@@ -207,7 +207,7 @@
 <a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">loop </span>{
 <a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span><span class="kw-2">mut </span>byte = (value &amp; <span class="number">0x7f</span>) <span class="kw">as </span>u8;
 <a href=#209 id=209 data-nosnippet>209</a>        value &gt;&gt;= <span class="number">7</span>;
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">if </span><span class="macro">value !</span>= <span class="number">0 </span>{
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">if </span>value != <span class="number">0 </span>{
 <a href=#211 id=211 data-nosnippet>211</a>            byte |= <span class="number">0x80</span>;
 <a href=#212 id=212 data-nosnippet>212</a>        }
 <a href=#213 id=213 data-nosnippet>213</a>        out.push(byte);
@@ -424,367 +424,365 @@
 <a href=#424 id=424 data-nosnippet>424</a>    // color_config():
 <a href=#425 id=425 data-nosnippet>425</a>    </span><span class="kw">let </span>high_bitdepth = r.bit()<span class="question-mark">?</span>;
 <a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span><span class="kw-2">mut </span>twelve_bit = <span class="number">0u8</span>;
-<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">let </span>bit_depth;
-<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">if </span>seq_profile == <span class="number">2 </span>&amp;&amp; high_bitdepth == <span class="number">1 </span>{
-<a href=#429 id=429 data-nosnippet>429</a>        twelve_bit = r.bit()<span class="question-mark">?</span>;
-<a href=#430 id=430 data-nosnippet>430</a>        bit_depth = <span class="kw">if </span>twelve_bit == <span class="number">1 </span>{ <span class="number">12 </span>} <span class="kw">else </span>{ <span class="number">10 </span>};
-<a href=#431 id=431 data-nosnippet>431</a>    } <span class="kw">else </span>{
-<a href=#432 id=432 data-nosnippet>432</a>        <span class="comment">// profile &lt;= 2: bit_depth = high_bitdepth ? 10 : 8
-<a href=#433 id=433 data-nosnippet>433</a>        </span>bit_depth = <span class="kw">if </span>high_bitdepth == <span class="number">1 </span>{ <span class="number">10 </span>} <span class="kw">else </span>{ <span class="number">8 </span>};
-<a href=#434 id=434 data-nosnippet>434</a>    }
-<a href=#435 id=435 data-nosnippet>435</a>    <span class="kw">let _ </span>= bit_depth;
-<a href=#436 id=436 data-nosnippet>436</a>
-<a href=#437 id=437 data-nosnippet>437</a>    <span class="kw">let </span>monochrome = <span class="kw">if </span>seq_profile == <span class="number">1 </span>{
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="number">0u8 </span><span class="comment">// mono_chrome not coded for profile 1
-<a href=#439 id=439 data-nosnippet>439</a>    </span>} <span class="kw">else </span>{
-<a href=#440 id=440 data-nosnippet>440</a>        r.bit()<span class="question-mark">?
-<a href=#441 id=441 data-nosnippet>441</a>    </span>};
-<a href=#442 id=442 data-nosnippet>442</a>
-<a href=#443 id=443 data-nosnippet>443</a>    <span class="kw">let </span>color_description_present_flag = r.bit()<span class="question-mark">?</span>;
-<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>color_primaries, <span class="kw-2">mut </span>transfer_characteristics, <span class="kw-2">mut </span>matrix_coefficients) =
-<a href=#445 id=445 data-nosnippet>445</a>        (<span class="number">2u32</span>, <span class="number">2u32</span>, <span class="number">2u32</span>); <span class="comment">// CP/TC/MC_UNSPECIFIED
-<a href=#446 id=446 data-nosnippet>446</a>    </span><span class="kw">if </span>color_description_present_flag == <span class="number">1 </span>{
-<a href=#447 id=447 data-nosnippet>447</a>        color_primaries = r.f(<span class="number">8</span>)<span class="question-mark">?</span>;
-<a href=#448 id=448 data-nosnippet>448</a>        transfer_characteristics = r.f(<span class="number">8</span>)<span class="question-mark">?</span>;
-<a href=#449 id=449 data-nosnippet>449</a>        matrix_coefficients = r.f(<span class="number">8</span>)<span class="question-mark">?</span>;
-<a href=#450 id=450 data-nosnippet>450</a>    }
-<a href=#451 id=451 data-nosnippet>451</a>
-<a href=#452 id=452 data-nosnippet>452</a>    <span class="kw">let </span>chroma_subsampling_x;
-<a href=#453 id=453 data-nosnippet>453</a>    <span class="kw">let </span>chroma_subsampling_y;
-<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">let </span><span class="kw-2">mut </span>chroma_sample_position = <span class="number">0u8</span>; <span class="comment">// CSP_UNKNOWN
-<a href=#455 id=455 data-nosnippet>455</a>
-<a href=#456 id=456 data-nosnippet>456</a>    </span><span class="kw">if </span>monochrome == <span class="number">1 </span>{
-<a href=#457 id=457 data-nosnippet>457</a>        r.bit()<span class="question-mark">?</span>; <span class="comment">// color_range
-<a href=#458 id=458 data-nosnippet>458</a>        // subsampling 1,1; chroma_sample_position 0.
-<a href=#459 id=459 data-nosnippet>459</a>        </span>chroma_subsampling_x = <span class="number">1</span>;
-<a href=#460 id=460 data-nosnippet>460</a>        chroma_subsampling_y = <span class="number">1</span>;
-<a href=#461 id=461 data-nosnippet>461</a>    } <span class="kw">else if </span>color_primaries == <span class="number">1 </span>&amp;&amp; transfer_characteristics == <span class="number">13 </span>&amp;&amp; matrix_coefficients == <span class="number">0 </span>{
-<a href=#462 id=462 data-nosnippet>462</a>        <span class="comment">// sRGB: color_range=1, subsampling 0,0.
-<a href=#463 id=463 data-nosnippet>463</a>        </span>chroma_subsampling_x = <span class="number">0</span>;
-<a href=#464 id=464 data-nosnippet>464</a>        chroma_subsampling_y = <span class="number">0</span>;
-<a href=#465 id=465 data-nosnippet>465</a>    } <span class="kw">else </span>{
-<a href=#466 id=466 data-nosnippet>466</a>        r.bit()<span class="question-mark">?</span>; <span class="comment">// color_range
-<a href=#467 id=467 data-nosnippet>467</a>        </span><span class="kw">if </span>seq_profile == <span class="number">0 </span>{
-<a href=#468 id=468 data-nosnippet>468</a>            chroma_subsampling_x = <span class="number">1</span>;
-<a href=#469 id=469 data-nosnippet>469</a>            chroma_subsampling_y = <span class="number">1</span>;
-<a href=#470 id=470 data-nosnippet>470</a>        } <span class="kw">else if </span>seq_profile == <span class="number">1 </span>{
-<a href=#471 id=471 data-nosnippet>471</a>            chroma_subsampling_x = <span class="number">0</span>;
-<a href=#472 id=472 data-nosnippet>472</a>            chroma_subsampling_y = <span class="number">0</span>;
-<a href=#473 id=473 data-nosnippet>473</a>        } <span class="kw">else </span>{
-<a href=#474 id=474 data-nosnippet>474</a>            <span class="comment">// profile 2
-<a href=#475 id=475 data-nosnippet>475</a>            </span><span class="kw">if </span>bit_depth == <span class="number">12 </span>{
-<a href=#476 id=476 data-nosnippet>476</a>                chroma_subsampling_x = r.bit()<span class="question-mark">?</span>;
-<a href=#477 id=477 data-nosnippet>477</a>                <span class="kw">if </span>chroma_subsampling_x == <span class="number">1 </span>{
-<a href=#478 id=478 data-nosnippet>478</a>                    chroma_subsampling_y = r.bit()<span class="question-mark">?</span>;
-<a href=#479 id=479 data-nosnippet>479</a>                } <span class="kw">else </span>{
-<a href=#480 id=480 data-nosnippet>480</a>                    chroma_subsampling_y = <span class="number">0</span>;
-<a href=#481 id=481 data-nosnippet>481</a>                }
-<a href=#482 id=482 data-nosnippet>482</a>            } <span class="kw">else </span>{
-<a href=#483 id=483 data-nosnippet>483</a>                chroma_subsampling_x = <span class="number">1</span>;
-<a href=#484 id=484 data-nosnippet>484</a>                chroma_subsampling_y = <span class="number">0</span>;
-<a href=#485 id=485 data-nosnippet>485</a>            }
-<a href=#486 id=486 data-nosnippet>486</a>        }
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="kw">if </span>chroma_subsampling_x == <span class="number">1 </span>&amp;&amp; chroma_subsampling_y == <span class="number">1 </span>{
-<a href=#488 id=488 data-nosnippet>488</a>            chroma_sample_position = r.f(<span class="number">2</span>)<span class="question-mark">? </span><span class="kw">as </span>u8;
-<a href=#489 id=489 data-nosnippet>489</a>        }
-<a href=#490 id=490 data-nosnippet>490</a>    }
-<a href=#491 id=491 data-nosnippet>491</a>
-<a href=#492 id=492 data-nosnippet>492</a>    <span class="prelude-val">Some</span>(SeqHeaderConfig {
-<a href=#493 id=493 data-nosnippet>493</a>        seq_profile,
-<a href=#494 id=494 data-nosnippet>494</a>        seq_level_idx_0,
-<a href=#495 id=495 data-nosnippet>495</a>        seq_tier_0,
-<a href=#496 id=496 data-nosnippet>496</a>        high_bitdepth,
-<a href=#497 id=497 data-nosnippet>497</a>        twelve_bit,
-<a href=#498 id=498 data-nosnippet>498</a>        monochrome,
-<a href=#499 id=499 data-nosnippet>499</a>        chroma_subsampling_x,
-<a href=#500 id=500 data-nosnippet>500</a>        chroma_subsampling_y,
-<a href=#501 id=501 data-nosnippet>501</a>        chroma_sample_position,
-<a href=#502 id=502 data-nosnippet>502</a>        max_frame_width,
-<a href=#503 id=503 data-nosnippet>503</a>        max_frame_height,
-<a href=#504 id=504 data-nosnippet>504</a>    })
-<a href=#505 id=505 data-nosnippet>505</a>}
-<a href=#506 id=506 data-nosnippet>506</a>
-<a href=#507 id=507 data-nosnippet>507</a><span class="doccomment">/// Build the `av1C` configuration-record bytes from the sequence-header OBU.
-<a href=#508 id=508 data-nosnippet>508</a>///
-<a href=#509 id=509 data-nosnippet>509</a>/// `seq_header` is the sequence-header OBU as located in the stream, normally
-<a href=#510 id=510 data-nosnippet>510</a>/// copied into `configOBUs` **verbatim** (byte-for-byte what a muxer would write
-<a href=#511 id=511 data-nosnippet>511</a>/// — cross-checked against ffmpeg's `av1C` box for the committed fixture, see the
-<a href=#512 id=512 data-nosnippet>512</a>/// tests); `cfg` is the parsed config. The returned bytes are exactly what goes
-<a href=#513 id=513 data-nosnippet>513</a>/// under the `"av1C"` key in the format description's
-<a href=#514 id=514 data-nosnippet>514</a>/// `SampleDescriptionExtensionAtoms`.
-<a href=#515 id=515 data-nosnippet>515</a>///
-<a href=#516 id=516 data-nosnippet>516</a>/// The one departure from a verbatim copy: an OBU with `obu_has_size_field = 0`
-<a href=#517 id=517 data-nosnippet>517</a>/// is re-framed with an explicit size. That flag is legal in the low-overhead
-<a href=#518 id=518 data-nosnippet>518</a>/// bitstream for the last OBU of a stream, where "no size" means "runs to the
-<a href=#519 id=519 data-nosnippet>519</a>/// end" — a meaning `configOBUs` cannot express, and which would otherwise make
-<a href=#520 id=520 data-nosnippet>520</a>/// [`parse_obus`] swallow every following OBU into the record.
-<a href=#521 id=521 data-nosnippet>521</a></span><span class="kw">pub fn </span>build_av1c(cfg: <span class="kw-2">&amp;</span>SeqHeaderConfig, seq_header: <span class="kw-2">&amp;</span>Obu&lt;<span class="lifetime">'_</span>&gt;) -&gt; Vec&lt;u8&gt; {
-<a href=#522 id=522 data-nosnippet>522</a>    <span class="kw">let </span>config_obu = <span class="kw">if </span>seq_header.has_size_field {
-<a href=#523 id=523 data-nosnippet>523</a>        seq_header.whole.to_vec()
-<a href=#524 id=524 data-nosnippet>524</a>    } <span class="kw">else </span>{
-<a href=#525 id=525 data-nosnippet>525</a>        <span class="kw">let </span><span class="kw-2">mut </span>framed = seq_header.header.to_vec();
-<a href=#526 id=526 data-nosnippet>526</a>        framed[<span class="number">0</span>] |= <span class="number">0b0000_0010</span>; <span class="comment">// set obu_has_size_field
-<a href=#527 id=527 data-nosnippet>527</a>        </span>write_leb128(<span class="kw-2">&amp;mut </span>framed, seq_header.payload.len() <span class="kw">as </span>u64);
-<a href=#528 id=528 data-nosnippet>528</a>        framed.extend_from_slice(seq_header.payload);
-<a href=#529 id=529 data-nosnippet>529</a>        framed
-<a href=#530 id=530 data-nosnippet>530</a>    };
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">let </span>bit_depth = <span class="kw">if </span>seq_profile == <span class="number">2 </span>&amp;&amp; high_bitdepth == <span class="number">1 </span>{
+<a href=#428 id=428 data-nosnippet>428</a>        twelve_bit = r.bit()<span class="question-mark">?</span>;
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">if </span>twelve_bit == <span class="number">1 </span>{ <span class="number">12 </span>} <span class="kw">else </span>{ <span class="number">10 </span>}
+<a href=#430 id=430 data-nosnippet>430</a>    } <span class="kw">else </span>{
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="comment">// profile &lt;= 2: bit_depth = high_bitdepth ? 10 : 8
+<a href=#432 id=432 data-nosnippet>432</a>        </span><span class="kw">if </span>high_bitdepth == <span class="number">1 </span>{ <span class="number">10 </span>} <span class="kw">else </span>{ <span class="number">8 </span>}
+<a href=#433 id=433 data-nosnippet>433</a>    };
+<a href=#434 id=434 data-nosnippet>434</a>
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="kw">let </span>monochrome = <span class="kw">if </span>seq_profile == <span class="number">1 </span>{
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="number">0u8 </span><span class="comment">// mono_chrome not coded for profile 1
+<a href=#437 id=437 data-nosnippet>437</a>    </span>} <span class="kw">else </span>{
+<a href=#438 id=438 data-nosnippet>438</a>        r.bit()<span class="question-mark">?
+<a href=#439 id=439 data-nosnippet>439</a>    </span>};
+<a href=#440 id=440 data-nosnippet>440</a>
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="kw">let </span>color_description_present_flag = r.bit()<span class="question-mark">?</span>;
+<a href=#442 id=442 data-nosnippet>442</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>color_primaries, <span class="kw-2">mut </span>transfer_characteristics, <span class="kw-2">mut </span>matrix_coefficients) =
+<a href=#443 id=443 data-nosnippet>443</a>        (<span class="number">2u32</span>, <span class="number">2u32</span>, <span class="number">2u32</span>); <span class="comment">// CP/TC/MC_UNSPECIFIED
+<a href=#444 id=444 data-nosnippet>444</a>    </span><span class="kw">if </span>color_description_present_flag == <span class="number">1 </span>{
+<a href=#445 id=445 data-nosnippet>445</a>        color_primaries = r.f(<span class="number">8</span>)<span class="question-mark">?</span>;
+<a href=#446 id=446 data-nosnippet>446</a>        transfer_characteristics = r.f(<span class="number">8</span>)<span class="question-mark">?</span>;
+<a href=#447 id=447 data-nosnippet>447</a>        matrix_coefficients = r.f(<span class="number">8</span>)<span class="question-mark">?</span>;
+<a href=#448 id=448 data-nosnippet>448</a>    }
+<a href=#449 id=449 data-nosnippet>449</a>
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="kw">let </span>chroma_subsampling_x;
+<a href=#451 id=451 data-nosnippet>451</a>    <span class="kw">let </span>chroma_subsampling_y;
+<a href=#452 id=452 data-nosnippet>452</a>    <span class="kw">let </span><span class="kw-2">mut </span>chroma_sample_position = <span class="number">0u8</span>; <span class="comment">// CSP_UNKNOWN
+<a href=#453 id=453 data-nosnippet>453</a>
+<a href=#454 id=454 data-nosnippet>454</a>    </span><span class="kw">if </span>monochrome == <span class="number">1 </span>{
+<a href=#455 id=455 data-nosnippet>455</a>        r.bit()<span class="question-mark">?</span>; <span class="comment">// color_range
+<a href=#456 id=456 data-nosnippet>456</a>        // subsampling 1,1; chroma_sample_position 0.
+<a href=#457 id=457 data-nosnippet>457</a>        </span>chroma_subsampling_x = <span class="number">1</span>;
+<a href=#458 id=458 data-nosnippet>458</a>        chroma_subsampling_y = <span class="number">1</span>;
+<a href=#459 id=459 data-nosnippet>459</a>    } <span class="kw">else if </span>color_primaries == <span class="number">1 </span>&amp;&amp; transfer_characteristics == <span class="number">13 </span>&amp;&amp; matrix_coefficients == <span class="number">0 </span>{
+<a href=#460 id=460 data-nosnippet>460</a>        <span class="comment">// sRGB: color_range=1, subsampling 0,0.
+<a href=#461 id=461 data-nosnippet>461</a>        </span>chroma_subsampling_x = <span class="number">0</span>;
+<a href=#462 id=462 data-nosnippet>462</a>        chroma_subsampling_y = <span class="number">0</span>;
+<a href=#463 id=463 data-nosnippet>463</a>    } <span class="kw">else </span>{
+<a href=#464 id=464 data-nosnippet>464</a>        r.bit()<span class="question-mark">?</span>; <span class="comment">// color_range
+<a href=#465 id=465 data-nosnippet>465</a>        </span><span class="kw">if </span>seq_profile == <span class="number">0 </span>{
+<a href=#466 id=466 data-nosnippet>466</a>            chroma_subsampling_x = <span class="number">1</span>;
+<a href=#467 id=467 data-nosnippet>467</a>            chroma_subsampling_y = <span class="number">1</span>;
+<a href=#468 id=468 data-nosnippet>468</a>        } <span class="kw">else if </span>seq_profile == <span class="number">1 </span>{
+<a href=#469 id=469 data-nosnippet>469</a>            chroma_subsampling_x = <span class="number">0</span>;
+<a href=#470 id=470 data-nosnippet>470</a>            chroma_subsampling_y = <span class="number">0</span>;
+<a href=#471 id=471 data-nosnippet>471</a>        } <span class="kw">else </span>{
+<a href=#472 id=472 data-nosnippet>472</a>            <span class="comment">// profile 2
+<a href=#473 id=473 data-nosnippet>473</a>            </span><span class="kw">if </span>bit_depth == <span class="number">12 </span>{
+<a href=#474 id=474 data-nosnippet>474</a>                chroma_subsampling_x = r.bit()<span class="question-mark">?</span>;
+<a href=#475 id=475 data-nosnippet>475</a>                <span class="kw">if </span>chroma_subsampling_x == <span class="number">1 </span>{
+<a href=#476 id=476 data-nosnippet>476</a>                    chroma_subsampling_y = r.bit()<span class="question-mark">?</span>;
+<a href=#477 id=477 data-nosnippet>477</a>                } <span class="kw">else </span>{
+<a href=#478 id=478 data-nosnippet>478</a>                    chroma_subsampling_y = <span class="number">0</span>;
+<a href=#479 id=479 data-nosnippet>479</a>                }
+<a href=#480 id=480 data-nosnippet>480</a>            } <span class="kw">else </span>{
+<a href=#481 id=481 data-nosnippet>481</a>                chroma_subsampling_x = <span class="number">1</span>;
+<a href=#482 id=482 data-nosnippet>482</a>                chroma_subsampling_y = <span class="number">0</span>;
+<a href=#483 id=483 data-nosnippet>483</a>            }
+<a href=#484 id=484 data-nosnippet>484</a>        }
+<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">if </span>chroma_subsampling_x == <span class="number">1 </span>&amp;&amp; chroma_subsampling_y == <span class="number">1 </span>{
+<a href=#486 id=486 data-nosnippet>486</a>            chroma_sample_position = r.f(<span class="number">2</span>)<span class="question-mark">? </span><span class="kw">as </span>u8;
+<a href=#487 id=487 data-nosnippet>487</a>        }
+<a href=#488 id=488 data-nosnippet>488</a>    }
+<a href=#489 id=489 data-nosnippet>489</a>
+<a href=#490 id=490 data-nosnippet>490</a>    <span class="prelude-val">Some</span>(SeqHeaderConfig {
+<a href=#491 id=491 data-nosnippet>491</a>        seq_profile,
+<a href=#492 id=492 data-nosnippet>492</a>        seq_level_idx_0,
+<a href=#493 id=493 data-nosnippet>493</a>        seq_tier_0,
+<a href=#494 id=494 data-nosnippet>494</a>        high_bitdepth,
+<a href=#495 id=495 data-nosnippet>495</a>        twelve_bit,
+<a href=#496 id=496 data-nosnippet>496</a>        monochrome,
+<a href=#497 id=497 data-nosnippet>497</a>        chroma_subsampling_x,
+<a href=#498 id=498 data-nosnippet>498</a>        chroma_subsampling_y,
+<a href=#499 id=499 data-nosnippet>499</a>        chroma_sample_position,
+<a href=#500 id=500 data-nosnippet>500</a>        max_frame_width,
+<a href=#501 id=501 data-nosnippet>501</a>        max_frame_height,
+<a href=#502 id=502 data-nosnippet>502</a>    })
+<a href=#503 id=503 data-nosnippet>503</a>}
+<a href=#504 id=504 data-nosnippet>504</a>
+<a href=#505 id=505 data-nosnippet>505</a><span class="doccomment">/// Build the `av1C` configuration-record bytes from the sequence-header OBU.
+<a href=#506 id=506 data-nosnippet>506</a>///
+<a href=#507 id=507 data-nosnippet>507</a>/// `seq_header` is the sequence-header OBU as located in the stream, normally
+<a href=#508 id=508 data-nosnippet>508</a>/// copied into `configOBUs` **verbatim** (byte-for-byte what a muxer would write
+<a href=#509 id=509 data-nosnippet>509</a>/// — cross-checked against ffmpeg's `av1C` box for the committed fixture, see the
+<a href=#510 id=510 data-nosnippet>510</a>/// tests); `cfg` is the parsed config. The returned bytes are exactly what goes
+<a href=#511 id=511 data-nosnippet>511</a>/// under the `"av1C"` key in the format description's
+<a href=#512 id=512 data-nosnippet>512</a>/// `SampleDescriptionExtensionAtoms`.
+<a href=#513 id=513 data-nosnippet>513</a>///
+<a href=#514 id=514 data-nosnippet>514</a>/// The one departure from a verbatim copy: an OBU with `obu_has_size_field = 0`
+<a href=#515 id=515 data-nosnippet>515</a>/// is re-framed with an explicit size. That flag is legal in the low-overhead
+<a href=#516 id=516 data-nosnippet>516</a>/// bitstream for the last OBU of a stream, where "no size" means "runs to the
+<a href=#517 id=517 data-nosnippet>517</a>/// end" — a meaning `configOBUs` cannot express, and which would otherwise make
+<a href=#518 id=518 data-nosnippet>518</a>/// [`parse_obus`] swallow every following OBU into the record.
+<a href=#519 id=519 data-nosnippet>519</a></span><span class="kw">pub fn </span>build_av1c(cfg: <span class="kw-2">&amp;</span>SeqHeaderConfig, seq_header: <span class="kw-2">&amp;</span>Obu&lt;<span class="lifetime">'_</span>&gt;) -&gt; Vec&lt;u8&gt; {
+<a href=#520 id=520 data-nosnippet>520</a>    <span class="kw">let </span>config_obu = <span class="kw">if </span>seq_header.has_size_field {
+<a href=#521 id=521 data-nosnippet>521</a>        seq_header.whole.to_vec()
+<a href=#522 id=522 data-nosnippet>522</a>    } <span class="kw">else </span>{
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="kw">let </span><span class="kw-2">mut </span>framed = seq_header.header.to_vec();
+<a href=#524 id=524 data-nosnippet>524</a>        framed[<span class="number">0</span>] |= <span class="number">0b0000_0010</span>; <span class="comment">// set obu_has_size_field
+<a href=#525 id=525 data-nosnippet>525</a>        </span>write_leb128(<span class="kw-2">&amp;mut </span>framed, seq_header.payload.len() <span class="kw">as </span>u64);
+<a href=#526 id=526 data-nosnippet>526</a>        framed.extend_from_slice(seq_header.payload);
+<a href=#527 id=527 data-nosnippet>527</a>        framed
+<a href=#528 id=528 data-nosnippet>528</a>    };
+<a href=#529 id=529 data-nosnippet>529</a>
+<a href=#530 id=530 data-nosnippet>530</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = Vec::with_capacity(<span class="number">4 </span>+ config_obu.len());
 <a href=#531 id=531 data-nosnippet>531</a>
-<a href=#532 id=532 data-nosnippet>532</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = Vec::with_capacity(<span class="number">4 </span>+ config_obu.len());
-<a href=#533 id=533 data-nosnippet>533</a>
-<a href=#534 id=534 data-nosnippet>534</a>    <span class="comment">// Byte 0: marker(1)=1, version(7)=1  →  0b1_0000001 = 0x81.
-<a href=#535 id=535 data-nosnippet>535</a>    </span>out.push(<span class="number">0x81</span>);
-<a href=#536 id=536 data-nosnippet>536</a>    <span class="comment">// Byte 1: seq_profile(3), seq_level_idx_0(5).
-<a href=#537 id=537 data-nosnippet>537</a>    </span>out.push(((cfg.seq_profile &amp; <span class="number">0x07</span>) &lt;&lt; <span class="number">5</span>) | (cfg.seq_level_idx_0 &amp; <span class="number">0x1f</span>));
-<a href=#538 id=538 data-nosnippet>538</a>    <span class="comment">// Byte 2: seq_tier_0(1), high_bitdepth(1), twelve_bit(1), monochrome(1),
-<a href=#539 id=539 data-nosnippet>539</a>    //         chroma_subsampling_x(1), chroma_subsampling_y(1), chroma_sample_position(2).
-<a href=#540 id=540 data-nosnippet>540</a>    </span>out.push(
-<a href=#541 id=541 data-nosnippet>541</a>        ((cfg.seq_tier_0 &amp; <span class="number">1</span>) &lt;&lt; <span class="number">7</span>)
-<a href=#542 id=542 data-nosnippet>542</a>            | ((cfg.high_bitdepth &amp; <span class="number">1</span>) &lt;&lt; <span class="number">6</span>)
-<a href=#543 id=543 data-nosnippet>543</a>            | ((cfg.twelve_bit &amp; <span class="number">1</span>) &lt;&lt; <span class="number">5</span>)
-<a href=#544 id=544 data-nosnippet>544</a>            | ((cfg.monochrome &amp; <span class="number">1</span>) &lt;&lt; <span class="number">4</span>)
-<a href=#545 id=545 data-nosnippet>545</a>            | ((cfg.chroma_subsampling_x &amp; <span class="number">1</span>) &lt;&lt; <span class="number">3</span>)
-<a href=#546 id=546 data-nosnippet>546</a>            | ((cfg.chroma_subsampling_y &amp; <span class="number">1</span>) &lt;&lt; <span class="number">2</span>)
-<a href=#547 id=547 data-nosnippet>547</a>            | (cfg.chroma_sample_position &amp; <span class="number">0x03</span>),
-<a href=#548 id=548 data-nosnippet>548</a>    );
-<a href=#549 id=549 data-nosnippet>549</a>    <span class="comment">// Byte 3: reserved(3)=0, initial_presentation_delay_present(1)=0,
-<a href=#550 id=550 data-nosnippet>550</a>    //         initial_presentation_delay_minus_one(4) → all zero.
-<a href=#551 id=551 data-nosnippet>551</a>    </span>out.push(<span class="number">0x00</span>);
-<a href=#552 id=552 data-nosnippet>552</a>
-<a href=#553 id=553 data-nosnippet>553</a>    <span class="comment">// configOBUs: the sequence-header OBU.
-<a href=#554 id=554 data-nosnippet>554</a>    </span>out.extend_from_slice(<span class="kw-2">&amp;</span>config_obu);
-<a href=#555 id=555 data-nosnippet>555</a>    out
-<a href=#556 id=556 data-nosnippet>556</a>}
-<a href=#557 id=557 data-nosnippet>557</a>
-<a href=#558 id=558 data-nosnippet>558</a><span class="doccomment">/// Convenience: from a full AV1 temporal-unit byte stream that contains a
-<a href=#559 id=559 data-nosnippet>559</a>/// sequence-header OBU, synthesise the `av1C` record **and** the coded geometry
-<a href=#560 id=560 data-nosnippet>560</a>/// that goes with it. Returns `None` if there is no sequence header, it can't be
-<a href=#561 id=561 data-nosnippet>561</a>/// parsed, or it declares a degenerate size — the callers then refuse AV1 rather
-<a href=#562 id=562 data-nosnippet>562</a>/// than build a format description that `VTDecompressionSessionCreate` would
-<a href=#563 id=563 data-nosnippet>563</a>/// reject (see the module docs).
-<a href=#564 id=564 data-nosnippet>564</a></span><span class="kw">pub fn </span>av1_config_from_stream(stream: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;Av1Config&gt; {
-<a href=#565 id=565 data-nosnippet>565</a>    <span class="kw">let </span>sh = find_sequence_header(stream)<span class="question-mark">?</span>;
-<a href=#566 id=566 data-nosnippet>566</a>    <span class="kw">let </span>cfg = parse_sequence_header(sh.payload)<span class="question-mark">?</span>;
-<a href=#567 id=567 data-nosnippet>567</a>    <span class="kw">if </span>cfg.max_frame_width == <span class="number">0 </span>|| cfg.max_frame_height == <span class="number">0 </span>{
-<a href=#568 id=568 data-nosnippet>568</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#569 id=569 data-nosnippet>569</a>    }
-<a href=#570 id=570 data-nosnippet>570</a>    <span class="prelude-val">Some</span>(Av1Config {
-<a href=#571 id=571 data-nosnippet>571</a>        record: build_av1c(<span class="kw-2">&amp;</span>cfg, <span class="kw-2">&amp;</span>sh),
-<a href=#572 id=572 data-nosnippet>572</a>        width: cfg.max_frame_width,
-<a href=#573 id=573 data-nosnippet>573</a>        height: cfg.max_frame_height,
-<a href=#574 id=574 data-nosnippet>574</a>    })
-<a href=#575 id=575 data-nosnippet>575</a>}
-<a href=#576 id=576 data-nosnippet>576</a>
-<a href=#577 id=577 data-nosnippet>577</a><span class="doccomment">/// True if a temporal-delimiter-only / empty stream (nothing to decode).
-<a href=#578 id=578 data-nosnippet>578</a></span><span class="kw">pub fn </span>is_temporal_delimiter_only(stream: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
-<a href=#579 id=579 data-nosnippet>579</a>    <span class="kw">let </span>obus = parse_obus(stream);
-<a href=#580 id=580 data-nosnippet>580</a>    !obus.is_empty() &amp;&amp; obus.iter().all(|o| o.obu_type == OBU_TEMPORAL_DELIMITER)
-<a href=#581 id=581 data-nosnippet>581</a>}
-<a href=#582 id=582 data-nosnippet>582</a>
-<a href=#583 id=583 data-nosnippet>583</a><span class="attr">#[cfg(test)]
-<a href=#584 id=584 data-nosnippet>584</a></span><span class="kw">mod </span>tests {
-<a href=#585 id=585 data-nosnippet>585</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#586 id=586 data-nosnippet>586</a>
-<a href=#587 id=587 data-nosnippet>587</a>    <span class="doccomment">/// The sequence-header OBU of the committed 720p `rav1e` fixture
-<a href=#588 id=588 data-nosnippet>588</a>    /// (`crates/test/bench/fixtures/av1_720p.bin`, first temporal unit), verbatim
-<a href=#589 id=589 data-nosnippet>589</a>    /// — the exact bytes the AV1 decode bench feeds `Engine::video_decoder(Av1)`,
-<a href=#590 id=590 data-nosnippet>590</a>    /// and the input every expectation below is pinned against. Held as a literal
-<a href=#591 id=591 data-nosnippet>591</a>    /// rather than read across crates so this stays a hermetic unit test; the
-<a href=#592 id=592 data-nosnippet>592</a>    /// bench's own probe is what catches the fixture being regenerated into
-<a href=#593 id=593 data-nosnippet>593</a>    /// something else.
-<a href=#594 id=594 data-nosnippet>594</a>    </span><span class="kw">const </span>FIXTURE_SEQ_HEADER_OBU: [u8; <span class="number">13</span>] = [
-<a href=#595 id=595 data-nosnippet>595</a>        <span class="comment">// obu_header: forbidden 0 | type 1 (OBU_SEQUENCE_HEADER) | ext 0 |
-<a href=#596 id=596 data-nosnippet>596</a>        // has_size 1 | reserved 0.
-<a href=#597 id=597 data-nosnippet>597</a>        </span><span class="number">0x0a</span>, <span class="comment">// leb128 obu_size = 11.
-<a href=#598 id=598 data-nosnippet>598</a>        </span><span class="number">0x0b</span>, <span class="comment">// payload: seq_profile 0, still_picture 0, reduced_still_picture_header 0,
-<a href=#599 id=599 data-nosnippet>599</a>        // timing_info_present 0, initial_display_delay_present 0,
-<a href=#600 id=600 data-nosnippet>600</a>        // operating_points_cnt_minus_1 0, operating_point_idc[0] 0,
-<a href=#601 id=601 data-nosnippet>601</a>        // seq_level_idx[0] 31, seq_tier[0] 0, 1280x720, order_hint_bits 6,
-<a href=#602 id=602 data-nosnippet>602</a>        // enable_cdef 1, 8-bit 4:2:0, chroma_sample_position 0 (UNKNOWN).
-<a href=#603 id=603 data-nosnippet>603</a>        </span><span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0xfa</span>, <span class="number">0xa6</span>, <span class="number">0x7f</span>, <span class="number">0xd9</span>, <span class="number">0xe2</span>, <span class="number">0x10</span>, <span class="number">0xa8</span>, <span class="number">0x0a</span>,
-<a href=#604 id=604 data-nosnippet>604</a>    ];
-<a href=#605 id=605 data-nosnippet>605</a>
-<a href=#606 id=606 data-nosnippet>606</a>    <span class="attr">#[test]
-<a href=#607 id=607 data-nosnippet>607</a>    </span><span class="kw">fn </span>leb128_roundtrip() {
-<a href=#608 id=608 data-nosnippet>608</a>        <span class="comment">// 0x80 0x01 = 128; single byte 0x7f = 127.
-<a href=#609 id=609 data-nosnippet>609</a>        </span><span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>[<span class="number">0x7f</span>], <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">127</span>, <span class="number">1</span>)));
-<a href=#610 id=610 data-nosnippet>610</a>        <span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>[<span class="number">0x80</span>, <span class="number">0x01</span>], <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">128</span>, <span class="number">2</span>)));
-<a href=#611 id=611 data-nosnippet>611</a>        <span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>[<span class="number">0xff</span>, <span class="number">0x7f</span>], <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">16383</span>, <span class="number">2</span>)));
-<a href=#612 id=612 data-nosnippet>612</a>        <span class="comment">// Truncated continuation byte → None, no panic.
-<a href=#613 id=613 data-nosnippet>613</a>        </span><span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>[<span class="number">0x80</span>], <span class="number">0</span>), <span class="prelude-val">None</span>);
-<a href=#614 id=614 data-nosnippet>614</a>        <span class="comment">// …and back out again.
-<a href=#615 id=615 data-nosnippet>615</a>        </span><span class="kw">for </span>value <span class="kw">in </span>[<span class="number">0u64</span>, <span class="number">1</span>, <span class="number">127</span>, <span class="number">128</span>, <span class="number">300</span>, <span class="number">16383</span>, <span class="number">16384</span>, <span class="number">1 </span>&lt;&lt; <span class="number">40</span>] {
-<a href=#616 id=616 data-nosnippet>616</a>            <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
-<a href=#617 id=617 data-nosnippet>617</a>            write_leb128(<span class="kw-2">&amp;mut </span>buf, value);
-<a href=#618 id=618 data-nosnippet>618</a>            <span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>buf, <span class="number">0</span>), <span class="prelude-val">Some</span>((value, buf.len())), <span class="string">"{value}"</span>);
-<a href=#619 id=619 data-nosnippet>619</a>        }
-<a href=#620 id=620 data-nosnippet>620</a>    }
-<a href=#621 id=621 data-nosnippet>621</a>
-<a href=#622 id=622 data-nosnippet>622</a>    <span class="attr">#[test]
-<a href=#623 id=623 data-nosnippet>623</a>    </span><span class="kw">fn </span>bit_reader_msb_first() {
-<a href=#624 id=624 data-nosnippet>624</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = BitReader::new(<span class="kw-2">&amp;</span>[<span class="number">0b1011_0010</span>, <span class="number">0b1100_0000</span>]);
-<a href=#625 id=625 data-nosnippet>625</a>        <span class="macro">assert_eq!</span>(r.f(<span class="number">3</span>), <span class="prelude-val">Some</span>(<span class="number">0b101</span>));
-<a href=#626 id=626 data-nosnippet>626</a>        <span class="macro">assert_eq!</span>(r.f(<span class="number">5</span>), <span class="prelude-val">Some</span>(<span class="number">0b10010</span>));
-<a href=#627 id=627 data-nosnippet>627</a>        <span class="macro">assert_eq!</span>(r.f(<span class="number">2</span>), <span class="prelude-val">Some</span>(<span class="number">0b11</span>));
-<a href=#628 id=628 data-nosnippet>628</a>        <span class="comment">// Past the end returns None rather than panicking.
-<a href=#629 id=629 data-nosnippet>629</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>r2 = BitReader::new(<span class="kw-2">&amp;</span>[<span class="number">0xff</span>]);
-<a href=#630 id=630 data-nosnippet>630</a>        <span class="macro">assert_eq!</span>(r2.f(<span class="number">16</span>), <span class="prelude-val">None</span>);
-<a href=#631 id=631 data-nosnippet>631</a>    }
-<a href=#632 id=632 data-nosnippet>632</a>
-<a href=#633 id=633 data-nosnippet>633</a>    <span class="attr">#[test]
-<a href=#634 id=634 data-nosnippet>634</a>    </span><span class="kw">fn </span>parse_obus_low_overhead() {
-<a href=#635 id=635 data-nosnippet>635</a>        <span class="comment">// Two OBUs, each with has_size_field=1.
-<a href=#636 id=636 data-nosnippet>636</a>        //  OBU A: type=1 (seq header), size=2, payload [0xAA,0xBB]
-<a href=#637 id=637 data-nosnippet>637</a>        //  OBU B: type=6 (frame),      size=1, payload [0xCC]
-<a href=#638 id=638 data-nosnippet>638</a>        // header byte: forbidden0 | type(4) | ext(0) | has_size(1) | reserved0
-<a href=#639 id=639 data-nosnippet>639</a>        </span><span class="kw">let </span>hdr_seq = (<span class="number">1u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>); <span class="comment">// type 1, has_size
-<a href=#640 id=640 data-nosnippet>640</a>        </span><span class="kw">let </span>hdr_frame = (<span class="number">6u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>); <span class="comment">// type 6, has_size
-<a href=#641 id=641 data-nosnippet>641</a>        </span><span class="kw">let </span>stream = [hdr_seq, <span class="number">0x02</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>, hdr_frame, <span class="number">0x01</span>, <span class="number">0xCC</span>];
-<a href=#642 id=642 data-nosnippet>642</a>        <span class="kw">let </span>obus = parse_obus(<span class="kw-2">&amp;</span>stream);
-<a href=#643 id=643 data-nosnippet>643</a>        <span class="macro">assert_eq!</span>(obus.len(), <span class="number">2</span>);
-<a href=#644 id=644 data-nosnippet>644</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">0</span>].obu_type, <span class="number">1</span>);
-<a href=#645 id=645 data-nosnippet>645</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">0</span>].payload, <span class="kw-2">&amp;</span>[<span class="number">0xAA</span>, <span class="number">0xBB</span>]);
-<a href=#646 id=646 data-nosnippet>646</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">0</span>].whole, <span class="kw-2">&amp;</span>[hdr_seq, <span class="number">0x02</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>]);
-<a href=#647 id=647 data-nosnippet>647</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">1</span>].obu_type, <span class="number">6</span>);
-<a href=#648 id=648 data-nosnippet>648</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">1</span>].payload, <span class="kw-2">&amp;</span>[<span class="number">0xCC</span>]);
-<a href=#649 id=649 data-nosnippet>649</a>    }
-<a href=#650 id=650 data-nosnippet>650</a>
-<a href=#651 id=651 data-nosnippet>651</a>    <span class="attr">#[test]
-<a href=#652 id=652 data-nosnippet>652</a>    </span><span class="kw">fn </span>parse_obus_truncated_stops_cleanly() {
-<a href=#653 id=653 data-nosnippet>653</a>        <span class="comment">// Claims size 5 but only 2 payload bytes present → no panic, no OBU.
-<a href=#654 id=654 data-nosnippet>654</a>        </span><span class="kw">let </span>hdr = (<span class="number">1u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>);
-<a href=#655 id=655 data-nosnippet>655</a>        <span class="kw">let </span>stream = [hdr, <span class="number">0x05</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>];
-<a href=#656 id=656 data-nosnippet>656</a>        <span class="macro">assert!</span>(parse_obus(<span class="kw-2">&amp;</span>stream).is_empty());
-<a href=#657 id=657 data-nosnippet>657</a>    }
-<a href=#658 id=658 data-nosnippet>658</a>
-<a href=#659 id=659 data-nosnippet>659</a>    <span class="attr">#[test]
-<a href=#660 id=660 data-nosnippet>660</a>    </span><span class="kw">fn </span>av1c_header_bytes_are_well_formed() {
-<a href=#661 id=661 data-nosnippet>661</a>        <span class="comment">// A representative 4:2:0 8-bit main-profile config: profile 0, level 8
-<a href=#662 id=662 data-nosnippet>662</a>        // (4.0), tier 0, 8-bit, color 4:2:0.
-<a href=#663 id=663 data-nosnippet>663</a>        </span><span class="kw">let </span>cfg = SeqHeaderConfig {
-<a href=#664 id=664 data-nosnippet>664</a>            seq_profile: <span class="number">0</span>,
-<a href=#665 id=665 data-nosnippet>665</a>            seq_level_idx_0: <span class="number">8</span>,
-<a href=#666 id=666 data-nosnippet>666</a>            seq_tier_0: <span class="number">0</span>,
-<a href=#667 id=667 data-nosnippet>667</a>            high_bitdepth: <span class="number">0</span>,
-<a href=#668 id=668 data-nosnippet>668</a>            twelve_bit: <span class="number">0</span>,
-<a href=#669 id=669 data-nosnippet>669</a>            monochrome: <span class="number">0</span>,
-<a href=#670 id=670 data-nosnippet>670</a>            chroma_subsampling_x: <span class="number">1</span>,
-<a href=#671 id=671 data-nosnippet>671</a>            chroma_subsampling_y: <span class="number">1</span>,
-<a href=#672 id=672 data-nosnippet>672</a>            chroma_sample_position: <span class="number">0</span>,
-<a href=#673 id=673 data-nosnippet>673</a>            max_frame_width: <span class="number">1280</span>,
-<a href=#674 id=674 data-nosnippet>674</a>            max_frame_height: <span class="number">720</span>,
-<a href=#675 id=675 data-nosnippet>675</a>        };
-<a href=#676 id=676 data-nosnippet>676</a>        <span class="kw">let </span>payload = [<span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>];
-<a href=#677 id=677 data-nosnippet>677</a>        <span class="kw">let </span>hdr = (<span class="number">1u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>); <span class="comment">// type 1 (seq header), has_size
-<a href=#678 id=678 data-nosnippet>678</a>        </span><span class="kw">let </span>stream = [hdr, <span class="number">0x03</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>];
-<a href=#679 id=679 data-nosnippet>679</a>        <span class="kw">let </span>obu = find_sequence_header(<span class="kw-2">&amp;</span>stream).expect(<span class="string">"seq header"</span>);
-<a href=#680 id=680 data-nosnippet>680</a>        <span class="kw">let </span>av1c = build_av1c(<span class="kw-2">&amp;</span>cfg, <span class="kw-2">&amp;</span>obu);
-<a href=#681 id=681 data-nosnippet>681</a>        <span class="comment">// marker+version
-<a href=#682 id=682 data-nosnippet>682</a>        </span><span class="macro">assert_eq!</span>(av1c[<span class="number">0</span>], <span class="number">0x81</span>);
-<a href=#683 id=683 data-nosnippet>683</a>        <span class="comment">// seq_profile(3)=0, level(5)=8 → 0b000_01000 = 0x08
-<a href=#684 id=684 data-nosnippet>684</a>        </span><span class="macro">assert_eq!</span>(av1c[<span class="number">1</span>], <span class="number">0x08</span>);
-<a href=#685 id=685 data-nosnippet>685</a>        <span class="comment">// tier0 hb0 tb0 mono0 ssx1 ssy1 csp0 → 0b0000_1100 = 0x0C
-<a href=#686 id=686 data-nosnippet>686</a>        </span><span class="macro">assert_eq!</span>(av1c[<span class="number">2</span>], <span class="number">0x0C</span>);
-<a href=#687 id=687 data-nosnippet>687</a>        <span class="macro">assert_eq!</span>(av1c[<span class="number">3</span>], <span class="number">0x00</span>);
-<a href=#688 id=688 data-nosnippet>688</a>        <span class="comment">// configOBUs appended verbatim (header + size + payload).
-<a href=#689 id=689 data-nosnippet>689</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>av1c[<span class="number">4</span>..], <span class="kw-2">&amp;</span>[hdr, <span class="number">0x03</span>, payload[<span class="number">0</span>], payload[<span class="number">1</span>], payload[<span class="number">2</span>]]);
-<a href=#690 id=690 data-nosnippet>690</a>    }
-<a href=#691 id=691 data-nosnippet>691</a>
-<a href=#692 id=692 data-nosnippet>692</a>    <span class="doccomment">/// The committed fixture's sequence header parses to exactly the config the
-<a href=#693 id=693 data-nosnippet>693</a>    /// stream declares — including the geometry, which is what the VideoToolbox
-<a href=#694 id=694 data-nosnippet>694</a>    /// format description needs and which the `av1C` record does not carry.
-<a href=#695 id=695 data-nosnippet>695</a>    ///
-<a href=#696 id=696 data-nosnippet>696</a>    /// `seq_level_idx_0 = 31` is not a parse slip: 31 is AV1's "maximum
-<a href=#697 id=697 data-nosnippet>697</a>    /// parameters" level, which is what `rav1e` writes when no level is
-<a href=#698 id=698 data-nosnippet>698</a>    /// configured, and `ffprobe` reports `level=31` for this same stream.
-<a href=#699 id=699 data-nosnippet>699</a>    </span><span class="attr">#[test]
-<a href=#700 id=700 data-nosnippet>700</a>    </span><span class="kw">fn </span>fixture_sequence_header_parses_to_its_declared_config() {
-<a href=#701 id=701 data-nosnippet>701</a>        <span class="kw">let </span>obu = find_sequence_header(<span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU).expect(<span class="string">"sequence header OBU"</span>);
-<a href=#702 id=702 data-nosnippet>702</a>        <span class="macro">assert_eq!</span>(obu.obu_type, OBU_SEQUENCE_HEADER);
-<a href=#703 id=703 data-nosnippet>703</a>        <span class="macro">assert!</span>(obu.has_size_field);
-<a href=#704 id=704 data-nosnippet>704</a>        <span class="macro">assert_eq!</span>(obu.payload.len(), <span class="number">11</span>);
-<a href=#705 id=705 data-nosnippet>705</a>
-<a href=#706 id=706 data-nosnippet>706</a>        <span class="kw">let </span>cfg = parse_sequence_header(obu.payload).expect(<span class="string">"parses"</span>);
-<a href=#707 id=707 data-nosnippet>707</a>        <span class="macro">assert_eq!</span>(
-<a href=#708 id=708 data-nosnippet>708</a>            cfg,
-<a href=#709 id=709 data-nosnippet>709</a>            SeqHeaderConfig {
-<a href=#710 id=710 data-nosnippet>710</a>                seq_profile: <span class="number">0</span>,            <span class="comment">// Main
-<a href=#711 id=711 data-nosnippet>711</a>                </span>seq_level_idx_0: <span class="number">31</span>,       <span class="comment">// "maximum parameters" (rav1e's default)
-<a href=#712 id=712 data-nosnippet>712</a>                </span>seq_tier_0: <span class="number">0</span>,             <span class="comment">// Main tier
-<a href=#713 id=713 data-nosnippet>713</a>                </span>high_bitdepth: <span class="number">0</span>,          <span class="comment">// 8-bit
-<a href=#714 id=714 data-nosnippet>714</a>                </span>twelve_bit: <span class="number">0</span>,             <span class="comment">// not coded for profile 0
-<a href=#715 id=715 data-nosnippet>715</a>                </span>monochrome: <span class="number">0</span>,             <span class="comment">// chroma present
-<a href=#716 id=716 data-nosnippet>716</a>                </span>chroma_subsampling_x: <span class="number">1</span>,   <span class="comment">// 4:2:0
-<a href=#717 id=717 data-nosnippet>717</a>                </span>chroma_subsampling_y: <span class="number">1</span>,   <span class="comment">// 4:2:0
-<a href=#718 id=718 data-nosnippet>718</a>                </span>chroma_sample_position: <span class="number">0</span>, <span class="comment">// CSP_UNKNOWN
-<a href=#719 id=719 data-nosnippet>719</a>                </span>max_frame_width: <span class="number">1280</span>,
-<a href=#720 id=720 data-nosnippet>720</a>                max_frame_height: <span class="number">720</span>,
-<a href=#721 id=721 data-nosnippet>721</a>            }
-<a href=#722 id=722 data-nosnippet>722</a>        );
-<a href=#723 id=723 data-nosnippet>723</a>    }
-<a href=#724 id=724 data-nosnippet>724</a>
-<a href=#725 id=725 data-nosnippet>725</a>    <span class="doccomment">/// THE byte-exact pin: the `av1C` this module synthesises for the committed
-<a href=#726 id=726 data-nosnippet>726</a>    /// fixture, cross-checked against the `av1C` box `ffmpeg` writes when it
-<a href=#727 id=727 data-nosnippet>727</a>    /// remuxes the very same OBU stream into MP4 (`ffmpeg -f obu -i … -c copy`)
-<a href=#728 id=728 data-nosnippet>728</a>    /// — byte for byte, all 17 of them.
-<a href=#729 id=729 data-nosnippet>729</a>    </span><span class="attr">#[test]
-<a href=#730 id=730 data-nosnippet>730</a>    </span><span class="kw">fn </span>fixture_av1c_is_byte_exact_and_matches_ffmpeg() {
-<a href=#731 id=731 data-nosnippet>731</a>        <span class="kw">let </span>cfg = av1_config_from_stream(<span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU).expect(<span class="string">"config"</span>);
-<a href=#732 id=732 data-nosnippet>732</a>
-<a href=#733 id=733 data-nosnippet>733</a>        <span class="attr">#[rustfmt::skip]
-<a href=#734 id=734 data-nosnippet>734</a>        </span><span class="kw">let </span>expected: [u8; <span class="number">17</span>] = [
-<a href=#735 id=735 data-nosnippet>735</a>            <span class="comment">// ── AV1CodecConfigurationRecord ──
-<a href=#736 id=736 data-nosnippet>736</a>            </span><span class="number">0x81</span>, <span class="comment">// marker(1)=1, version(7)=1
-<a href=#737 id=737 data-nosnippet>737</a>            </span><span class="number">0x1f</span>, <span class="comment">// seq_profile(3)=0, seq_level_idx_0(5)=31
-<a href=#738 id=738 data-nosnippet>738</a>            </span><span class="number">0x0c</span>, <span class="comment">// seq_tier_0=0, high_bitdepth=0, twelve_bit=0, monochrome=0,
-<a href=#739 id=739 data-nosnippet>739</a>                  //   chroma_subsampling_x=1, chroma_subsampling_y=1,
-<a href=#740 id=740 data-nosnippet>740</a>                  //   chroma_sample_position(2)=0
-<a href=#741 id=741 data-nosnippet>741</a>            </span><span class="number">0x00</span>, <span class="comment">// reserved(3)=0, initial_presentation_delay_present(1)=0,
-<a href=#742 id=742 data-nosnippet>742</a>                  //   reserved(4)=0
-<a href=#743 id=743 data-nosnippet>743</a>            // ── configOBUs: the sequence-header OBU, verbatim ──
-<a href=#744 id=744 data-nosnippet>744</a>            </span><span class="number">0x0a</span>, <span class="comment">// obu_header: type 1 (OBU_SEQUENCE_HEADER), has_size_field=1
-<a href=#745 id=745 data-nosnippet>745</a>            </span><span class="number">0x0b</span>, <span class="comment">// leb128 obu_size = 11
-<a href=#746 id=746 data-nosnippet>746</a>            </span><span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0xfa</span>, <span class="number">0xa6</span>, <span class="number">0x7f</span>, <span class="number">0xd9</span>, <span class="number">0xe2</span>, <span class="number">0x10</span>, <span class="number">0xa8</span>, <span class="number">0x0a</span>,
-<a href=#747 id=747 data-nosnippet>747</a>        ];
-<a href=#748 id=748 data-nosnippet>748</a>        <span class="macro">assert_eq!</span>(
-<a href=#749 id=749 data-nosnippet>749</a>            cfg.record, expected,
-<a href=#750 id=750 data-nosnippet>750</a>            <span class="string">"av1C drifted from the ffmpeg-verified record: {:02x?}"</span>,
-<a href=#751 id=751 data-nosnippet>751</a>            cfg.record
-<a href=#752 id=752 data-nosnippet>752</a>        );
-<a href=#753 id=753 data-nosnippet>753</a>
-<a href=#754 id=754 data-nosnippet>754</a>        <span class="comment">// The geometry that must reach `CMVideoFormatDescriptionCreate`: passing
-<a href=#755 id=755 data-nosnippet>755</a>        // 0x0 here is what `VTDecompressionSessionCreate` rejects with -12911.
-<a href=#756 id=756 data-nosnippet>756</a>        </span><span class="macro">assert_eq!</span>((cfg.width, cfg.height), (<span class="number">1280</span>, <span class="number">720</span>));
-<a href=#757 id=757 data-nosnippet>757</a>    }
-<a href=#758 id=758 data-nosnippet>758</a>
-<a href=#759 id=759 data-nosnippet>759</a>    <span class="doccomment">/// A sequence header that omits `obu_has_size_field` (legal for the last OBU
-<a href=#760 id=760 data-nosnippet>760</a>    /// of a low-overhead stream) must not be copied into `configOBUs` as-is: the
-<a href=#761 id=761 data-nosnippet>761</a>    /// record has to delimit it explicitly, or a parser reading the record cannot
-<a href=#762 id=762 data-nosnippet>762</a>    /// tell where the OBU ends.
-<a href=#763 id=763 data-nosnippet>763</a>    </span><span class="attr">#[test]
-<a href=#764 id=764 data-nosnippet>764</a>    </span><span class="kw">fn </span>size_less_sequence_header_is_reframed_for_config_obus() {
-<a href=#765 id=765 data-nosnippet>765</a>        <span class="comment">// Same OBU as the fixture's, with has_size_field cleared and the size
-<a href=#766 id=766 data-nosnippet>766</a>        // byte dropped — i.e. "payload runs to the end of the stream".
-<a href=#767 id=767 data-nosnippet>767</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>stream = <span class="macro">vec!</span>[<span class="number">0x0a </span>&amp; !<span class="number">0b0000_0010</span>];
-<a href=#768 id=768 data-nosnippet>768</a>        stream.extend_from_slice(<span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU[<span class="number">2</span>..]);
-<a href=#769 id=769 data-nosnippet>769</a>
-<a href=#770 id=770 data-nosnippet>770</a>        <span class="kw">let </span>cfg = av1_config_from_stream(<span class="kw-2">&amp;</span>stream).expect(<span class="string">"config"</span>);
-<a href=#771 id=771 data-nosnippet>771</a>        <span class="comment">// Re-framed back into the canonical, self-delimiting form.
-<a href=#772 id=772 data-nosnippet>772</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>cfg.record[<span class="number">4</span>..], <span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU);
-<a href=#773 id=773 data-nosnippet>773</a>        <span class="macro">assert_eq!</span>((cfg.width, cfg.height), (<span class="number">1280</span>, <span class="number">720</span>));
-<a href=#774 id=774 data-nosnippet>774</a>    }
-<a href=#775 id=775 data-nosnippet>775</a>
-<a href=#776 id=776 data-nosnippet>776</a>    <span class="doccomment">/// A stream with no sequence header (or a truncated one) yields no config —
-<a href=#777 id=777 data-nosnippet>777</a>    /// the decoder then stays pre-bootstrap instead of building a format
-<a href=#778 id=778 data-nosnippet>778</a>    /// description out of nothing.
-<a href=#779 id=779 data-nosnippet>779</a>    </span><span class="attr">#[test]
-<a href=#780 id=780 data-nosnippet>780</a>    </span><span class="kw">fn </span>no_sequence_header_yields_no_config() {
-<a href=#781 id=781 data-nosnippet>781</a>        <span class="kw">let </span>td = [(<span class="number">2u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>), <span class="number">0x00</span>]; <span class="comment">// temporal delimiter only
-<a href=#782 id=782 data-nosnippet>782</a>        </span><span class="macro">assert!</span>(av1_config_from_stream(<span class="kw-2">&amp;</span>td).is_none());
-<a href=#783 id=783 data-nosnippet>783</a>        <span class="macro">assert!</span>(is_temporal_delimiter_only(<span class="kw-2">&amp;</span>td));
-<a href=#784 id=784 data-nosnippet>784</a>
-<a href=#785 id=785 data-nosnippet>785</a>        <span class="comment">// Truncated payload: the header claims 11 bytes, 4 are present.
-<a href=#786 id=786 data-nosnippet>786</a>        </span><span class="kw">let </span>truncated = <span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU[..<span class="number">6</span>];
-<a href=#787 id=787 data-nosnippet>787</a>        <span class="macro">assert!</span>(av1_config_from_stream(truncated).is_none());
-<a href=#788 id=788 data-nosnippet>788</a>    }
-<a href=#789 id=789 data-nosnippet>789</a>}
+<a href=#532 id=532 data-nosnippet>532</a>    <span class="comment">// Byte 0: marker(1)=1, version(7)=1  →  0b1_0000001 = 0x81.
+<a href=#533 id=533 data-nosnippet>533</a>    </span>out.push(<span class="number">0x81</span>);
+<a href=#534 id=534 data-nosnippet>534</a>    <span class="comment">// Byte 1: seq_profile(3), seq_level_idx_0(5).
+<a href=#535 id=535 data-nosnippet>535</a>    </span>out.push(((cfg.seq_profile &amp; <span class="number">0x07</span>) &lt;&lt; <span class="number">5</span>) | (cfg.seq_level_idx_0 &amp; <span class="number">0x1f</span>));
+<a href=#536 id=536 data-nosnippet>536</a>    <span class="comment">// Byte 2: seq_tier_0(1), high_bitdepth(1), twelve_bit(1), monochrome(1),
+<a href=#537 id=537 data-nosnippet>537</a>    //         chroma_subsampling_x(1), chroma_subsampling_y(1), chroma_sample_position(2).
+<a href=#538 id=538 data-nosnippet>538</a>    </span>out.push(
+<a href=#539 id=539 data-nosnippet>539</a>        ((cfg.seq_tier_0 &amp; <span class="number">1</span>) &lt;&lt; <span class="number">7</span>)
+<a href=#540 id=540 data-nosnippet>540</a>            | ((cfg.high_bitdepth &amp; <span class="number">1</span>) &lt;&lt; <span class="number">6</span>)
+<a href=#541 id=541 data-nosnippet>541</a>            | ((cfg.twelve_bit &amp; <span class="number">1</span>) &lt;&lt; <span class="number">5</span>)
+<a href=#542 id=542 data-nosnippet>542</a>            | ((cfg.monochrome &amp; <span class="number">1</span>) &lt;&lt; <span class="number">4</span>)
+<a href=#543 id=543 data-nosnippet>543</a>            | ((cfg.chroma_subsampling_x &amp; <span class="number">1</span>) &lt;&lt; <span class="number">3</span>)
+<a href=#544 id=544 data-nosnippet>544</a>            | ((cfg.chroma_subsampling_y &amp; <span class="number">1</span>) &lt;&lt; <span class="number">2</span>)
+<a href=#545 id=545 data-nosnippet>545</a>            | (cfg.chroma_sample_position &amp; <span class="number">0x03</span>),
+<a href=#546 id=546 data-nosnippet>546</a>    );
+<a href=#547 id=547 data-nosnippet>547</a>    <span class="comment">// Byte 3: reserved(3)=0, initial_presentation_delay_present(1)=0,
+<a href=#548 id=548 data-nosnippet>548</a>    //         initial_presentation_delay_minus_one(4) → all zero.
+<a href=#549 id=549 data-nosnippet>549</a>    </span>out.push(<span class="number">0x00</span>);
+<a href=#550 id=550 data-nosnippet>550</a>
+<a href=#551 id=551 data-nosnippet>551</a>    <span class="comment">// configOBUs: the sequence-header OBU.
+<a href=#552 id=552 data-nosnippet>552</a>    </span>out.extend_from_slice(<span class="kw-2">&amp;</span>config_obu);
+<a href=#553 id=553 data-nosnippet>553</a>    out
+<a href=#554 id=554 data-nosnippet>554</a>}
+<a href=#555 id=555 data-nosnippet>555</a>
+<a href=#556 id=556 data-nosnippet>556</a><span class="doccomment">/// Convenience: from a full AV1 temporal-unit byte stream that contains a
+<a href=#557 id=557 data-nosnippet>557</a>/// sequence-header OBU, synthesise the `av1C` record **and** the coded geometry
+<a href=#558 id=558 data-nosnippet>558</a>/// that goes with it. Returns `None` if there is no sequence header, it can't be
+<a href=#559 id=559 data-nosnippet>559</a>/// parsed, or it declares a degenerate size — the callers then refuse AV1 rather
+<a href=#560 id=560 data-nosnippet>560</a>/// than build a format description that `VTDecompressionSessionCreate` would
+<a href=#561 id=561 data-nosnippet>561</a>/// reject (see the module docs).
+<a href=#562 id=562 data-nosnippet>562</a></span><span class="kw">pub fn </span>av1_config_from_stream(stream: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;Av1Config&gt; {
+<a href=#563 id=563 data-nosnippet>563</a>    <span class="kw">let </span>sh = find_sequence_header(stream)<span class="question-mark">?</span>;
+<a href=#564 id=564 data-nosnippet>564</a>    <span class="kw">let </span>cfg = parse_sequence_header(sh.payload)<span class="question-mark">?</span>;
+<a href=#565 id=565 data-nosnippet>565</a>    <span class="kw">if </span>cfg.max_frame_width == <span class="number">0 </span>|| cfg.max_frame_height == <span class="number">0 </span>{
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#567 id=567 data-nosnippet>567</a>    }
+<a href=#568 id=568 data-nosnippet>568</a>    <span class="prelude-val">Some</span>(Av1Config {
+<a href=#569 id=569 data-nosnippet>569</a>        record: build_av1c(<span class="kw-2">&amp;</span>cfg, <span class="kw-2">&amp;</span>sh),
+<a href=#570 id=570 data-nosnippet>570</a>        width: cfg.max_frame_width,
+<a href=#571 id=571 data-nosnippet>571</a>        height: cfg.max_frame_height,
+<a href=#572 id=572 data-nosnippet>572</a>    })
+<a href=#573 id=573 data-nosnippet>573</a>}
+<a href=#574 id=574 data-nosnippet>574</a>
+<a href=#575 id=575 data-nosnippet>575</a><span class="doccomment">/// True if a temporal-delimiter-only / empty stream (nothing to decode).
+<a href=#576 id=576 data-nosnippet>576</a></span><span class="kw">pub fn </span>is_temporal_delimiter_only(stream: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
+<a href=#577 id=577 data-nosnippet>577</a>    <span class="kw">let </span>obus = parse_obus(stream);
+<a href=#578 id=578 data-nosnippet>578</a>    !obus.is_empty() &amp;&amp; obus.iter().all(|o| o.obu_type == OBU_TEMPORAL_DELIMITER)
+<a href=#579 id=579 data-nosnippet>579</a>}
+<a href=#580 id=580 data-nosnippet>580</a>
+<a href=#581 id=581 data-nosnippet>581</a><span class="attr">#[cfg(test)]
+<a href=#582 id=582 data-nosnippet>582</a></span><span class="kw">mod </span>tests {
+<a href=#583 id=583 data-nosnippet>583</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#584 id=584 data-nosnippet>584</a>
+<a href=#585 id=585 data-nosnippet>585</a>    <span class="doccomment">/// The sequence-header OBU of the committed 720p `rav1e` fixture
+<a href=#586 id=586 data-nosnippet>586</a>    /// (`crates/test/bench/fixtures/av1_720p.bin`, first temporal unit), verbatim
+<a href=#587 id=587 data-nosnippet>587</a>    /// — the exact bytes the AV1 decode bench feeds `Engine::video_decoder(Av1)`,
+<a href=#588 id=588 data-nosnippet>588</a>    /// and the input every expectation below is pinned against. Held as a literal
+<a href=#589 id=589 data-nosnippet>589</a>    /// rather than read across crates so this stays a hermetic unit test; the
+<a href=#590 id=590 data-nosnippet>590</a>    /// bench's own probe is what catches the fixture being regenerated into
+<a href=#591 id=591 data-nosnippet>591</a>    /// something else.
+<a href=#592 id=592 data-nosnippet>592</a>    </span><span class="kw">const </span>FIXTURE_SEQ_HEADER_OBU: [u8; <span class="number">13</span>] = [
+<a href=#593 id=593 data-nosnippet>593</a>        <span class="comment">// obu_header: forbidden 0 | type 1 (OBU_SEQUENCE_HEADER) | ext 0 |
+<a href=#594 id=594 data-nosnippet>594</a>        // has_size 1 | reserved 0.
+<a href=#595 id=595 data-nosnippet>595</a>        </span><span class="number">0x0a</span>, <span class="comment">// leb128 obu_size = 11.
+<a href=#596 id=596 data-nosnippet>596</a>        </span><span class="number">0x0b</span>, <span class="comment">// payload: seq_profile 0, still_picture 0, reduced_still_picture_header 0,
+<a href=#597 id=597 data-nosnippet>597</a>        // timing_info_present 0, initial_display_delay_present 0,
+<a href=#598 id=598 data-nosnippet>598</a>        // operating_points_cnt_minus_1 0, operating_point_idc[0] 0,
+<a href=#599 id=599 data-nosnippet>599</a>        // seq_level_idx[0] 31, seq_tier[0] 0, 1280x720, order_hint_bits 6,
+<a href=#600 id=600 data-nosnippet>600</a>        // enable_cdef 1, 8-bit 4:2:0, chroma_sample_position 0 (UNKNOWN).
+<a href=#601 id=601 data-nosnippet>601</a>        </span><span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0xfa</span>, <span class="number">0xa6</span>, <span class="number">0x7f</span>, <span class="number">0xd9</span>, <span class="number">0xe2</span>, <span class="number">0x10</span>, <span class="number">0xa8</span>, <span class="number">0x0a</span>,
+<a href=#602 id=602 data-nosnippet>602</a>    ];
+<a href=#603 id=603 data-nosnippet>603</a>
+<a href=#604 id=604 data-nosnippet>604</a>    <span class="attr">#[test]
+<a href=#605 id=605 data-nosnippet>605</a>    </span><span class="kw">fn </span>leb128_roundtrip() {
+<a href=#606 id=606 data-nosnippet>606</a>        <span class="comment">// 0x80 0x01 = 128; single byte 0x7f = 127.
+<a href=#607 id=607 data-nosnippet>607</a>        </span><span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>[<span class="number">0x7f</span>], <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">127</span>, <span class="number">1</span>)));
+<a href=#608 id=608 data-nosnippet>608</a>        <span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>[<span class="number">0x80</span>, <span class="number">0x01</span>], <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">128</span>, <span class="number">2</span>)));
+<a href=#609 id=609 data-nosnippet>609</a>        <span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>[<span class="number">0xff</span>, <span class="number">0x7f</span>], <span class="number">0</span>), <span class="prelude-val">Some</span>((<span class="number">16383</span>, <span class="number">2</span>)));
+<a href=#610 id=610 data-nosnippet>610</a>        <span class="comment">// Truncated continuation byte → None, no panic.
+<a href=#611 id=611 data-nosnippet>611</a>        </span><span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>[<span class="number">0x80</span>], <span class="number">0</span>), <span class="prelude-val">None</span>);
+<a href=#612 id=612 data-nosnippet>612</a>        <span class="comment">// …and back out again.
+<a href=#613 id=613 data-nosnippet>613</a>        </span><span class="kw">for </span>value <span class="kw">in </span>[<span class="number">0u64</span>, <span class="number">1</span>, <span class="number">127</span>, <span class="number">128</span>, <span class="number">300</span>, <span class="number">16383</span>, <span class="number">16384</span>, <span class="number">1 </span>&lt;&lt; <span class="number">40</span>] {
+<a href=#614 id=614 data-nosnippet>614</a>            <span class="kw">let </span><span class="kw-2">mut </span>buf = Vec::new();
+<a href=#615 id=615 data-nosnippet>615</a>            write_leb128(<span class="kw-2">&amp;mut </span>buf, value);
+<a href=#616 id=616 data-nosnippet>616</a>            <span class="macro">assert_eq!</span>(read_leb128(<span class="kw-2">&amp;</span>buf, <span class="number">0</span>), <span class="prelude-val">Some</span>((value, buf.len())), <span class="string">"{value}"</span>);
+<a href=#617 id=617 data-nosnippet>617</a>        }
+<a href=#618 id=618 data-nosnippet>618</a>    }
+<a href=#619 id=619 data-nosnippet>619</a>
+<a href=#620 id=620 data-nosnippet>620</a>    <span class="attr">#[test]
+<a href=#621 id=621 data-nosnippet>621</a>    </span><span class="kw">fn </span>bit_reader_msb_first() {
+<a href=#622 id=622 data-nosnippet>622</a>        <span class="kw">let </span><span class="kw-2">mut </span>r = BitReader::new(<span class="kw-2">&amp;</span>[<span class="number">0b1011_0010</span>, <span class="number">0b1100_0000</span>]);
+<a href=#623 id=623 data-nosnippet>623</a>        <span class="macro">assert_eq!</span>(r.f(<span class="number">3</span>), <span class="prelude-val">Some</span>(<span class="number">0b101</span>));
+<a href=#624 id=624 data-nosnippet>624</a>        <span class="macro">assert_eq!</span>(r.f(<span class="number">5</span>), <span class="prelude-val">Some</span>(<span class="number">0b10010</span>));
+<a href=#625 id=625 data-nosnippet>625</a>        <span class="macro">assert_eq!</span>(r.f(<span class="number">2</span>), <span class="prelude-val">Some</span>(<span class="number">0b11</span>));
+<a href=#626 id=626 data-nosnippet>626</a>        <span class="comment">// Past the end returns None rather than panicking.
+<a href=#627 id=627 data-nosnippet>627</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>r2 = BitReader::new(<span class="kw-2">&amp;</span>[<span class="number">0xff</span>]);
+<a href=#628 id=628 data-nosnippet>628</a>        <span class="macro">assert_eq!</span>(r2.f(<span class="number">16</span>), <span class="prelude-val">None</span>);
+<a href=#629 id=629 data-nosnippet>629</a>    }
+<a href=#630 id=630 data-nosnippet>630</a>
+<a href=#631 id=631 data-nosnippet>631</a>    <span class="attr">#[test]
+<a href=#632 id=632 data-nosnippet>632</a>    </span><span class="kw">fn </span>parse_obus_low_overhead() {
+<a href=#633 id=633 data-nosnippet>633</a>        <span class="comment">// Two OBUs, each with has_size_field=1.
+<a href=#634 id=634 data-nosnippet>634</a>        //  OBU A: type=1 (seq header), size=2, payload [0xAA,0xBB]
+<a href=#635 id=635 data-nosnippet>635</a>        //  OBU B: type=6 (frame),      size=1, payload [0xCC]
+<a href=#636 id=636 data-nosnippet>636</a>        // header byte: forbidden0 | type(4) | ext(0) | has_size(1) | reserved0
+<a href=#637 id=637 data-nosnippet>637</a>        </span><span class="kw">let </span>hdr_seq = (<span class="number">1u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>); <span class="comment">// type 1, has_size
+<a href=#638 id=638 data-nosnippet>638</a>        </span><span class="kw">let </span>hdr_frame = (<span class="number">6u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>); <span class="comment">// type 6, has_size
+<a href=#639 id=639 data-nosnippet>639</a>        </span><span class="kw">let </span>stream = [hdr_seq, <span class="number">0x02</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>, hdr_frame, <span class="number">0x01</span>, <span class="number">0xCC</span>];
+<a href=#640 id=640 data-nosnippet>640</a>        <span class="kw">let </span>obus = parse_obus(<span class="kw-2">&amp;</span>stream);
+<a href=#641 id=641 data-nosnippet>641</a>        <span class="macro">assert_eq!</span>(obus.len(), <span class="number">2</span>);
+<a href=#642 id=642 data-nosnippet>642</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">0</span>].obu_type, <span class="number">1</span>);
+<a href=#643 id=643 data-nosnippet>643</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">0</span>].payload, <span class="kw-2">&amp;</span>[<span class="number">0xAA</span>, <span class="number">0xBB</span>]);
+<a href=#644 id=644 data-nosnippet>644</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">0</span>].whole, <span class="kw-2">&amp;</span>[hdr_seq, <span class="number">0x02</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>]);
+<a href=#645 id=645 data-nosnippet>645</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">1</span>].obu_type, <span class="number">6</span>);
+<a href=#646 id=646 data-nosnippet>646</a>        <span class="macro">assert_eq!</span>(obus[<span class="number">1</span>].payload, <span class="kw-2">&amp;</span>[<span class="number">0xCC</span>]);
+<a href=#647 id=647 data-nosnippet>647</a>    }
+<a href=#648 id=648 data-nosnippet>648</a>
+<a href=#649 id=649 data-nosnippet>649</a>    <span class="attr">#[test]
+<a href=#650 id=650 data-nosnippet>650</a>    </span><span class="kw">fn </span>parse_obus_truncated_stops_cleanly() {
+<a href=#651 id=651 data-nosnippet>651</a>        <span class="comment">// Claims size 5 but only 2 payload bytes present → no panic, no OBU.
+<a href=#652 id=652 data-nosnippet>652</a>        </span><span class="kw">let </span>hdr = (<span class="number">1u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>);
+<a href=#653 id=653 data-nosnippet>653</a>        <span class="kw">let </span>stream = [hdr, <span class="number">0x05</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>];
+<a href=#654 id=654 data-nosnippet>654</a>        <span class="macro">assert!</span>(parse_obus(<span class="kw-2">&amp;</span>stream).is_empty());
+<a href=#655 id=655 data-nosnippet>655</a>    }
+<a href=#656 id=656 data-nosnippet>656</a>
+<a href=#657 id=657 data-nosnippet>657</a>    <span class="attr">#[test]
+<a href=#658 id=658 data-nosnippet>658</a>    </span><span class="kw">fn </span>av1c_header_bytes_are_well_formed() {
+<a href=#659 id=659 data-nosnippet>659</a>        <span class="comment">// A representative 4:2:0 8-bit main-profile config: profile 0, level 8
+<a href=#660 id=660 data-nosnippet>660</a>        // (4.0), tier 0, 8-bit, color 4:2:0.
+<a href=#661 id=661 data-nosnippet>661</a>        </span><span class="kw">let </span>cfg = SeqHeaderConfig {
+<a href=#662 id=662 data-nosnippet>662</a>            seq_profile: <span class="number">0</span>,
+<a href=#663 id=663 data-nosnippet>663</a>            seq_level_idx_0: <span class="number">8</span>,
+<a href=#664 id=664 data-nosnippet>664</a>            seq_tier_0: <span class="number">0</span>,
+<a href=#665 id=665 data-nosnippet>665</a>            high_bitdepth: <span class="number">0</span>,
+<a href=#666 id=666 data-nosnippet>666</a>            twelve_bit: <span class="number">0</span>,
+<a href=#667 id=667 data-nosnippet>667</a>            monochrome: <span class="number">0</span>,
+<a href=#668 id=668 data-nosnippet>668</a>            chroma_subsampling_x: <span class="number">1</span>,
+<a href=#669 id=669 data-nosnippet>669</a>            chroma_subsampling_y: <span class="number">1</span>,
+<a href=#670 id=670 data-nosnippet>670</a>            chroma_sample_position: <span class="number">0</span>,
+<a href=#671 id=671 data-nosnippet>671</a>            max_frame_width: <span class="number">1280</span>,
+<a href=#672 id=672 data-nosnippet>672</a>            max_frame_height: <span class="number">720</span>,
+<a href=#673 id=673 data-nosnippet>673</a>        };
+<a href=#674 id=674 data-nosnippet>674</a>        <span class="kw">let </span>payload = [<span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>];
+<a href=#675 id=675 data-nosnippet>675</a>        <span class="kw">let </span>hdr = (<span class="number">1u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>); <span class="comment">// type 1 (seq header), has_size
+<a href=#676 id=676 data-nosnippet>676</a>        </span><span class="kw">let </span>stream = [hdr, <span class="number">0x03</span>, <span class="number">0xAA</span>, <span class="number">0xBB</span>, <span class="number">0xCC</span>];
+<a href=#677 id=677 data-nosnippet>677</a>        <span class="kw">let </span>obu = find_sequence_header(<span class="kw-2">&amp;</span>stream).expect(<span class="string">"seq header"</span>);
+<a href=#678 id=678 data-nosnippet>678</a>        <span class="kw">let </span>av1c = build_av1c(<span class="kw-2">&amp;</span>cfg, <span class="kw-2">&amp;</span>obu);
+<a href=#679 id=679 data-nosnippet>679</a>        <span class="comment">// marker+version
+<a href=#680 id=680 data-nosnippet>680</a>        </span><span class="macro">assert_eq!</span>(av1c[<span class="number">0</span>], <span class="number">0x81</span>);
+<a href=#681 id=681 data-nosnippet>681</a>        <span class="comment">// seq_profile(3)=0, level(5)=8 → 0b000_01000 = 0x08
+<a href=#682 id=682 data-nosnippet>682</a>        </span><span class="macro">assert_eq!</span>(av1c[<span class="number">1</span>], <span class="number">0x08</span>);
+<a href=#683 id=683 data-nosnippet>683</a>        <span class="comment">// tier0 hb0 tb0 mono0 ssx1 ssy1 csp0 → 0b0000_1100 = 0x0C
+<a href=#684 id=684 data-nosnippet>684</a>        </span><span class="macro">assert_eq!</span>(av1c[<span class="number">2</span>], <span class="number">0x0C</span>);
+<a href=#685 id=685 data-nosnippet>685</a>        <span class="macro">assert_eq!</span>(av1c[<span class="number">3</span>], <span class="number">0x00</span>);
+<a href=#686 id=686 data-nosnippet>686</a>        <span class="comment">// configOBUs appended verbatim (header + size + payload).
+<a href=#687 id=687 data-nosnippet>687</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>av1c[<span class="number">4</span>..], <span class="kw-2">&amp;</span>[hdr, <span class="number">0x03</span>, payload[<span class="number">0</span>], payload[<span class="number">1</span>], payload[<span class="number">2</span>]]);
+<a href=#688 id=688 data-nosnippet>688</a>    }
+<a href=#689 id=689 data-nosnippet>689</a>
+<a href=#690 id=690 data-nosnippet>690</a>    <span class="doccomment">/// The committed fixture's sequence header parses to exactly the config the
+<a href=#691 id=691 data-nosnippet>691</a>    /// stream declares — including the geometry, which is what the VideoToolbox
+<a href=#692 id=692 data-nosnippet>692</a>    /// format description needs and which the `av1C` record does not carry.
+<a href=#693 id=693 data-nosnippet>693</a>    ///
+<a href=#694 id=694 data-nosnippet>694</a>    /// `seq_level_idx_0 = 31` is not a parse slip: 31 is AV1's "maximum
+<a href=#695 id=695 data-nosnippet>695</a>    /// parameters" level, which is what `rav1e` writes when no level is
+<a href=#696 id=696 data-nosnippet>696</a>    /// configured, and `ffprobe` reports `level=31` for this same stream.
+<a href=#697 id=697 data-nosnippet>697</a>    </span><span class="attr">#[test]
+<a href=#698 id=698 data-nosnippet>698</a>    </span><span class="kw">fn </span>fixture_sequence_header_parses_to_its_declared_config() {
+<a href=#699 id=699 data-nosnippet>699</a>        <span class="kw">let </span>obu = find_sequence_header(<span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU).expect(<span class="string">"sequence header OBU"</span>);
+<a href=#700 id=700 data-nosnippet>700</a>        <span class="macro">assert_eq!</span>(obu.obu_type, OBU_SEQUENCE_HEADER);
+<a href=#701 id=701 data-nosnippet>701</a>        <span class="macro">assert!</span>(obu.has_size_field);
+<a href=#702 id=702 data-nosnippet>702</a>        <span class="macro">assert_eq!</span>(obu.payload.len(), <span class="number">11</span>);
+<a href=#703 id=703 data-nosnippet>703</a>
+<a href=#704 id=704 data-nosnippet>704</a>        <span class="kw">let </span>cfg = parse_sequence_header(obu.payload).expect(<span class="string">"parses"</span>);
+<a href=#705 id=705 data-nosnippet>705</a>        <span class="macro">assert_eq!</span>(
+<a href=#706 id=706 data-nosnippet>706</a>            cfg,
+<a href=#707 id=707 data-nosnippet>707</a>            SeqHeaderConfig {
+<a href=#708 id=708 data-nosnippet>708</a>                seq_profile: <span class="number">0</span>,            <span class="comment">// Main
+<a href=#709 id=709 data-nosnippet>709</a>                </span>seq_level_idx_0: <span class="number">31</span>,       <span class="comment">// "maximum parameters" (rav1e's default)
+<a href=#710 id=710 data-nosnippet>710</a>                </span>seq_tier_0: <span class="number">0</span>,             <span class="comment">// Main tier
+<a href=#711 id=711 data-nosnippet>711</a>                </span>high_bitdepth: <span class="number">0</span>,          <span class="comment">// 8-bit
+<a href=#712 id=712 data-nosnippet>712</a>                </span>twelve_bit: <span class="number">0</span>,             <span class="comment">// not coded for profile 0
+<a href=#713 id=713 data-nosnippet>713</a>                </span>monochrome: <span class="number">0</span>,             <span class="comment">// chroma present
+<a href=#714 id=714 data-nosnippet>714</a>                </span>chroma_subsampling_x: <span class="number">1</span>,   <span class="comment">// 4:2:0
+<a href=#715 id=715 data-nosnippet>715</a>                </span>chroma_subsampling_y: <span class="number">1</span>,   <span class="comment">// 4:2:0
+<a href=#716 id=716 data-nosnippet>716</a>                </span>chroma_sample_position: <span class="number">0</span>, <span class="comment">// CSP_UNKNOWN
+<a href=#717 id=717 data-nosnippet>717</a>                </span>max_frame_width: <span class="number">1280</span>,
+<a href=#718 id=718 data-nosnippet>718</a>                max_frame_height: <span class="number">720</span>,
+<a href=#719 id=719 data-nosnippet>719</a>            }
+<a href=#720 id=720 data-nosnippet>720</a>        );
+<a href=#721 id=721 data-nosnippet>721</a>    }
+<a href=#722 id=722 data-nosnippet>722</a>
+<a href=#723 id=723 data-nosnippet>723</a>    <span class="doccomment">/// THE byte-exact pin: the `av1C` this module synthesises for the committed
+<a href=#724 id=724 data-nosnippet>724</a>    /// fixture, cross-checked against the `av1C` box `ffmpeg` writes when it
+<a href=#725 id=725 data-nosnippet>725</a>    /// remuxes the very same OBU stream into MP4 (`ffmpeg -f obu -i … -c copy`)
+<a href=#726 id=726 data-nosnippet>726</a>    /// — byte for byte, all 17 of them.
+<a href=#727 id=727 data-nosnippet>727</a>    </span><span class="attr">#[test]
+<a href=#728 id=728 data-nosnippet>728</a>    </span><span class="kw">fn </span>fixture_av1c_is_byte_exact_and_matches_ffmpeg() {
+<a href=#729 id=729 data-nosnippet>729</a>        <span class="kw">let </span>cfg = av1_config_from_stream(<span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU).expect(<span class="string">"config"</span>);
+<a href=#730 id=730 data-nosnippet>730</a>
+<a href=#731 id=731 data-nosnippet>731</a>        <span class="attr">#[rustfmt::skip]
+<a href=#732 id=732 data-nosnippet>732</a>        </span><span class="kw">let </span>expected: [u8; <span class="number">17</span>] = [
+<a href=#733 id=733 data-nosnippet>733</a>            <span class="comment">// ── AV1CodecConfigurationRecord ──
+<a href=#734 id=734 data-nosnippet>734</a>            </span><span class="number">0x81</span>, <span class="comment">// marker(1)=1, version(7)=1
+<a href=#735 id=735 data-nosnippet>735</a>            </span><span class="number">0x1f</span>, <span class="comment">// seq_profile(3)=0, seq_level_idx_0(5)=31
+<a href=#736 id=736 data-nosnippet>736</a>            </span><span class="number">0x0c</span>, <span class="comment">// seq_tier_0=0, high_bitdepth=0, twelve_bit=0, monochrome=0,
+<a href=#737 id=737 data-nosnippet>737</a>                  //   chroma_subsampling_x=1, chroma_subsampling_y=1,
+<a href=#738 id=738 data-nosnippet>738</a>                  //   chroma_sample_position(2)=0
+<a href=#739 id=739 data-nosnippet>739</a>            </span><span class="number">0x00</span>, <span class="comment">// reserved(3)=0, initial_presentation_delay_present(1)=0,
+<a href=#740 id=740 data-nosnippet>740</a>                  //   reserved(4)=0
+<a href=#741 id=741 data-nosnippet>741</a>            // ── configOBUs: the sequence-header OBU, verbatim ──
+<a href=#742 id=742 data-nosnippet>742</a>            </span><span class="number">0x0a</span>, <span class="comment">// obu_header: type 1 (OBU_SEQUENCE_HEADER), has_size_field=1
+<a href=#743 id=743 data-nosnippet>743</a>            </span><span class="number">0x0b</span>, <span class="comment">// leb128 obu_size = 11
+<a href=#744 id=744 data-nosnippet>744</a>            </span><span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0xfa</span>, <span class="number">0xa6</span>, <span class="number">0x7f</span>, <span class="number">0xd9</span>, <span class="number">0xe2</span>, <span class="number">0x10</span>, <span class="number">0xa8</span>, <span class="number">0x0a</span>,
+<a href=#745 id=745 data-nosnippet>745</a>        ];
+<a href=#746 id=746 data-nosnippet>746</a>        <span class="macro">assert_eq!</span>(
+<a href=#747 id=747 data-nosnippet>747</a>            cfg.record, expected,
+<a href=#748 id=748 data-nosnippet>748</a>            <span class="string">"av1C drifted from the ffmpeg-verified record: {:02x?}"</span>,
+<a href=#749 id=749 data-nosnippet>749</a>            cfg.record
+<a href=#750 id=750 data-nosnippet>750</a>        );
+<a href=#751 id=751 data-nosnippet>751</a>
+<a href=#752 id=752 data-nosnippet>752</a>        <span class="comment">// The geometry that must reach `CMVideoFormatDescriptionCreate`: passing
+<a href=#753 id=753 data-nosnippet>753</a>        // 0x0 here is what `VTDecompressionSessionCreate` rejects with -12911.
+<a href=#754 id=754 data-nosnippet>754</a>        </span><span class="macro">assert_eq!</span>((cfg.width, cfg.height), (<span class="number">1280</span>, <span class="number">720</span>));
+<a href=#755 id=755 data-nosnippet>755</a>    }
+<a href=#756 id=756 data-nosnippet>756</a>
+<a href=#757 id=757 data-nosnippet>757</a>    <span class="doccomment">/// A sequence header that omits `obu_has_size_field` (legal for the last OBU
+<a href=#758 id=758 data-nosnippet>758</a>    /// of a low-overhead stream) must not be copied into `configOBUs` as-is: the
+<a href=#759 id=759 data-nosnippet>759</a>    /// record has to delimit it explicitly, or a parser reading the record cannot
+<a href=#760 id=760 data-nosnippet>760</a>    /// tell where the OBU ends.
+<a href=#761 id=761 data-nosnippet>761</a>    </span><span class="attr">#[test]
+<a href=#762 id=762 data-nosnippet>762</a>    </span><span class="kw">fn </span>size_less_sequence_header_is_reframed_for_config_obus() {
+<a href=#763 id=763 data-nosnippet>763</a>        <span class="comment">// Same OBU as the fixture's, with has_size_field cleared and the size
+<a href=#764 id=764 data-nosnippet>764</a>        // byte dropped — i.e. "payload runs to the end of the stream".
+<a href=#765 id=765 data-nosnippet>765</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>stream = <span class="macro">vec!</span>[<span class="number">0x0a </span>&amp; !<span class="number">0b0000_0010</span>];
+<a href=#766 id=766 data-nosnippet>766</a>        stream.extend_from_slice(<span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU[<span class="number">2</span>..]);
+<a href=#767 id=767 data-nosnippet>767</a>
+<a href=#768 id=768 data-nosnippet>768</a>        <span class="kw">let </span>cfg = av1_config_from_stream(<span class="kw-2">&amp;</span>stream).expect(<span class="string">"config"</span>);
+<a href=#769 id=769 data-nosnippet>769</a>        <span class="comment">// Re-framed back into the canonical, self-delimiting form.
+<a href=#770 id=770 data-nosnippet>770</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>cfg.record[<span class="number">4</span>..], <span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU);
+<a href=#771 id=771 data-nosnippet>771</a>        <span class="macro">assert_eq!</span>((cfg.width, cfg.height), (<span class="number">1280</span>, <span class="number">720</span>));
+<a href=#772 id=772 data-nosnippet>772</a>    }
+<a href=#773 id=773 data-nosnippet>773</a>
+<a href=#774 id=774 data-nosnippet>774</a>    <span class="doccomment">/// A stream with no sequence header (or a truncated one) yields no config —
+<a href=#775 id=775 data-nosnippet>775</a>    /// the decoder then stays pre-bootstrap instead of building a format
+<a href=#776 id=776 data-nosnippet>776</a>    /// description out of nothing.
+<a href=#777 id=777 data-nosnippet>777</a>    </span><span class="attr">#[test]
+<a href=#778 id=778 data-nosnippet>778</a>    </span><span class="kw">fn </span>no_sequence_header_yields_no_config() {
+<a href=#779 id=779 data-nosnippet>779</a>        <span class="kw">let </span>td = [(<span class="number">2u8 </span>&lt;&lt; <span class="number">3</span>) | (<span class="number">1 </span>&lt;&lt; <span class="number">1</span>), <span class="number">0x00</span>]; <span class="comment">// temporal delimiter only
+<a href=#780 id=780 data-nosnippet>780</a>        </span><span class="macro">assert!</span>(av1_config_from_stream(<span class="kw-2">&amp;</span>td).is_none());
+<a href=#781 id=781 data-nosnippet>781</a>        <span class="macro">assert!</span>(is_temporal_delimiter_only(<span class="kw-2">&amp;</span>td));
+<a href=#782 id=782 data-nosnippet>782</a>
+<a href=#783 id=783 data-nosnippet>783</a>        <span class="comment">// Truncated payload: the header claims 11 bytes, 4 are present.
+<a href=#784 id=784 data-nosnippet>784</a>        </span><span class="kw">let </span>truncated = <span class="kw-2">&amp;</span>FIXTURE_SEQ_HEADER_OBU[..<span class="number">6</span>];
+<a href=#785 id=785 data-nosnippet>785</a>        <span class="macro">assert!</span>(av1_config_from_stream(truncated).is_none());
+<a href=#786 id=786 data-nosnippet>786</a>    }
+<a href=#787 id=787 data-nosnippet>787</a>}
 </code></pre></div></section></main></body></html>

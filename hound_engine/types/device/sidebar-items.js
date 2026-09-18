@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DeviceChoice","DeviceKind","DevicePermission"],"macro":["device_id"],"struct":["CameraId","MicId","SpeakerId"],"trait":["DeviceId"]};
+window.SIDEBAR_ITEMS = {"enum":["DeviceChoice","DeviceKind","DevicePermission"],"macro":[["device_id",1]],"struct":["CameraId","MicId","SpeakerId"],"trait":["DeviceId"]};

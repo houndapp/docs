@@ -1,9 +1,9 @@
 (function() {
-    var implementors = Object.fromEntries([["rust_lib_houndchat",[]]]);
+    const implementors = Object.fromEntries([["rust_lib_houndchat",[]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":57,"fragment_lengths":[25]}
+//{"start":59,"fragment_lengths":[25]}

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ContentKind","SearchDiagnosticKind","SearchTokenKind"],"fn":["open_space_around","parse_search_query","resume_live","search","search_filter_keys","search_has_values","watch_history_detached"],"struct":["ParsedSearchQuery","SearchDiagnostic","SearchQuery","SearchRequest","SearchToken"]};

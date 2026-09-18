@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fetch_message","find","highlight_markup","markup_plain_text","parse_markup","reference_autolink"],"struct":["NamedId","Names"]};

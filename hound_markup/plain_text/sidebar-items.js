@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["plain_text","render_block","render_blocks","render_inline","render_inlines","render_reference"],"struct":["NoNames"],"trait":["Resolve"]};

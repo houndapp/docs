@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/app/client/src/stats.rs`."><title>stats.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_client" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0 (254b59607 2026-01-19)" data-channel="1.93.0" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hound_client/</div>stats.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # RTC debug stats (`call:stats`)
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/app/client/src/stats.rs`."><title>stats.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_client" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">hound_client/</div>stats.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # RTC debug stats (`call:stats`)
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! The shared counter/gauge registry + 1 Hz emitter behind the `call:stats`
 <a href=#4 id=4 data-nosnippet>4</a>//! snapshot — the data source for the in-app RTC debug panel. One structured
@@ -96,7 +96,7 @@
 <a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">use </span>hound_engine::audio::mix::{GlitchKind, NO_PEER_TAG};
 <a href=#97 id=97 data-nosnippet>97</a>    GlitchSnapshot {
 <a href=#98 id=98 data-nosnippet>98</a>        ago_ms: ((now_us - g.at_us).max(<span class="number">0</span>) <span class="kw">as </span>f64) / <span class="number">1000.0</span>,
-<a href=#99 id=99 data-nosnippet>99</a>        peer: (g.<span class="macro">peer_tag !</span>= NO_PEER_TAG).then_some(g.peer_tag),
+<a href=#99 id=99 data-nosnippet>99</a>        peer: (g.peer_tag != NO_PEER_TAG).then_some(g.peer_tag),
 <a href=#100 id=100 data-nosnippet>100</a>        label: g.label.to_string(),
 <a href=#101 id=101 data-nosnippet>101</a>        kind: <span class="kw">match </span>g.kind {
 <a href=#102 id=102 data-nosnippet>102</a>            GlitchKind::Underflow =&gt; <span class="string">"underflow"</span>,
@@ -860,7 +860,7 @@
 <a href=#860 id=860 data-nosnippet>860</a>        v.height.store(height, Ordering::Relaxed);
 <a href=#861 id=861 data-nosnippet>861</a>        v.remote_loss_bps.store(remote_loss_bps, Ordering::Relaxed);
 <a href=#862 id=862 data-nosnippet>862</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>s) = v.quality_rung.lock()
-<a href=#863 id=863 data-nosnippet>863</a>            &amp;&amp; <span class="kw-2">*</span><span class="macro">s !</span>= rung_label
+<a href=#863 id=863 data-nosnippet>863</a>            &amp;&amp; <span class="kw-2">*</span>s != rung_label
 <a href=#864 id=864 data-nosnippet>864</a>        {
 <a href=#865 id=865 data-nosnippet>865</a>            <span class="kw-2">*</span>s = rung_label.to_owned();
 <a href=#866 id=866 data-nosnippet>866</a>        }
@@ -885,7 +885,7 @@
 <a href=#885 id=885 data-nosnippet>885</a>    /// publish; the codec never changes mid-track.
 <a href=#886 id=886 data-nosnippet>886</a>    </span><span class="kw">pub fn </span>set_video_codec(<span class="kw-2">&amp;</span><span class="self">self</span>, codec: <span class="kw-2">&amp;</span>str) {
 <a href=#887 id=887 data-nosnippet>887</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>s) = <span class="self">self</span>.outbound_video.codec.lock()
-<a href=#888 id=888 data-nosnippet>888</a>            &amp;&amp; <span class="kw-2">*</span><span class="macro">s !</span>= codec
+<a href=#888 id=888 data-nosnippet>888</a>            &amp;&amp; <span class="kw-2">*</span>s != codec
 <a href=#889 id=889 data-nosnippet>889</a>        {
 <a href=#890 id=890 data-nosnippet>890</a>            <span class="kw-2">*</span>s = codec.to_owned();
 <a href=#891 id=891 data-nosnippet>891</a>        }
@@ -915,7 +915,7 @@
 <a href=#915 id=915 data-nosnippet>915</a>    <span class="doccomment">/// Set the screen track's wire codec label. Called once at publish.
 <a href=#916 id=916 data-nosnippet>916</a>    </span><span class="kw">pub fn </span>set_screen_codec(<span class="kw-2">&amp;</span><span class="self">self</span>, codec: <span class="kw-2">&amp;</span>str) {
 <a href=#917 id=917 data-nosnippet>917</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>s) = <span class="self">self</span>.outbound_screen.codec.lock()
-<a href=#918 id=918 data-nosnippet>918</a>            &amp;&amp; <span class="kw-2">*</span><span class="macro">s !</span>= codec
+<a href=#918 id=918 data-nosnippet>918</a>            &amp;&amp; <span class="kw-2">*</span>s != codec
 <a href=#919 id=919 data-nosnippet>919</a>        {
 <a href=#920 id=920 data-nosnippet>920</a>            <span class="kw-2">*</span>s = codec.to_owned();
 <a href=#921 id=921 data-nosnippet>921</a>        }
@@ -983,13 +983,13 @@
 <a href=#983 id=983 data-nosnippet>983</a>        s.target_bps.store(target_bps, Ordering::Relaxed);
 <a href=#984 id=984 data-nosnippet>984</a>        <span class="comment">// Only re-set geometry on a real video rung (AudioOnly reports 0×0; keep the
 <a href=#985 id=985 data-nosnippet>985</a>        // last real screen geometry so the panel does not flicker to 0 on a pause).
-<a href=#986 id=986 data-nosnippet>986</a>        </span><span class="kw">if </span><span class="macro">width !</span>= <span class="number">0 </span>&amp;&amp; <span class="macro">height !</span>= <span class="number">0 </span>{
+<a href=#986 id=986 data-nosnippet>986</a>        </span><span class="kw">if </span>width != <span class="number">0 </span>&amp;&amp; height != <span class="number">0 </span>{
 <a href=#987 id=987 data-nosnippet>987</a>            s.width.store(width, Ordering::Relaxed);
 <a href=#988 id=988 data-nosnippet>988</a>            s.height.store(height, Ordering::Relaxed);
 <a href=#989 id=989 data-nosnippet>989</a>        }
 <a href=#990 id=990 data-nosnippet>990</a>        s.remote_loss_bps.store(remote_loss_bps, Ordering::Relaxed);
 <a href=#991 id=991 data-nosnippet>991</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>g) = s.quality_rung.lock()
-<a href=#992 id=992 data-nosnippet>992</a>            &amp;&amp; <span class="kw-2">*</span><span class="macro">g !</span>= rung_label
+<a href=#992 id=992 data-nosnippet>992</a>            &amp;&amp; <span class="kw-2">*</span>g != rung_label
 <a href=#993 id=993 data-nosnippet>993</a>        {
 <a href=#994 id=994 data-nosnippet>994</a>            <span class="kw-2">*</span>g = rung_label.to_owned();
 <a href=#995 id=995 data-nosnippet>995</a>        }
@@ -1369,7 +1369,7 @@
 <a href=#1369 id=1369 data-nosnippet>1369</a>    /// rebuilds, on a mid-stream sender switch) the decoder — not per frame.
 <a href=#1370 id=1370 data-nosnippet>1370</a>    </span><span class="kw">pub fn </span>set_inbound_video_codec(<span class="kw-2">&amp;</span><span class="self">self</span>, kind: InboundVideoKind, codec: <span class="kw-2">&amp;</span>str) {
 <a href=#1371 id=1371 data-nosnippet>1371</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>s) = <span class="self">self</span>.inbound_video(kind).codec.lock()
-<a href=#1372 id=1372 data-nosnippet>1372</a>            &amp;&amp; <span class="kw-2">*</span><span class="macro">s !</span>= codec
+<a href=#1372 id=1372 data-nosnippet>1372</a>            &amp;&amp; <span class="kw-2">*</span>s != codec
 <a href=#1373 id=1373 data-nosnippet>1373</a>        {
 <a href=#1374 id=1374 data-nosnippet>1374</a>            <span class="kw-2">*</span>s = codec.to_owned();
 <a href=#1375 id=1375 data-nosnippet>1375</a>        }
@@ -1462,7 +1462,7 @@
 <a href=#1462 id=1462 data-nosnippet>1462</a>        v.decoder_build_unsupported
 <a href=#1463 id=1463 data-nosnippet>1463</a>            .store(unsupported, Ordering::Relaxed);
 <a href=#1464 id=1464 data-nosnippet>1464</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>s) = v.failed_codec.lock()
-<a href=#1465 id=1465 data-nosnippet>1465</a>            &amp;&amp; <span class="kw-2">*</span><span class="macro">s !</span>= codec
+<a href=#1465 id=1465 data-nosnippet>1465</a>            &amp;&amp; <span class="kw-2">*</span>s != codec
 <a href=#1466 id=1466 data-nosnippet>1466</a>        {
 <a href=#1467 id=1467 data-nosnippet>1467</a>            <span class="kw-2">*</span>s = codec.to_owned();
 <a href=#1468 id=1468 data-nosnippet>1468</a>        }

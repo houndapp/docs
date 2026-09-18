@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["METRICS_CI_MAX_BYTES"],"fn":["authorized","get_metrics","get_sfu_nodes","post_metrics_ci","post_sfu_register","router"],"struct":["SfuRegisterRequest"]};
+window.SIDEBAR_ITEMS = {"constant":["METRICS_CI_MAX_BYTES","REINDEX_BATCH"],"fn":["authorized","get_metrics","get_sfu_nodes","post_messages_reindex","post_metrics_ci","post_sfu_register","reindex_one","router"],"struct":["ReindexResponse","SfuRegisterRequest"]};

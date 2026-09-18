@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MediaFamily"],"fn":["has_code_block","has_spoiler","kinds","media_family","search_text"],"struct":["MessageContext","ParsedMessage","Sink"]};

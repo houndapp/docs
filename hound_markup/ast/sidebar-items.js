@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Block","Inline"],"fn":["collect_block_links","collect_block_references","collect_inline_links","collect_inline_references","links","push_web_url","references"],"struct":["Document"]};

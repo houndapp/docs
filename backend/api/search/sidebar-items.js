@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_LIMIT","LIMIT_RANGE","TAG"],"enum":["SearchScope","SearchSort"],"fn":["default_limit","post_search","router"],"mod":["cursor","hydrate","sql"],"struct":["SearchHit","SearchRequest","SearchResults"]};

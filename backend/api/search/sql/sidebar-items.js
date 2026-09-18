@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FTS"],"enum":["TextPlan"],"fn":["common_predicates","fts_match","fts_phrase","limit_clause","newest_keyset","postgres_sql","relevance_wrapper","sqlite_sql","statement"],"struct":["Binder","HitRow","Plan"]};

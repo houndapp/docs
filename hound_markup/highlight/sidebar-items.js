@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CODE","EMPH","HEADING_MASK","HEADING_SHIFT","LINK","MARKER","MAX_DEPTH","QUOTE","REFERENCE","SPOILER","STRIKE","STRONG","SUBTEXT","UNDERLINE"],"enum":["Post","Shape"],"fn":["highlight","node_text"],"struct":["Painter","StyleRun"]};

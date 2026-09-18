@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["QuotesKind"],"struct":["Builder","ColumnBuilder","ExistsColumnBuilder","NestedPathBuilder"]};
+window.SIDEBAR_ITEMS = {"enum":["QuotesKind"],"struct":["Builder","Column","ExistsColumn","NestedPath"]};
