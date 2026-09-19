@@ -75,7 +75,7 @@ stdout/stderr and a log file — the Rust equivalent of the shell scripts’
 hold it open (Ctrl-C tears it down), or force a standalone teardown when
 a prior <code>up</code> didn’t get the chance to run its own cleanup (killed
 terminal, crashed host).</dd><dt><a class="mod" href="visual/index.html" title="mod hound_stack::visual">visual</a></dt><dd><code>hound-stack visual</code>: bring the stack up, bootstrap the shared community
-via [<code>hound_testkit::Env</code>] (no bash curl/jq re-implementation — see its
+via <a href="../hound_testkit/env/struct.Env.html" title="struct hound_testkit::env::Env"><code>hound_testkit::Env</code></a> (no bash curl/jq re-implementation — see its
 module doc), spawn one <code>houndbot --testcard</code> peer into the voice call,
 run the real-app Flutter integration test, then <code>snapdiff compare</code>
 against the accepted baselines. Mirrors the retired

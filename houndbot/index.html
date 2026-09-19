@@ -5,8 +5,8 @@ engine’s synthetic (camera-free/mic-free) capture sources, samples call
 stats for a fixed window, leaves, and prints a pass/fail verdict as JSON
 to stdout. Exit code: <code>0</code> pass, <code>1</code> fail (ran to completion under the
 bar), <code>2</code> setup error (never got far enough to run the actual test).</p>
-<p>Sign-in delegates to [<code>hound_testkit::auth</code>] (see
-[<code>hound_testkit::auth::sign_in_magic_link</code>] for why this bypasses
+<p>Sign-in delegates to <a href="../hound_testkit/auth/index.html" title="mod hound_testkit::auth"><code>hound_testkit::auth</code></a> (see
+<a href="../hound_testkit/auth/fn.sign_in_magic_link.html" title="fn hound_testkit::auth::sign_in_magic_link"><code>hound_testkit::auth::sign_in_magic_link</code></a> for why this bypasses
 <code>HoundClient</code>’s loopback-listener magic-link flow — a headless bot never
 clicks the emailed link). Stats sampling drives
 [<code>hound_client::call_health</code>] directly — the same warmup-anchored
@@ -24,4 +24,4 @@ expected-shape failure (auth, join, missing voice space) — those become a
 explaining what happened, per the setup-error contract.</dd><dt><a class="fn" href="fn.run_call.html" title="fn houndbot::run_call">run_<wbr>call</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Join the call, sample stats for <code>duration_secs</code> (see
 [<code>hound_client::call_health::sample_call_health</code>]), then leave.</dd><dt><a class="fn" href="fn.setup_failure.html" title="fn houndbot::setup_failure">setup_<wbr>failure</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Build a best-effort verdict for a run that never reached the sampling
 window — every gated signal is at its worst (0 peers / 0 frames), so
-<code>compute_verdict</code> already fails it; this just adds the concrete reason.</dd><dt><a class="fn" href="fn.sign_in.html" title="fn houndbot::sign_in">sign_in</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Sign in via magic-link — see [<code>hound_testkit::auth::sign_in_magic_link</code>].</dd></dl></section></div></main></body></html>
+<code>compute_verdict</code> already fails it; this just adds the concrete reason.</dd><dt><a class="fn" href="fn.sign_in.html" title="fn houndbot::sign_in">sign_in</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Sign in via magic-link — see <a href="../hound_testkit/auth/fn.sign_in_magic_link.html" title="fn hound_testkit::auth::sign_in_magic_link"><code>hound_testkit::auth::sign_in_magic_link</code></a>.</dd></dl></section></div></main></body></html>
