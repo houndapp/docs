@@ -6,20 +6,26 @@
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">mod </span>m20260906_000001_message_reference;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">mod </span>m20260907_000001_message_search_columns;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">mod </span>m20260909_000001_message_search_index;
-<a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">pub struct </span>Migrator;
-<a href=#11 id=11 data-nosnippet>11</a>
-<a href=#12 id=12 data-nosnippet>12</a><span class="attr">#[async_trait::async_trait]
-<a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">impl </span>MigratorTrait <span class="kw">for </span>Migrator {
-<a href=#14 id=14 data-nosnippet>14</a>    <span class="kw">fn </span>migrations() -&gt; Vec&lt;Box&lt;<span class="kw">dyn </span>MigrationTrait&gt;&gt; {
-<a href=#15 id=15 data-nosnippet>15</a>        <span class="macro">vec!</span>[
-<a href=#16 id=16 data-nosnippet>16</a>            Box::new(m20220101_000001_create_table::Migration),
-<a href=#17 id=17 data-nosnippet>17</a>            Box::new(m20260721_000001_first_user_grant::Migration),
-<a href=#18 id=18 data-nosnippet>18</a>            Box::new(m20260824_000001_link_embed::Migration),
-<a href=#19 id=19 data-nosnippet>19</a>            Box::new(m20260906_000001_message_reference::Migration),
-<a href=#20 id=20 data-nosnippet>20</a>            Box::new(m20260907_000001_message_search_columns::Migration),
-<a href=#21 id=21 data-nosnippet>21</a>            Box::new(m20260909_000001_message_search_index::Migration),
-<a href=#22 id=22 data-nosnippet>22</a>        ]
-<a href=#23 id=23 data-nosnippet>23</a>    }
-<a href=#24 id=24 data-nosnippet>24</a>}
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">mod </span>m20260919_000001_community_profile;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">mod </span>m20260920_000001_invites_bans;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">mod </span>m20260921_000001_profile_unique;
+<a href=#12 id=12 data-nosnippet>12</a>
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">pub struct </span>Migrator;
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a><span class="attr">#[async_trait::async_trait]
+<a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">impl </span>MigratorTrait <span class="kw">for </span>Migrator {
+<a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">fn </span>migrations() -&gt; Vec&lt;Box&lt;<span class="kw">dyn </span>MigrationTrait&gt;&gt; {
+<a href=#18 id=18 data-nosnippet>18</a>        <span class="macro">vec!</span>[
+<a href=#19 id=19 data-nosnippet>19</a>            Box::new(m20220101_000001_create_table::Migration),
+<a href=#20 id=20 data-nosnippet>20</a>            Box::new(m20260721_000001_first_user_grant::Migration),
+<a href=#21 id=21 data-nosnippet>21</a>            Box::new(m20260824_000001_link_embed::Migration),
+<a href=#22 id=22 data-nosnippet>22</a>            Box::new(m20260906_000001_message_reference::Migration),
+<a href=#23 id=23 data-nosnippet>23</a>            Box::new(m20260907_000001_message_search_columns::Migration),
+<a href=#24 id=24 data-nosnippet>24</a>            Box::new(m20260909_000001_message_search_index::Migration),
+<a href=#25 id=25 data-nosnippet>25</a>            Box::new(m20260919_000001_community_profile::Migration),
+<a href=#26 id=26 data-nosnippet>26</a>            Box::new(m20260920_000001_invites_bans::Migration),
+<a href=#27 id=27 data-nosnippet>27</a>            Box::new(m20260921_000001_profile_unique::Migration),
+<a href=#28 id=28 data-nosnippet>28</a>        ]
+<a href=#29 id=29 data-nosnippet>29</a>    }
+<a href=#30 id=30 data-nosnippet>30</a>}
 </code></pre></div></section></main></body></html>

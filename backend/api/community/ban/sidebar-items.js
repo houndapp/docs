@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_BAN_REASON_CHARS"],"fn":["delete_ban","get_bans","post_ban","validate_ban_reason"],"struct":["BanModel","PostBanRequest"]};

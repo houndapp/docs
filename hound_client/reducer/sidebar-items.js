@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["key","member_from_voice","message_from_event","space_from_event","uuid_v7_millis"],"struct":["CommunityTree","MessageList","RosterView"]};
+window.SIDEBAR_ITEMS = {"fn":["community_order","key","member_from_voice","message_from_event","space_from_event","space_order","uuid_v7_millis"],"struct":["CommunityTree","MessageList","RosterView"]};

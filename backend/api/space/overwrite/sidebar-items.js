@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["put_space_overwrites"],"struct":["PutSpaceOverwritesRequest","RoleOverwrite","UserOverwrite"]};
+window.SIDEBAR_ITEMS = {"fn":["get_space_overwrites","put_space_overwrites","validate_overwrites"],"struct":["PutSpaceOverwritesRequest","RoleOverwrite","SpaceOverwritesResponse","UserOverwrite"]};

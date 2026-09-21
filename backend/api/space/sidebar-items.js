@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["delete_community_space","get_community_space","get_community_spaces","patch_community_space","post_community_space","router"],"mod":["message","model","overwrite","voice"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_SPACE_NAME_CHARS","TAG"],"fn":["delete_community_space","get_community_space","get_community_spaces","order_spaces","patch_community_space","post_community_space","router","validate_space_name"],"mod":["message","model","overwrite","privacy","voice"]};

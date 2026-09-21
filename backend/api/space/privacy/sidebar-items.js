@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PrivacyWrite"],"fn":["is_private_acl"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ALPHABET","CODE_LEN","INVITE_SEGMENT"],"fn":["normalise","parse_invite_code"]};

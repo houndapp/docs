@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TAG","TRANSPORTS"],"enum":["Transport"],"fn":["get_realtime_config","router","unauthorized"],"mod":["hub","ws","wt"]};
+window.SIDEBAR_ITEMS = {"constant":["TAG","TRANSPORTS"],"enum":["Transport"],"fn":["get_realtime_config","router","space_payload","unauthorized"],"mod":["hub","ws","wt"]};

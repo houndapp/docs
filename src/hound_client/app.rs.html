@@ -35,488 +35,523 @@
 <a href=#35 id=35 data-nosnippet>35</a><span class="kw">mod </span>auth;
 <a href=#36 id=36 data-nosnippet>36</a><span class="kw">mod </span>browser_auth;
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">mod </span>call_commands;
-<a href=#38 id=38 data-nosnippet>38</a><span class="kw">mod </span>realtime_wiring;
-<a href=#39 id=39 data-nosnippet>39</a><span class="kw">mod </span>search;
-<a href=#40 id=40 data-nosnippet>40</a>
-<a href=#41 id=41 data-nosnippet>41</a><span class="doccomment">/// How long startup waits on the credential store before giving up on a *fast*
-<a href=#42 id=42 data-nosnippet>42</a>/// restore. Sized for a read that only hits the store (milliseconds); anything past
-<a href=#43 id=43 data-nosnippet>43</a>/// it means the OS is asking the user something — see [`Session::load_stored`] — and
-<a href=#44 id=44 data-nosnippet>44</a>/// no startup path may wait on a human.
-<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">const </span>KEYRING_READ_GRACE: Duration = Duration::from_secs(<span class="number">3</span>);
-<a href=#46 id=46 data-nosnippet>46</a>
-<a href=#47 id=47 data-nosnippet>47</a><span class="doccomment">/// Map a Steam-client ticket failure onto the auth registry, one code per cause:
-<a href=#48 id=48 data-nosnippet>48</a>/// "not under Steam", "Steam is offline", "the ticket callback never came" and "the
-<a href=#49 id=49 data-nosnippet>49</a>/// SDK itself failed" are four different things to tell a user (and four different
-<a href=#50 id=50 data-nosnippet>50</a>/// things to triage), so they must not share a Sentry bucket. The upstream display
-<a href=#51 id=51 data-nosnippet>51</a>/// text stays as the message.
-<a href=#52 id=52 data-nosnippet>52</a></span><span class="kw">fn </span>steam_auth_error(e: hound_steam::SteamClientError) -&gt; HoundError {
-<a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">use </span>hound_steam::SteamClientError <span class="kw">as </span>E;
-<a href=#54 id=54 data-nosnippet>54</a>    <span class="kw">let </span>code = <span class="kw">match </span>e {
-<a href=#55 id=55 data-nosnippet>55</a>        E::NotAvailable =&gt; AuthCode::SteamNotAvailable,
-<a href=#56 id=56 data-nosnippet>56</a>        E::NotConnected =&gt; AuthCode::SteamNotConnected,
-<a href=#57 id=57 data-nosnippet>57</a>        E::Timeout =&gt; AuthCode::SteamTicketTimeout,
-<a href=#58 id=58 data-nosnippet>58</a>        E::Steamworks(<span class="kw">_</span>) =&gt; AuthCode::SteamworksFailure,
-<a href=#59 id=59 data-nosnippet>59</a>    };
-<a href=#60 id=60 data-nosnippet>60</a>    HoundError::auth(code, e.to_string())
-<a href=#61 id=61 data-nosnippet>61</a>}
-<a href=#62 id=62 data-nosnippet>62</a>
-<a href=#63 id=63 data-nosnippet>63</a><span class="doccomment">/// How long [`HoundClient::new_bounded`] waits for the local Steam client before
-<a href=#64 id=64 data-nosnippet>64</a>/// starting without it. Sized for a handshake with an already-running process; past
-<a href=#65 id=65 data-nosnippet>65</a>/// it, Steam is booting (or wedged) and no startup path may keep waiting.
-<a href=#66 id=66 data-nosnippet>66</a></span><span class="kw">const </span>STEAM_INIT_BOUND: Duration = Duration::from_secs(<span class="number">6</span>);
-<a href=#67 id=67 data-nosnippet>67</a>
-<a href=#68 id=68 data-nosnippet>68</a><span class="doccomment">/// [`SteamHandle::init`] moved off the async worker and given a deadline. `None`
-<a href=#69 id=69 data-nosnippet>69</a>/// for "no app id", "not a Steam launch", and "Steam did not answer in time"
-<a href=#70 id=70 data-nosnippet>70</a>/// alike — all three mean the same thing to every caller: no Steam sign-in.
-<a href=#71 id=71 data-nosnippet>71</a></span><span class="kw">async fn </span>bounded_steam_init(steam_app_id: <span class="prelude-ty">Option</span>&lt;u32&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;SteamHandle&gt; {
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">let </span>app_id = steam_app_id<span class="question-mark">?</span>;
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let </span>init = tokio::task::spawn_blocking(<span class="kw">move </span>|| SteamHandle::init(app_id));
-<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">match </span>tokio::time::timeout(STEAM_INIT_BOUND, init).<span class="kw">await </span>{
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(handle)) =&gt; handle,
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
-<a href=#77 id=77 data-nosnippet>77</a>            <span class="macro">tracing::warn!</span>(<span class="string">"steam: init task failed ({e}) — starting without steam"</span>);
-<a href=#78 id=78 data-nosnippet>78</a>            <span class="prelude-val">None
-<a href=#79 id=79 data-nosnippet>79</a>        </span>}
-<a href=#80 id=80 data-nosnippet>80</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-<a href=#81 id=81 data-nosnippet>81</a>            <span class="macro">tracing::warn!</span>(
-<a href=#82 id=82 data-nosnippet>82</a>                <span class="string">"steam: the client did not answer within {STEAM_INIT_BOUND:?} — starting without steam"
-<a href=#83 id=83 data-nosnippet>83</a>            </span>);
-<a href=#84 id=84 data-nosnippet>84</a>            <span class="prelude-val">None
-<a href=#85 id=85 data-nosnippet>85</a>        </span>}
-<a href=#86 id=86 data-nosnippet>86</a>    }
-<a href=#87 id=87 data-nosnippet>87</a>}
-<a href=#88 id=88 data-nosnippet>88</a>
-<a href=#89 id=89 data-nosnippet>89</a><span class="doccomment">/// How long a realtime connect waits for the server's `Welcome` before letting
-<a href=#90 id=90 data-nosnippet>90</a>/// the caller proceed anyway. See `HoundClient::await_realtime_live`.
-<a href=#91 id=91 data-nosnippet>91</a></span><span class="kw">const </span>REALTIME_WELCOME_GRACE: Duration = Duration::from_secs(<span class="number">5</span>);
-<a href=#92 id=92 data-nosnippet>92</a>
-<a href=#93 id=93 data-nosnippet>93</a><span class="doccomment">/// How many messages a space's history window holds — the page the UI loads on
-<a href=#94 id=94 data-nosnippet>94</a>/// open, and the same page a reconnect re-fetches to reconcile against.
-<a href=#95 id=95 data-nosnippet>95</a>///
-<a href=#96 id=96 data-nosnippet>96</a>/// One constant on purpose: the re-fetched window is authoritative for the range
-<a href=#97 id=97 data-nosnippet>97</a>/// it covers (see [`MessageList::reconcile_window`]), so fetching a *smaller*
-<a href=#98 id=98 data-nosnippet>98</a>/// window than the one on screen would silently narrow what a reconnect can
-<a href=#99 id=99 data-nosnippet>99</a>/// repair.
-<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">const </span>MESSAGE_WINDOW: u32 = <span class="number">50</span>;
-<a href=#101 id=101 data-nosnippet>101</a>
-<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// How long the post-reconnect re-fetch waits for the server to confirm it
-<a href=#103 id=103 data-nosnippet>103</a>/// re-joined a space's room before going ahead without the confirmation.
-<a href=#104 id=104 data-nosnippet>104</a>///
-<a href=#105 id=105 data-nosnippet>105</a>/// The re-fetch wants to run *after* the room join, so that a message posted
-<a href=#106 id=106 data-nosnippet>106</a>/// between the history snapshot and the join is delivered as an event rather
-<a href=#107 id=107 data-nosnippet>107</a>/// than missed by both — the same window [`RealtimeClient::subscribe_space`]
-<a href=#108 id=108 data-nosnippet>108</a>/// exists to close on open. But a server that does not confirm subscriptions at
-<a href=#109 id=109 data-nosnippet>109</a>/// all (an older backend) would never release it, and a resync that never
-<a href=#110 id=110 data-nosnippet>110</a>/// happens is worse than one that races, so the wait is bounded and expiring it
-<a href=#111 id=111 data-nosnippet>111</a>/// is not an error.
-<a href=#112 id=112 data-nosnippet>112</a></span><span class="kw">const </span>RESYNC_SUBSCRIBE_GRACE: Duration = Duration::from_secs(<span class="number">5</span>);
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a><span class="doccomment">/// The observable app state: one `watch` channel per snapshot the UI renders. Each
-<a href=#115 id=115 data-nosnippet>115</a>/// holds the latest value (a new subscriber sees it immediately) and notifies on
-<a href=#116 id=116 data-nosnippet>116</a>/// change. Per-space message lists are created lazily on [`HoundClient::open_space`].
-<a href=#117 id=117 data-nosnippet>117</a></span><span class="kw">struct </span>AppState {
-<a href=#118 id=118 data-nosnippet>118</a>    auth: watch::Sender&lt;AuthState&gt;,
-<a href=#119 id=119 data-nosnippet>119</a>    community_tree: watch::Sender&lt;CommunityTree&gt;,
-<a href=#120 id=120 data-nosnippet>120</a>    roster: watch::Sender&lt;RosterView&gt;,
-<a href=#121 id=121 data-nosnippet>121</a>    <span class="doccomment">/// space id → that space's message-list channel (lazily created on open).
-<a href=#122 id=122 data-nosnippet>122</a>    </span>messages: Mutex&lt;HashMap&lt;Uuid, watch::Sender&lt;MessageList&gt;&gt;&gt;,
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// space id → whether that space's list is showing a DETACHED history
-<a href=#124 id=124 data-nosnippet>124</a>    /// window (an around-page centred on a search hit) rather than the live
-<a href=#125 id=125 data-nosnippet>125</a>    /// tail. Lazily created alongside the message channel; see
-<a href=#126 id=126 data-nosnippet>126</a>    /// [`HoundClient::open_space_around`] for the state machine.
-<a href=#127 id=127 data-nosnippet>127</a>    </span>detached: Mutex&lt;HashMap&lt;Uuid, watch::Sender&lt;bool&gt;&gt;&gt;,
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// Spaces whose history still needs re-fetching after a reconnect.
-<a href=#129 id=129 data-nosnippet>129</a>    ///
-<a href=#130 id=130 data-nosnippet>130</a>    /// Armed as a set by the reconnect itself and drained one space at a time by
-<a href=#131 id=131 data-nosnippet>131</a>    /// that space's `Subscribed` confirmation (or by the grace timer). Being a
-<a href=#132 id=132 data-nosnippet>132</a>    /// set is what makes the resync fire exactly once per space per reconnect,
-<a href=#133 id=133 data-nosnippet>133</a>    /// however many confirmations, timers and reconnects overlap.
-<a href=#134 id=134 data-nosnippet>134</a>    </span>resync_pending: Mutex&lt;HashSet&lt;Uuid&gt;&gt;,
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// Serializes post-reconnect history re-fetches.
+<a href=#38 id=38 data-nosnippet>38</a><span class="kw">mod </span>community;
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">mod </span>realtime_wiring;
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">mod </span>search;
+<a href=#41 id=41 data-nosnippet>41</a>
+<a href=#42 id=42 data-nosnippet>42</a><span class="doccomment">/// How long startup waits on the credential store before giving up on a *fast*
+<a href=#43 id=43 data-nosnippet>43</a>/// restore. Sized for a read that only hits the store (milliseconds); anything past
+<a href=#44 id=44 data-nosnippet>44</a>/// it means the OS is asking the user something — see [`Session::load_stored`] — and
+<a href=#45 id=45 data-nosnippet>45</a>/// no startup path may wait on a human.
+<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">const </span>KEYRING_READ_GRACE: Duration = Duration::from_secs(<span class="number">3</span>);
+<a href=#47 id=47 data-nosnippet>47</a>
+<a href=#48 id=48 data-nosnippet>48</a><span class="doccomment">/// Map a Steam-client ticket failure onto the auth registry, one code per cause:
+<a href=#49 id=49 data-nosnippet>49</a>/// "not under Steam", "Steam is offline", "the ticket callback never came" and "the
+<a href=#50 id=50 data-nosnippet>50</a>/// SDK itself failed" are four different things to tell a user (and four different
+<a href=#51 id=51 data-nosnippet>51</a>/// things to triage), so they must not share a Sentry bucket. The upstream display
+<a href=#52 id=52 data-nosnippet>52</a>/// text stays as the message.
+<a href=#53 id=53 data-nosnippet>53</a></span><span class="kw">fn </span>steam_auth_error(e: hound_steam::SteamClientError) -&gt; HoundError {
+<a href=#54 id=54 data-nosnippet>54</a>    <span class="kw">use </span>hound_steam::SteamClientError <span class="kw">as </span>E;
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">let </span>code = <span class="kw">match </span>e {
+<a href=#56 id=56 data-nosnippet>56</a>        E::NotAvailable =&gt; AuthCode::SteamNotAvailable,
+<a href=#57 id=57 data-nosnippet>57</a>        E::NotConnected =&gt; AuthCode::SteamNotConnected,
+<a href=#58 id=58 data-nosnippet>58</a>        E::Timeout =&gt; AuthCode::SteamTicketTimeout,
+<a href=#59 id=59 data-nosnippet>59</a>        E::Steamworks(<span class="kw">_</span>) =&gt; AuthCode::SteamworksFailure,
+<a href=#60 id=60 data-nosnippet>60</a>    };
+<a href=#61 id=61 data-nosnippet>61</a>    HoundError::auth(code, e.to_string())
+<a href=#62 id=62 data-nosnippet>62</a>}
+<a href=#63 id=63 data-nosnippet>63</a>
+<a href=#64 id=64 data-nosnippet>64</a><span class="doccomment">/// How long [`HoundClient::new_bounded`] waits for the local Steam client before
+<a href=#65 id=65 data-nosnippet>65</a>/// starting without it. Sized for a handshake with an already-running process; past
+<a href=#66 id=66 data-nosnippet>66</a>/// it, Steam is booting (or wedged) and no startup path may keep waiting.
+<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">const </span>STEAM_INIT_BOUND: Duration = Duration::from_secs(<span class="number">6</span>);
+<a href=#68 id=68 data-nosnippet>68</a>
+<a href=#69 id=69 data-nosnippet>69</a><span class="doccomment">/// [`SteamHandle::init`] moved off the async worker and given a deadline. `None`
+<a href=#70 id=70 data-nosnippet>70</a>/// for "no app id", "not a Steam launch", and "Steam did not answer in time"
+<a href=#71 id=71 data-nosnippet>71</a>/// alike — all three mean the same thing to every caller: no Steam sign-in.
+<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">async fn </span>bounded_steam_init(steam_app_id: <span class="prelude-ty">Option</span>&lt;u32&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;SteamHandle&gt; {
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let </span>app_id = steam_app_id<span class="question-mark">?</span>;
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">let </span>init = tokio::task::spawn_blocking(<span class="kw">move </span>|| SteamHandle::init(app_id));
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">match </span>tokio::time::timeout(STEAM_INIT_BOUND, init).<span class="kw">await </span>{
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(handle)) =&gt; handle,
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(e)) =&gt; {
+<a href=#78 id=78 data-nosnippet>78</a>            <span class="macro">tracing::warn!</span>(<span class="string">"steam: init task failed ({e}) — starting without steam"</span>);
+<a href=#79 id=79 data-nosnippet>79</a>            <span class="prelude-val">None
+<a href=#80 id=80 data-nosnippet>80</a>        </span>}
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#82 id=82 data-nosnippet>82</a>            <span class="macro">tracing::warn!</span>(
+<a href=#83 id=83 data-nosnippet>83</a>                <span class="string">"steam: the client did not answer within {STEAM_INIT_BOUND:?} — starting without steam"
+<a href=#84 id=84 data-nosnippet>84</a>            </span>);
+<a href=#85 id=85 data-nosnippet>85</a>            <span class="prelude-val">None
+<a href=#86 id=86 data-nosnippet>86</a>        </span>}
+<a href=#87 id=87 data-nosnippet>87</a>    }
+<a href=#88 id=88 data-nosnippet>88</a>}
+<a href=#89 id=89 data-nosnippet>89</a>
+<a href=#90 id=90 data-nosnippet>90</a><span class="doccomment">/// How long a realtime connect waits for the server's `Welcome` before letting
+<a href=#91 id=91 data-nosnippet>91</a>/// the caller proceed anyway. See `HoundClient::await_realtime_live`.
+<a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">const </span>REALTIME_WELCOME_GRACE: Duration = Duration::from_secs(<span class="number">5</span>);
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a><span class="doccomment">/// How many messages a space's history window holds — the page the UI loads on
+<a href=#95 id=95 data-nosnippet>95</a>/// open, and the same page a reconnect re-fetches to reconcile against.
+<a href=#96 id=96 data-nosnippet>96</a>///
+<a href=#97 id=97 data-nosnippet>97</a>/// One constant on purpose: the re-fetched window is authoritative for the range
+<a href=#98 id=98 data-nosnippet>98</a>/// it covers (see [`MessageList::reconcile_window`]), so fetching a *smaller*
+<a href=#99 id=99 data-nosnippet>99</a>/// window than the one on screen would silently narrow what a reconnect can
+<a href=#100 id=100 data-nosnippet>100</a>/// repair.
+<a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">const </span>MESSAGE_WINDOW: u32 = <span class="number">50</span>;
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a><span class="doccomment">/// How long the post-reconnect re-fetch waits for the server to confirm it
+<a href=#104 id=104 data-nosnippet>104</a>/// re-joined a space's room before going ahead without the confirmation.
+<a href=#105 id=105 data-nosnippet>105</a>///
+<a href=#106 id=106 data-nosnippet>106</a>/// The re-fetch wants to run *after* the room join, so that a message posted
+<a href=#107 id=107 data-nosnippet>107</a>/// between the history snapshot and the join is delivered as an event rather
+<a href=#108 id=108 data-nosnippet>108</a>/// than missed by both — the same window [`RealtimeClient::subscribe_space`]
+<a href=#109 id=109 data-nosnippet>109</a>/// exists to close on open. But a server that does not confirm subscriptions at
+<a href=#110 id=110 data-nosnippet>110</a>/// all (an older backend) would never release it, and a resync that never
+<a href=#111 id=111 data-nosnippet>111</a>/// happens is worse than one that races, so the wait is bounded and expiring it
+<a href=#112 id=112 data-nosnippet>112</a>/// is not an error.
+<a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">const </span>RESYNC_SUBSCRIBE_GRACE: Duration = Duration::from_secs(<span class="number">5</span>);
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a><span class="doccomment">/// How many community signals a slow subscriber may fall behind before it starts
+<a href=#116 id=116 data-nosnippet>116</a>/// missing them. Sized for a burst of role edits, not for buffering an absent
+<a href=#117 id=117 data-nosnippet>117</a>/// reader: a missed signal costs one stale page until the next edit, so the
+<a href=#118 id=118 data-nosnippet>118</a>/// bound is deliberately small.
+<a href=#119 id=119 data-nosnippet>119</a></span><span class="kw">const </span>COMMUNITY_SIGNAL_BACKLOG: usize = <span class="number">64</span>;
+<a href=#120 id=120 data-nosnippet>120</a>
+<a href=#121 id=121 data-nosnippet>121</a><span class="doccomment">/// The observable app state: one `watch` channel per snapshot the UI renders. Each
+<a href=#122 id=122 data-nosnippet>122</a>/// holds the latest value (a new subscriber sees it immediately) and notifies on
+<a href=#123 id=123 data-nosnippet>123</a>/// change. Per-space message lists are created lazily on [`HoundClient::open_space`].
+<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">struct </span>AppState {
+<a href=#125 id=125 data-nosnippet>125</a>    auth: watch::Sender&lt;AuthState&gt;,
+<a href=#126 id=126 data-nosnippet>126</a>    community_tree: watch::Sender&lt;CommunityTree&gt;,
+<a href=#127 id=127 data-nosnippet>127</a>    roster: watch::Sender&lt;RosterView&gt;,
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// space id → that space's message-list channel (lazily created on open).
+<a href=#129 id=129 data-nosnippet>129</a>    </span>messages: Mutex&lt;HashMap&lt;Uuid, watch::Sender&lt;MessageList&gt;&gt;&gt;,
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="doccomment">/// space id → whether that space's list is showing a DETACHED history
+<a href=#131 id=131 data-nosnippet>131</a>    /// window (an around-page centred on a search hit) rather than the live
+<a href=#132 id=132 data-nosnippet>132</a>    /// tail. Lazily created alongside the message channel; see
+<a href=#133 id=133 data-nosnippet>133</a>    /// [`HoundClient::open_space_around`] for the state machine.
+<a href=#134 id=134 data-nosnippet>134</a>    </span>detached: Mutex&lt;HashMap&lt;Uuid, watch::Sender&lt;bool&gt;&gt;&gt;,
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// Spaces whose history still needs re-fetching after a reconnect.
 <a href=#136 id=136 data-nosnippet>136</a>    ///
-<a href=#137 id=137 data-nosnippet>137</a>    /// Every space is re-confirmed at once after a `Welcome`, so without this a
-<a href=#138 id=138 data-nosnippet>138</a>    /// client that has opened a dozen spaces answers one reconnect with a dozen
-<a href=#139 id=139 data-nosnippet>139</a>    /// simultaneous history requests — and every client on a backend that just
-<a href=#140 id=140 data-nosnippet>140</a>    /// restarted reconnects at once. One permit turns that into a queue: the
-<a href=#141 id=141 data-nosnippet>141</a>    /// space the user is looking at is repaired just as fast, and the rest
-<a href=#142 id=142 data-nosnippet>142</a>    /// trickle.
-<a href=#143 id=143 data-nosnippet>143</a>    </span>resync_gate: Semaphore,
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="doccomment">/// Call-state observables, driven by the live [`CallSession`]:
-<a href=#145 id=145 data-nosnippet>145</a>    /// the roster/track view (from the control plane's `SessionView`), the
-<a href=#146 id=146 data-nosnippet>146</a>    /// connection state, and the mic + per-peer speaking levels.
-<a href=#147 id=147 data-nosnippet>147</a>    </span>call_view: watch::Sender&lt;CallView&gt;,
-<a href=#148 id=148 data-nosnippet>148</a>    connection: watch::Sender&lt;ConnectionState&gt;,
-<a href=#149 id=149 data-nosnippet>149</a>    levels: watch::Sender&lt;LevelsView&gt;,
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="doccomment">/// 1 Hz RTC debug-stats snapshot (the data behind the debug panel + per-tile
-<a href=#151 id=151 data-nosnippet>151</a>    /// overlay). Driven by the call's `spawn_emitter`; default/empty between calls.
-<a href=#152 id=152 data-nosnippet>152</a>    </span>stats: watch::Sender&lt;<span class="kw">crate</span>::stats::StatsSnapshot&gt;,
-<a href=#153 id=153 data-nosnippet>153</a>    <span class="doccomment">/// Whether the realtime plane is currently welcomed. Latest-wins like every
-<a href=#154 id=154 data-nosnippet>154</a>    /// other snapshot here; the supervisor heals an outage on its own, so this is
-<a href=#155 id=155 data-nosnippet>155</a>    /// a status indicator (and a test seam), never a trigger for the app to act.
-<a href=#156 id=156 data-nosnippet>156</a>    </span>realtime_connected: watch::Sender&lt;bool&gt;,
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="doccomment">/// Which realtime plane the reducer task is allowed to speak for.
-<a href=#158 id=158 data-nosnippet>158</a>    ///
-<a href=#159 id=159 data-nosnippet>159</a>    /// `HoundClient::connect` stamps a fresh generation and the task it spawns
-<a href=#160 id=160 data-nosnippet>160</a>    /// carries it. A plane is replaced on every sign-in (and on a re-restore),
-<a href=#161 id=161 data-nosnippet>161</a>    /// and the OLD task can still hold queued events — including an
-<a href=#162 id=162 data-nosnippet>162</a>    /// `AuthExpired` from the credential that was just replaced, which would
-<a href=#163 id=163 data-nosnippet>163</a>    /// sign the user straight back out of the session they just established, or
-<a href=#164 id=164 data-nosnippet>164</a>    /// a `Connected` that would flip the new plane's liveness to a lie. Events
-<a href=#165 id=165 data-nosnippet>165</a>    /// stamped with a superseded generation are dropped at apply.
-<a href=#166 id=166 data-nosnippet>166</a>    </span>realtime_epoch: std::sync::atomic::AtomicU64,
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="doccomment">/// Live `peer_id → user_id` map for the current call. Seeded by the call at join
-<a href=#168 id=168 data-nosnippet>168</a>    /// (from the REST voice roster + self) and kept current by the realtime voice
-<a href=#169 id=169 data-nosnippet>169</a>    /// events here; the call's control reader joins it into each `CallView` so tiles
-<a href=#170 id=170 data-nosnippet>170</a>    /// show real identities. Cleared on call join/leave so it never leaks across calls.
-<a href=#171 id=171 data-nosnippet>171</a>    </span>call_identities: PeerIdentities,
-<a href=#172 id=172 data-nosnippet>172</a>}
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a><span class="kw">impl </span>AppState {
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
-<a href=#176 id=176 data-nosnippet>176</a>        <span class="self">Self </span>{
-<a href=#177 id=177 data-nosnippet>177</a>            auth: watch::channel(AuthState::SignedOut).<span class="number">0</span>,
-<a href=#178 id=178 data-nosnippet>178</a>            community_tree: watch::channel(CommunityTree::new()).<span class="number">0</span>,
-<a href=#179 id=179 data-nosnippet>179</a>            roster: watch::channel(RosterView::new()).<span class="number">0</span>,
-<a href=#180 id=180 data-nosnippet>180</a>            messages: Mutex::new(HashMap::new()),
-<a href=#181 id=181 data-nosnippet>181</a>            detached: Mutex::new(HashMap::new()),
-<a href=#182 id=182 data-nosnippet>182</a>            resync_pending: Mutex::new(HashSet::new()),
-<a href=#183 id=183 data-nosnippet>183</a>            resync_gate: Semaphore::new(<span class="number">1</span>),
-<a href=#184 id=184 data-nosnippet>184</a>            call_view: watch::channel(CallView::default()).<span class="number">0</span>,
-<a href=#185 id=185 data-nosnippet>185</a>            connection: watch::channel(ConnectionState::default()).<span class="number">0</span>,
-<a href=#186 id=186 data-nosnippet>186</a>            levels: watch::channel(LevelsView::default()).<span class="number">0</span>,
-<a href=#187 id=187 data-nosnippet>187</a>            stats: watch::channel(<span class="kw">crate</span>::stats::StatsSnapshot::default()).<span class="number">0</span>,
-<a href=#188 id=188 data-nosnippet>188</a>            realtime_connected: watch::channel(<span class="bool-val">false</span>).<span class="number">0</span>,
-<a href=#189 id=189 data-nosnippet>189</a>            realtime_epoch: std::sync::atomic::AtomicU64::new(<span class="number">0</span>),
-<a href=#190 id=190 data-nosnippet>190</a>            call_identities: PeerIdentities::default(),
-<a href=#191 id=191 data-nosnippet>191</a>        }
-<a href=#192 id=192 data-nosnippet>192</a>    }
-<a href=#193 id=193 data-nosnippet>193</a>}
-<a href=#194 id=194 data-nosnippet>194</a>
-<a href=#195 id=195 data-nosnippet>195</a><span class="doccomment">/// The headless application core. Cheap to share via the returned `Arc&lt;Self&gt;`; every
-<a href=#196 id=196 data-nosnippet>196</a>/// command takes `&amp;self`. Holds the REST client, the session, the observable state,
-<a href=#197 id=197 data-nosnippet>197</a>/// and the live realtime connection (replaced on each (re)connect).
-<a href=#198 id=198 data-nosnippet>198</a></span><span class="kw">pub struct </span>HoundClient {
-<a href=#199 id=199 data-nosnippet>199</a>    rest: Arc&lt;RestClient&gt;,
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="doccomment">/// The base URL (kept so the call orchestration can derive the control WS URL).
-<a href=#201 id=201 data-nosnippet>201</a>    </span>base_url: String,
-<a href=#202 id=202 data-nosnippet>202</a>    session: Session,
-<a href=#203 id=203 data-nosnippet>203</a>    state: AppState,
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="doccomment">/// The live realtime connection, if connected. Swapped on connect; dropped (and
-<a href=#205 id=205 data-nosnippet>205</a>    /// its background task ended) on disconnect/logout.
-<a href=#206 id=206 data-nosnippet>206</a>    </span>realtime: Mutex&lt;<span class="prelude-ty">Option</span>&lt;RealtimeClient&gt;&gt;,
-<a href=#207 id=207 data-nosnippet>207</a>    <span class="doccomment">/// The live voice/video call, if joined. At most one at a time.
-<a href=#208 id=208 data-nosnippet>208</a>    </span>call: Mutex&lt;<span class="prelude-ty">Option</span>&lt;CallSession&gt;&gt;,
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="doccomment">/// The settings screen's mic test, while it is running. Mutually exclusive
-<a href=#210 id=210 data-nosnippet>210</a>    /// with `call` by construction — [`Self::mic_monitor_start`] refuses while a
-<a href=#211 id=211 data-nosnippet>211</a>    /// call holds the input device, and [`Self::call_join`] stops any monitor
-<a href=#212 id=212 data-nosnippet>212</a>    /// before it opens one.
-<a href=#213 id=213 data-nosnippet>213</a>    </span>mic_monitor: Mutex&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw">crate</span>::call::MicMonitor&gt;&gt;,
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="doccomment">/// The Steamworks connection when launched through Steam (`None` otherwise,
-<a href=#215 id=215 data-nosnippet>215</a>    /// including all non-Steam builds). Init success *is* the launch detection.
-<a href=#216 id=216 data-nosnippet>216</a>    </span>steam: <span class="prelude-ty">Option</span>&lt;hound_steam::SteamHandle&gt;,
-<a href=#217 id=217 data-nosnippet>217</a>    <span class="doccomment">/// A pending Steam `link_token`: proof of Steam-account ownership awaiting
-<a href=#218 id=218 data-nosnippet>218</a>    /// the user's create-or-link decision (or a settings link). Set when a
-<a href=#219 id=219 data-nosnippet>219</a>    /// Steam sign-in meets an unknown Steam ID; consumed by
-<a href=#220 id=220 data-nosnippet>220</a>    /// [`steam_register`](Self::steam_register) /
-<a href=#221 id=221 data-nosnippet>221</a>    /// [`link_steam_pending`](Self::link_steam_pending), auto-consumed by a
-<a href=#222 id=222 data-nosnippet>222</a>    /// successful sign-in, cleared by [`steam_dismiss`](Self::steam_dismiss).
-<a href=#223 id=223 data-nosnippet>223</a>    </span>pending_steam_link: Mutex&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt;,
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="doccomment">/// A pending browser-deferred login (the bound loopback listener), if the UI
-<a href=#225 id=225 data-nosnippet>225</a>    /// has begun one. At most one at a time; replaced by a re-begin, consumed by
-<a href=#226 id=226 data-nosnippet>226</a>    /// wait, dropped by cancel.
-<a href=#227 id=227 data-nosnippet>227</a>    </span>browser_login: Mutex&lt;<span class="prelude-ty">Option</span>&lt;hound_browser_auth::BrowserLogin&gt;&gt;,
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="doccomment">/// Wakes a blocked [`browser_login_wait`](Self::browser_login_wait) when the
-<a href=#229 id=229 data-nosnippet>229</a>    /// UI cancels (the wait has already consumed the listener by then).
-<a href=#230 id=230 data-nosnippet>230</a>    </span>browser_login_cancelled: tokio::sync::Notify,
-<a href=#231 id=231 data-nosnippet>231</a>    <span class="doccomment">/// A pending email `link_token`: proof that a magic-link sign-in met an
-<a href=#232 id=232 data-nosnippet>232</a>    /// unknown email, awaiting the user's create-or-link decision. Set by
-<a href=#233 id=233 data-nosnippet>233</a>    /// [`magic_login_wait`](Self::magic_login_wait) /
-<a href=#234 id=234 data-nosnippet>234</a>    /// [`magic_login_code`](Self::magic_login_code) on `Unknown`; consumed by
-<a href=#235 id=235 data-nosnippet>235</a>    /// [`magic_register`](Self::magic_register).
-<a href=#236 id=236 data-nosnippet>236</a>    </span>pending_magic_link: Mutex&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt;,
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="doccomment">/// A pending email magic-link login (the bound loopback listener), if the
-<a href=#238 id=238 data-nosnippet>238</a>    /// UI has begun one. At most one at a time; replaced by a re-begin,
-<a href=#239 id=239 data-nosnippet>239</a>    /// consumed by wait, dropped by cancel.
-<a href=#240 id=240 data-nosnippet>240</a>    </span>magic_login: Mutex&lt;<span class="prelude-ty">Option</span>&lt;hound_browser_auth::MagicLogin&gt;&gt;,
-<a href=#241 id=241 data-nosnippet>241</a>    <span class="doccomment">/// Wakes a blocked [`magic_login_wait`](Self::magic_login_wait) when the UI
-<a href=#242 id=242 data-nosnippet>242</a>    /// cancels (the wait has already consumed the listener by then).
-<a href=#243 id=243 data-nosnippet>243</a>    </span>magic_login_cancelled: tokio::sync::Notify,
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="doccomment">/// The decode→render sink the call hands decoded video to (keyed by peer). The
-<a href=#245 id=245 data-nosnippet>245</a>    /// FRB layer installs one whose body calls `video_render::push_frame(...)`;
-<a href=#246 id=246 data-nosnippet>246</a>    /// until then a [`NullVideoSink`] keeps the call running (audio + state) headless.
-<a href=#247 id=247 data-nosnippet>247</a>    </span>video_sink: Mutex&lt;Arc&lt;<span class="kw">dyn </span>VideoSink&gt;&gt;,
-<a href=#248 id=248 data-nosnippet>248</a>    <span class="doccomment">/// Which capture backend the next [`call_join`](Self::call_join) opens —
-<a href=#249 id=249 data-nosnippet>249</a>    /// real hardware, or the engine's camera-free/mic-free synthetic test
-<a href=#250 id=250 data-nosnippet>250</a>    /// sources (a headless-bot / test seam; see
-<a href=#251 id=251 data-nosnippet>251</a>    /// [`set_capture_source`](Self::set_capture_source)). `synthetic`-feature-only:
-<a href=#252 id=252 data-nosnippet>252</a>    /// a non-synthetic build carries no field, no method, zero cost.
-<a href=#253 id=253 data-nosnippet>253</a>    </span><span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#254 id=254 data-nosnippet>254</a>    </span>capture_source: Mutex&lt;<span class="kw">crate</span>::call::CaptureSource&gt;,
-<a href=#255 id=255 data-nosnippet>255</a>    <span class="doccomment">/// Live "stop talking" switch for the synthetic mic source (see
-<a href=#256 id=256 data-nosnippet>256</a>    /// [`set_source_silent`](Self::set_source_silent)). Built once and cloned into
-<a href=#257 id=257 data-nosnippet>257</a>    /// every join, so toggling it reaches the running call and survives reconnects.
-<a href=#258 id=258 data-nosnippet>258</a>    /// `synthetic`-feature-only.
-<a href=#259 id=259 data-nosnippet>259</a>    </span><span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#260 id=260 data-nosnippet>260</a>    </span>synthetic_silence: <span class="kw">crate</span>::call::SyntheticSilence,
-<a href=#261 id=261 data-nosnippet>261</a>}
-<a href=#262 id=262 data-nosnippet>262</a>
-<a href=#263 id=263 data-nosnippet>263</a><span class="kw">impl </span>HoundClient {
-<a href=#264 id=264 data-nosnippet>264</a>    <span class="doccomment">/// Build a client bound to `base_url`, persisting tokens through `store`. Does
-<a href=#265 id=265 data-nosnippet>265</a>    /// not touch the network — call [`restore`](Self::restore) or a login command.
-<a href=#266 id=266 data-nosnippet>266</a>    /// `steam_app_id` opts into Steamworks detection (Steam-store builds only);
-<a href=#267 id=267 data-nosnippet>267</a>    /// init failure just means "not launched through Steam".
-<a href=#268 id=268 data-nosnippet>268</a>    </span><span class="kw">pub fn </span>new(
-<a href=#269 id=269 data-nosnippet>269</a>        base_url: <span class="kw-2">&amp;</span>str,
-<a href=#270 id=270 data-nosnippet>270</a>        store: Arc&lt;<span class="kw">dyn </span>SessionStore&gt;,
-<a href=#271 id=271 data-nosnippet>271</a>        steam_app_id: <span class="prelude-ty">Option</span>&lt;u32&gt;,
-<a href=#272 id=272 data-nosnippet>272</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;<span class="self">Self</span>&gt;&gt; {
-<a href=#273 id=273 data-nosnippet>273</a>        <span class="self">Self</span>::with_steam(base_url, store, steam_app_id.and_then(SteamHandle::init))
-<a href=#274 id=274 data-nosnippet>274</a>    }
-<a href=#275 id=275 data-nosnippet>275</a>
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="doccomment">/// [`new`](Self::new) with the Steamworks handshake taken off the caller's
-<a href=#277 id=277 data-nosnippet>277</a>    /// thread and time-boxed to [`STEAM_INIT_BOUND`] — the constructor a UI host
-<a href=#278 id=278 data-nosnippet>278</a>    /// must use.
-<a href=#279 id=279 data-nosnippet>279</a>    ///
-<a href=#280 id=280 data-nosnippet>280</a>    /// `steamworks::Client::init_app` is a *blocking* IPC handshake with the local
-<a href=#281 id=281 data-nosnippet>281</a>    /// Steam process and carries no deadline of its own: on a cold machine where
-<a href=#282 id=282 data-nosnippet>282</a>    /// Steam is still booting it holds for as long as Steam takes. This runs before
-<a href=#283 id=283 data-nosnippet>283</a>    /// the app's first frame, so that is a black screen rather than a slow launch
-<a href=#284 id=284 data-nosnippet>284</a>    /// (which is exactly how it presented — a bootstrap watchdog firing in
-<a href=#285 id=285 data-nosnippet>285</a>    /// `init_app` with no frame ever rendered).
-<a href=#286 id=286 data-nosnippet>286</a>    ///
-<a href=#287 id=287 data-nosnippet>287</a>    /// A timed-out init is ABANDONED, not cancelled — the SDK call has no cancel —
-<a href=#288 id=288 data-nosnippet>288</a>    /// so the blocking thread may still finish and immediately drop its handle. The
-<a href=#289 id=289 data-nosnippet>289</a>    /// process then simply runs without Steam: `steam_available` is false, the
-<a href=#290 id=290 data-nosnippet>290</a>    /// silent sign-in is skipped, and the login screen stands.
-<a href=#291 id=291 data-nosnippet>291</a>    </span><span class="kw">pub async fn </span>new_bounded(
-<a href=#292 id=292 data-nosnippet>292</a>        base_url: <span class="kw-2">&amp;</span>str,
-<a href=#293 id=293 data-nosnippet>293</a>        store: Arc&lt;<span class="kw">dyn </span>SessionStore&gt;,
-<a href=#294 id=294 data-nosnippet>294</a>        steam_app_id: <span class="prelude-ty">Option</span>&lt;u32&gt;,
-<a href=#295 id=295 data-nosnippet>295</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;<span class="self">Self</span>&gt;&gt; {
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="self">Self</span>::with_steam(base_url, store, bounded_steam_init(steam_app_id).<span class="kw">await</span>)
-<a href=#297 id=297 data-nosnippet>297</a>    }
-<a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a>    <span class="doccomment">/// The common constructor body: everything here is cheap and non-blocking, so
-<a href=#300 id=300 data-nosnippet>300</a>    /// the two public constructors differ only in how they obtained `steam`.
-<a href=#301 id=301 data-nosnippet>301</a>    </span><span class="kw">fn </span>with_steam(
-<a href=#302 id=302 data-nosnippet>302</a>        base_url: <span class="kw-2">&amp;</span>str,
-<a href=#303 id=303 data-nosnippet>303</a>        store: Arc&lt;<span class="kw">dyn </span>SessionStore&gt;,
-<a href=#304 id=304 data-nosnippet>304</a>        steam: <span class="prelude-ty">Option</span>&lt;SteamHandle&gt;,
-<a href=#305 id=305 data-nosnippet>305</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;<span class="self">Self</span>&gt;&gt; {
-<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">let </span>rest = Arc::new(RestClient::new(base_url)<span class="question-mark">?</span>);
-<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">let </span>session = Session::new(rest.clone(), store);
-<a href=#308 id=308 data-nosnippet>308</a>        <span class="prelude-val">Ok</span>(Arc::new(<span class="self">Self </span>{
-<a href=#309 id=309 data-nosnippet>309</a>            rest,
-<a href=#310 id=310 data-nosnippet>310</a>            base_url: base_url.to_owned(),
-<a href=#311 id=311 data-nosnippet>311</a>            session,
-<a href=#312 id=312 data-nosnippet>312</a>            state: AppState::new(),
-<a href=#313 id=313 data-nosnippet>313</a>            realtime: Mutex::new(<span class="prelude-val">None</span>),
-<a href=#314 id=314 data-nosnippet>314</a>            call: Mutex::new(<span class="prelude-val">None</span>),
-<a href=#315 id=315 data-nosnippet>315</a>            mic_monitor: Mutex::new(<span class="prelude-val">None</span>),
-<a href=#316 id=316 data-nosnippet>316</a>            steam,
-<a href=#317 id=317 data-nosnippet>317</a>            pending_steam_link: Mutex::new(<span class="prelude-val">None</span>),
-<a href=#318 id=318 data-nosnippet>318</a>            browser_login: Mutex::new(<span class="prelude-val">None</span>),
-<a href=#319 id=319 data-nosnippet>319</a>            browser_login_cancelled: tokio::sync::Notify::new(),
-<a href=#320 id=320 data-nosnippet>320</a>            pending_magic_link: Mutex::new(<span class="prelude-val">None</span>),
-<a href=#321 id=321 data-nosnippet>321</a>            magic_login: Mutex::new(<span class="prelude-val">None</span>),
-<a href=#322 id=322 data-nosnippet>322</a>            magic_login_cancelled: tokio::sync::Notify::new(),
-<a href=#323 id=323 data-nosnippet>323</a>            video_sink: Mutex::new(Arc::new(NullVideoSink)),
-<a href=#324 id=324 data-nosnippet>324</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#325 id=325 data-nosnippet>325</a>            </span>capture_source: Mutex::new(<span class="kw">crate</span>::call::CaptureSource::default()),
-<a href=#326 id=326 data-nosnippet>326</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#327 id=327 data-nosnippet>327</a>            </span>synthetic_silence: <span class="kw">crate</span>::call::SyntheticSilence::default(),
-<a href=#328 id=328 data-nosnippet>328</a>        }))
-<a href=#329 id=329 data-nosnippet>329</a>    }
-<a href=#330 id=330 data-nosnippet>330</a>
-<a href=#331 id=331 data-nosnippet>331</a>    <span class="doccomment">/// Install the decode→render video sink the call orchestration feeds decoded
-<a href=#332 id=332 data-nosnippet>332</a>    /// frames to (keyed `"self"` / `"cam:{peer}"` / `"screen:{peer}"`). The FRB
-<a href=#333 id=333 data-nosnippet>333</a>    /// layer calls this once at startup with a sink that forwards to
-<a href=#334 id=334 data-nosnippet>334</a>    /// `video_render::push_frame`. Takes effect on the next [`call_join`](Self::call_join).
-<a href=#335 id=335 data-nosnippet>335</a>    </span><span class="kw">pub async fn </span>set_video_sink(<span class="kw-2">&amp;</span><span class="self">self</span>, sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;) {
-<a href=#336 id=336 data-nosnippet>336</a>        <span class="kw-2">*</span><span class="self">self</span>.video_sink.lock().<span class="kw">await </span>= sink;
-<a href=#337 id=337 data-nosnippet>337</a>    }
-<a href=#338 id=338 data-nosnippet>338</a>
-<a href=#339 id=339 data-nosnippet>339</a>    <span class="doccomment">/// Select the capture backend the next [`call_join`](Self::call_join) opens:
-<a href=#340 id=340 data-nosnippet>340</a>    /// real hardware ([`CaptureSource::Default`](crate::call::CaptureSource::Default))
-<a href=#341 id=341 data-nosnippet>341</a>    /// or the engine's camera-free/mic-free synthetic test sources
-<a href=#342 id=342 data-nosnippet>342</a>    /// ([`CaptureSource::Synthetic`](crate::call::CaptureSource::Synthetic)) — for a
-<a href=#343 id=343 data-nosnippet>343</a>    /// headless client (a bot) with no devices. Call before `call_join`; takes
-<a href=#344 id=344 data-nosnippet>344</a>    /// effect on that (and every subsequent) join. `synthetic`-feature-only.
-<a href=#345 id=345 data-nosnippet>345</a>    </span><span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#346 id=346 data-nosnippet>346</a>    </span><span class="kw">pub async fn </span>set_capture_source(<span class="kw-2">&amp;</span><span class="self">self</span>, source: <span class="kw">crate</span>::call::CaptureSource) {
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw-2">*</span><span class="self">self</span>.capture_source.lock().<span class="kw">await </span>= source;
-<a href=#348 id=348 data-nosnippet>348</a>    }
-<a href=#349 id=349 data-nosnippet>349</a>
-<a href=#350 id=350 data-nosnippet>350</a>    <span class="doccomment">/// Make the synthetic mic source emit digital SILENCE (or resume its speech-like
-<a href=#351 id=351 data-nosnippet>351</a>    /// signal). Live — it takes effect on the next captured frame of an in-progress
-<a href=#352 id=352 data-nosnippet>352</a>    /// call, and it survives reconnects.
-<a href=#353 id=353 data-nosnippet>353</a>    ///
-<a href=#354 id=354 data-nosnippet>354</a>    /// The seam a scenario needs to exercise the silence path end to end: the
-<a href=#355 id=355 data-nosnippet>355</a>    /// synthetic source is VAD-active by design, so nothing downstream (Opus DTX, the
-<a href=#356 id=356 data-nosnippet>356</a>    /// publisher's silence suppression) can otherwise engage on a headless client.
-<a href=#357 id=357 data-nosnippet>357</a>    /// This injects the real article — bit-exact zeros — rather than muting, so the
-<a href=#358 id=358 data-nosnippet>358</a>    /// whole chain runs for real. No-op unless the capture source is synthetic;
-<a href=#359 id=359 data-nosnippet>359</a>    /// `synthetic`-feature-only.
-<a href=#360 id=360 data-nosnippet>360</a>    </span><span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
-<a href=#361 id=361 data-nosnippet>361</a>    </span><span class="kw">pub fn </span>set_source_silent(<span class="kw-2">&amp;</span><span class="self">self</span>, silent: bool) {
-<a href=#362 id=362 data-nosnippet>362</a>        <span class="self">self</span>.synthetic_silence.set(silent);
-<a href=#363 id=363 data-nosnippet>363</a>    }
-<a href=#364 id=364 data-nosnippet>364</a>
-<a href=#365 id=365 data-nosnippet>365</a>    <span class="comment">// ─── Observable getters ──────────────────────────────────────────────────────
-<a href=#366 id=366 data-nosnippet>366</a>
-<a href=#367 id=367 data-nosnippet>367</a>    </span><span class="doccomment">/// Auth snapshot stream (signed-out ⇄ signed-in).
-<a href=#368 id=368 data-nosnippet>368</a>    </span><span class="kw">pub fn </span>watch_auth(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; watch::Receiver&lt;AuthState&gt; {
-<a href=#369 id=369 data-nosnippet>369</a>        <span class="self">self</span>.state.auth.subscribe()
-<a href=#370 id=370 data-nosnippet>370</a>    }
-<a href=#371 id=371 data-nosnippet>371</a>
-<a href=#372 id=372 data-nosnippet>372</a>    <span class="doccomment">/// Community → spaces tree stream (the sidebar).
-<a href=#373 id=373 data-nosnippet>373</a>    </span><span class="kw">pub fn </span>watch_community_tree(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; watch::Receiver&lt;CommunityTree&gt; {
-<a href=#374 id=374 data-nosnippet>374</a>        <span class="self">self</span>.state.community_tree.subscribe()
-<a href=#375 id=375 data-nosnippet>375</a>    }
-<a href=#376 id=376 data-nosnippet>376</a>
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="doccomment">/// Display-roster stream (names/avatars the UI joins messages + peers against).
-<a href=#378 id=378 data-nosnippet>378</a>    </span><span class="kw">pub fn </span>watch_roster(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; watch::Receiver&lt;RosterView&gt; {
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="self">self</span>.state.roster.subscribe()
-<a href=#380 id=380 data-nosnippet>380</a>    }
-<a href=#381 id=381 data-nosnippet>381</a>
-<a href=#382 id=382 data-nosnippet>382</a>    <span class="doccomment">/// Realtime-plane liveness: `true` between a `Welcome` and the transport
-<a href=#383 id=383 data-nosnippet>383</a>    /// dying. Purely observational — the plane's supervisor reconnects on its
-<a href=#384 id=384 data-nosnippet>384</a>    /// own, so a `false` here needs no reaction from a caller (a UI may show a
-<a href=#385 id=385 data-nosnippet>385</a>    /// "reconnecting" hint; a test may await a live plane before asserting on
-<a href=#386 id=386 data-nosnippet>386</a>    /// pushed events).
-<a href=#387 id=387 data-nosnippet>387</a>    </span><span class="kw">pub fn </span>watch_realtime_connected(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; watch::Receiver&lt;bool&gt; {
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="self">self</span>.state.realtime_connected.subscribe()
-<a href=#389 id=389 data-nosnippet>389</a>    }
-<a href=#390 id=390 data-nosnippet>390</a>
-<a href=#391 id=391 data-nosnippet>391</a>    <span class="doccomment">/// Per-space message-list stream. Creates the channel on first use so a UI may
-<a href=#392 id=392 data-nosnippet>392</a>    /// subscribe before (or without) calling [`open_space`](Self::open_space); the
-<a href=#393 id=393 data-nosnippet>393</a>    /// list is empty until history is loaded / events arrive.
-<a href=#394 id=394 data-nosnippet>394</a>    </span><span class="kw">pub async fn </span>watch_messages(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid) -&gt; watch::Receiver&lt;MessageList&gt; {
-<a href=#395 id=395 data-nosnippet>395</a>        <span class="self">self</span>.message_sender(space_id).<span class="kw">await</span>.subscribe()
-<a href=#396 id=396 data-nosnippet>396</a>    }
-<a href=#397 id=397 data-nosnippet>397</a>
-<a href=#398 id=398 data-nosnippet>398</a>    <span class="doccomment">/// Get-or-create the `watch` sender for a space's message list.
-<a href=#399 id=399 data-nosnippet>399</a>    </span><span class="kw">async fn </span>message_sender(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid) -&gt; watch::Sender&lt;MessageList&gt; {
-<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">let </span><span class="kw-2">mut </span>map = <span class="self">self</span>.state.messages.lock().<span class="kw">await</span>;
-<a href=#401 id=401 data-nosnippet>401</a>        map.entry(space_id)
-<a href=#402 id=402 data-nosnippet>402</a>            .or_insert_with(|| watch::channel(MessageList::new()).<span class="number">0</span>)
-<a href=#403 id=403 data-nosnippet>403</a>            .clone()
-<a href=#404 id=404 data-nosnippet>404</a>    }
-<a href=#405 id=405 data-nosnippet>405</a>
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="comment">// ─── Uploads ─────────────────────────────────────────────────────────────────
-<a href=#407 id=407 data-nosnippet>407</a>
-<a href=#408 id=408 data-nosnippet>408</a>    </span><span class="doccomment">/// The media types this deployment accepts for an avatar / attachment upload,
-<a href=#409 id=409 data-nosnippet>409</a>    /// asked of the server rather than assumed (see
-<a href=#410 id=410 data-nosnippet>410</a>    /// [`RestClient::upload_accept_post`] for why, and for what an empty list means).
-<a href=#411 id=411 data-nosnippet>411</a>    </span><span class="kw">pub async fn </span>supported_upload_mime_types(
-<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#413 id=413 data-nosnippet>413</a>        purpose: <span class="kw">crate</span>::rest::UploadPurpose,
-<a href=#414 id=414 data-nosnippet>414</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;mime::Mime&gt;&gt; {
-<a href=#415 id=415 data-nosnippet>415</a>        <span class="self">self</span>.rest.upload_accept_post(purpose).<span class="kw">await
-<a href=#416 id=416 data-nosnippet>416</a>    </span>}
-<a href=#417 id=417 data-nosnippet>417</a>
-<a href=#418 id=418 data-nosnippet>418</a>    <span class="comment">// ─── Data commands ───────────────────────────────────────────────────────────
-<a href=#419 id=419 data-nosnippet>419</a>
-<a href=#420 id=420 data-nosnippet>420</a>    </span><span class="doccomment">/// Load the signed-in user's communities and their spaces, seeding the
-<a href=#421 id=421 data-nosnippet>421</a>    /// community-tree snapshot. Idempotent (re-run on reconnect to re-seed).
-<a href=#422 id=422 data-nosnippet>422</a>    </span><span class="kw">pub async fn </span>load_communities(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">let </span>page = <span class="self">self</span>.rest.list_communities(<span class="number">0</span>, <span class="number">100</span>).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#424 id=424 data-nosnippet>424</a>        <span class="kw">let </span><span class="kw-2">mut </span>tree = <span class="self">self</span>.state.community_tree.borrow().clone();
-<a href=#425 id=425 data-nosnippet>425</a>        tree.apply_communities(page.items.clone());
-<a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">for </span>community <span class="kw">in </span><span class="kw-2">&amp;</span>page.items {
-<a href=#427 id=427 data-nosnippet>427</a>            <span class="kw">let </span>spaces = <span class="self">self</span>.rest.list_spaces(community.id, <span class="number">0</span>, <span class="number">100</span>).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#428 id=428 data-nosnippet>428</a>            tree.set_spaces(community.id, spaces.items);
-<a href=#429 id=429 data-nosnippet>429</a>        }
-<a href=#430 id=430 data-nosnippet>430</a>        <span class="comment">// `send_replace`: see the comment in `logout` — a caller that hasn't
-<a href=#431 id=431 data-nosnippet>431</a>        // subscribed to `watch_community_tree()` yet (e.g. a headless client that
-<a href=#432 id=432 data-nosnippet>432</a>        // calls it only after sign-in, like a bot) must still see this load, not a
-<a href=#433 id=433 data-nosnippet>433</a>        // silently-dropped no-op. Was a plain `send`; this is the exact bug that
-<a href=#434 id=434 data-nosnippet>434</a>        // made a freshly-registered headless caller read back zero communities
-<a href=#435 id=435 data-nosnippet>435</a>        // despite `list_communities` returning the just-created one.
-<a href=#436 id=436 data-nosnippet>436</a>        </span><span class="self">self</span>.state.community_tree.send_replace(tree);
-<a href=#437 id=437 data-nosnippet>437</a>        <span class="prelude-val">Ok</span>(())
-<a href=#438 id=438 data-nosnippet>438</a>    }
-<a href=#439 id=439 data-nosnippet>439</a>
-<a href=#440 id=440 data-nosnippet>440</a>    <span class="doccomment">/// Open a space: load its message history (seeding the per-space `MessageList`
-<a href=#441 id=441 data-nosnippet>441</a>    /// watch and merging the authors into the roster), then subscribe to its
-<a href=#442 id=442 data-nosnippet>442</a>    /// realtime room so subsequent `message:*` events flow into the same channel.
-<a href=#443 id=443 data-nosnippet>443</a>    ///
-<a href=#444 id=444 data-nosnippet>444</a>    /// Returning means **subscribed**, not merely "subscribe requested": the
-<a href=#445 id=445 data-nosnippet>445</a>    /// subscribe is awaited to the server's confirmation (see
-<a href=#446 id=446 data-nosnippet>446</a>    /// [`RealtimeClient::subscribe_space`], which bounds and never fails on
-<a href=#447 id=447 data-nosnippet>447</a>    /// it). A caller may therefore act on the space — send into it, expect its
-<a href=#448 id=448 data-nosnippet>448</a>    /// traffic — knowing events are already being delivered here.
-<a href=#449 id=449 data-nosnippet>449</a>    ///
-<a href=#450 id=450 data-nosnippet>450</a>    /// One window remains and is deliberately out of scope: a message posted
-<a href=#451 id=451 data-nosnippet>451</a>    /// *between* the history page above and that confirmation is in neither, and
-<a href=#452 id=452 data-nosnippet>452</a>    /// nothing re-fetches it. (Its bigger sibling — everything missed while the
-<a href=#453 id=453 data-nosnippet>453</a>    /// plane was DOWN — is repaired by `resync_space`.)
-<a href=#454 id=454 data-nosnippet>454</a>    ///
-<a href=#455 id=455 data-nosnippet>455</a>    /// Re-opening a space that is showing a detached around-window
-<a href=#456 id=456 data-nosnippet>456</a>    /// ([`open_space_around`](Self::open_space_around)) re-attaches it: page 0
-<a href=#457 id=457 data-nosnippet>457</a>    /// *replaces* that window rather than merging into it, because the two are
-<a href=#458 id=458 data-nosnippet>458</a>    /// slices of different parts of the log and merging them would splice a
-<a href=#459 id=459 data-nosnippet>459</a>    /// hole. An ordinary open still merges, as it always did.
-<a href=#460 id=460 data-nosnippet>460</a>    </span><span class="kw">pub async fn </span>open_space(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#461 id=461 data-nosnippet>461</a>        <span class="kw">let </span>page = <span class="self">self</span>.rest.list_messages(space_id, <span class="number">0</span>, MESSAGE_WINDOW).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#462 id=462 data-nosnippet>462</a>
-<a href=#463 id=463 data-nosnippet>463</a>        <span class="kw">let </span>sender = <span class="self">self</span>.message_sender(space_id).<span class="kw">await</span>;
-<a href=#464 id=464 data-nosnippet>464</a>        <span class="kw">if </span><span class="self">self</span>.take_detached(space_id).<span class="kw">await </span>{
-<a href=#465 id=465 data-nosnippet>465</a>            <span class="kw">let </span>window = page.messages.items;
-<a href=#466 id=466 data-nosnippet>466</a>            sender.send_if_modified(|list| list.replace(window));
-<a href=#467 id=467 data-nosnippet>467</a>        } <span class="kw">else </span>{
-<a href=#468 id=468 data-nosnippet>468</a>            sender.send_modify(|list| list.apply_page(page.messages.items));
-<a href=#469 id=469 data-nosnippet>469</a>        }
-<a href=#470 id=470 data-nosnippet>470</a>
-<a href=#471 id=471 data-nosnippet>471</a>        <span class="kw">if </span>!page.members.is_empty() {
-<a href=#472 id=472 data-nosnippet>472</a>            <span class="self">self</span>.state
-<a href=#473 id=473 data-nosnippet>473</a>                .roster
-<a href=#474 id=474 data-nosnippet>474</a>                .send_modify(|roster| roster.apply_members(page.members));
-<a href=#475 id=475 data-nosnippet>475</a>        }
-<a href=#476 id=476 data-nosnippet>476</a>
-<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(rt) = <span class="self">self</span>.realtime.lock().<span class="kw">await</span>.as_ref() {
-<a href=#478 id=478 data-nosnippet>478</a>            rt.subscribe_space(space_id).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#479 id=479 data-nosnippet>479</a>        }
-<a href=#480 id=480 data-nosnippet>480</a>        <span class="prelude-val">Ok</span>(())
-<a href=#481 id=481 data-nosnippet>481</a>    }
-<a href=#482 id=482 data-nosnippet>482</a>
-<a href=#483 id=483 data-nosnippet>483</a>    <span class="doccomment">/// Send a message. The realtime `message:create` echo seeds the list (the
-<a href=#484 id=484 data-nosnippet>484</a>    /// reducer dedupes by id), so we don't optimistically insert here.
-<a href=#485 id=485 data-nosnippet>485</a>    </span><span class="kw">pub async fn </span>send_message(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid, contents: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#486 id=486 data-nosnippet>486</a>        <span class="self">self</span>.rest.post_message(space_id, contents, <span class="kw-2">&amp;</span>[]).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="prelude-val">Ok</span>(())
-<a href=#488 id=488 data-nosnippet>488</a>    }
-<a href=#489 id=489 data-nosnippet>489</a>
-<a href=#490 id=490 data-nosnippet>490</a>    <span class="doccomment">/// Edit a message. The realtime `message:update` echo applies the change.
-<a href=#491 id=491 data-nosnippet>491</a>    </span><span class="kw">pub async fn </span>edit_message(
-<a href=#492 id=492 data-nosnippet>492</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#493 id=493 data-nosnippet>493</a>        space_id: Uuid,
-<a href=#494 id=494 data-nosnippet>494</a>        message_id: Uuid,
-<a href=#495 id=495 data-nosnippet>495</a>        contents: <span class="kw-2">&amp;</span>str,
-<a href=#496 id=496 data-nosnippet>496</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#497 id=497 data-nosnippet>497</a>        <span class="self">self</span>.rest
-<a href=#498 id=498 data-nosnippet>498</a>            .edit_message(space_id, message_id, contents)
-<a href=#499 id=499 data-nosnippet>499</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#500 id=500 data-nosnippet>500</a>        <span class="prelude-val">Ok</span>(())
-<a href=#501 id=501 data-nosnippet>501</a>    }
-<a href=#502 id=502 data-nosnippet>502</a>
-<a href=#503 id=503 data-nosnippet>503</a>    <span class="doccomment">/// Fetch a single message by id — e.g. resolving a `&lt;hound:message/…&gt;`
-<a href=#504 id=504 data-nosnippet>504</a>    /// reference preview. Plain request/response, unlike [`Self::watch_messages`]:
-<a href=#505 id=505 data-nosnippet>505</a>    /// no snapshot, no caching, one round trip per call.
-<a href=#506 id=506 data-nosnippet>506</a>    </span><span class="kw">pub async fn </span>fetch_message(<span class="kw-2">&amp;</span><span class="self">self</span>, message_id: Uuid) -&gt; <span class="prelude-ty">Result</span>&lt;Message&gt; {
-<a href=#507 id=507 data-nosnippet>507</a>        <span class="self">self</span>.rest.get_message(message_id).<span class="kw">await
-<a href=#508 id=508 data-nosnippet>508</a>    </span>}
-<a href=#509 id=509 data-nosnippet>509</a>
-<a href=#510 id=510 data-nosnippet>510</a>    <span class="doccomment">/// Unfurl `url` through the server's embed pipeline and return the full
-<a href=#511 id=511 data-nosnippet>511</a>    /// trace — every HTTP hop, every metadata key seen, and what the precedence
-<a href=#512 id=512 data-nosnippet>512</a>    /// rules made of them.
-<a href=#513 id=513 data-nosnippet>513</a>    ///
-<a href=#514 id=514 data-nosnippet>514</a>    /// The embed debugger in developer settings. Nothing here fetches anything
-<a href=#515 id=515 data-nosnippet>515</a>    /// locally: the client has no business making outbound requests to a URL
-<a href=#516 id=516 data-nosnippet>516</a>    /// somebody typed, and the point of the tool is to see what *the server*
-<a href=#517 id=517 data-nosnippet>517</a>    /// does, which is what a message would get.
-<a href=#518 id=518 data-nosnippet>518</a>    </span><span class="kw">pub async fn </span>debug_embed(<span class="kw-2">&amp;</span><span class="self">self</span>, url: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;hound_types::EmbedDebugReport&gt; {
-<a href=#519 id=519 data-nosnippet>519</a>        <span class="self">self</span>.rest.debug_embed(url).<span class="kw">await
-<a href=#520 id=520 data-nosnippet>520</a>    </span>}
-<a href=#521 id=521 data-nosnippet>521</a>}
+<a href=#137 id=137 data-nosnippet>137</a>    /// Armed as a set by the reconnect itself and drained one space at a time by
+<a href=#138 id=138 data-nosnippet>138</a>    /// that space's `Subscribed` confirmation (or by the grace timer). Being a
+<a href=#139 id=139 data-nosnippet>139</a>    /// set is what makes the resync fire exactly once per space per reconnect,
+<a href=#140 id=140 data-nosnippet>140</a>    /// however many confirmations, timers and reconnects overlap.
+<a href=#141 id=141 data-nosnippet>141</a>    </span>resync_pending: Mutex&lt;HashSet&lt;Uuid&gt;&gt;,
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="doccomment">/// Serializes post-reconnect history re-fetches.
+<a href=#143 id=143 data-nosnippet>143</a>    ///
+<a href=#144 id=144 data-nosnippet>144</a>    /// Every space is re-confirmed at once after a `Welcome`, so without this a
+<a href=#145 id=145 data-nosnippet>145</a>    /// client that has opened a dozen spaces answers one reconnect with a dozen
+<a href=#146 id=146 data-nosnippet>146</a>    /// simultaneous history requests — and every client on a backend that just
+<a href=#147 id=147 data-nosnippet>147</a>    /// restarted reconnects at once. One permit turns that into a queue: the
+<a href=#148 id=148 data-nosnippet>148</a>    /// space the user is looking at is repaired just as fast, and the rest
+<a href=#149 id=149 data-nosnippet>149</a>    /// trickle.
+<a href=#150 id=150 data-nosnippet>150</a>    </span>resync_gate: Semaphore,
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="doccomment">/// Call-state observables, driven by the live [`CallSession`]:
+<a href=#152 id=152 data-nosnippet>152</a>    /// the roster/track view (from the control plane's `SessionView`), the
+<a href=#153 id=153 data-nosnippet>153</a>    /// connection state, and the mic + per-peer speaking levels.
+<a href=#154 id=154 data-nosnippet>154</a>    </span>call_view: watch::Sender&lt;CallView&gt;,
+<a href=#155 id=155 data-nosnippet>155</a>    connection: watch::Sender&lt;ConnectionState&gt;,
+<a href=#156 id=156 data-nosnippet>156</a>    levels: watch::Sender&lt;LevelsView&gt;,
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="doccomment">/// 1 Hz RTC debug-stats snapshot (the data behind the debug panel + per-tile
+<a href=#158 id=158 data-nosnippet>158</a>    /// overlay). Driven by the call's `spawn_emitter`; default/empty between calls.
+<a href=#159 id=159 data-nosnippet>159</a>    </span>stats: watch::Sender&lt;<span class="kw">crate</span>::stats::StatsSnapshot&gt;,
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="doccomment">/// Whether the realtime plane is currently welcomed. Latest-wins like every
+<a href=#161 id=161 data-nosnippet>161</a>    /// other snapshot here; the supervisor heals an outage on its own, so this is
+<a href=#162 id=162 data-nosnippet>162</a>    /// a status indicator (and a test seam), never a trigger for the app to act.
+<a href=#163 id=163 data-nosnippet>163</a>    </span>realtime_connected: watch::Sender&lt;bool&gt;,
+<a href=#164 id=164 data-nosnippet>164</a>    <span class="doccomment">/// "Refetch the roles / the member page of this community" — the one
+<a href=#165 id=165 data-nosnippet>165</a>    /// observable here that is a BROADCAST rather than a `watch`.
+<a href=#166 id=166 data-nosnippet>166</a>    ///
+<a href=#167 id=167 data-nosnippet>167</a>    /// Roles and member pages are fetched on demand (paginated, rarely open), so
+<a href=#168 id=168 data-nosnippet>168</a>    /// there is no snapshot to republish; what a consumer needs is the *edge*,
+<a href=#169 id=169 data-nosnippet>169</a>    /// and a latest-wins channel cannot deliver two edges to a subscriber that
+<a href=#170 id=170 data-nosnippet>170</a>    /// blinked. Bounded: a subscriber too slow to keep up misses signals rather
+<a href=#171 id=171 data-nosnippet>171</a>    /// than growing the queue, and missing one only costs a stale page until the
+<a href=#172 id=172 data-nosnippet>172</a>    /// next — never memory. Nothing awaits a receiver, so a send with no
+<a href=#173 id=173 data-nosnippet>173</a>    /// subscribers is the expected quiet case.
+<a href=#174 id=174 data-nosnippet>174</a>    </span>community_signals: tokio::sync::broadcast::Sender&lt;<span class="kw">crate</span>::model::CommunitySignal&gt;,
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Stamps every [`CommunitySignal`](crate::model::CommunitySignal) with a
+<a href=#176 id=176 data-nosnippet>176</a>    /// number no other signal has. Two identical edits are then two distinct
+<a href=#177 id=177 data-nosnippet>177</a>    /// values, which is what a latest-wins consumer needs to see the second one
+<a href=#178 id=178 data-nosnippet>178</a>    /// at all — see the type's docs.
+<a href=#179 id=179 data-nosnippet>179</a>    </span>signal_seq: std::sync::atomic::AtomicU64,
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="doccomment">/// Which realtime plane the reducer task is allowed to speak for.
+<a href=#181 id=181 data-nosnippet>181</a>    ///
+<a href=#182 id=182 data-nosnippet>182</a>    /// `HoundClient::connect` stamps a fresh generation and the task it spawns
+<a href=#183 id=183 data-nosnippet>183</a>    /// carries it. A plane is replaced on every sign-in (and on a re-restore),
+<a href=#184 id=184 data-nosnippet>184</a>    /// and the OLD task can still hold queued events — including an
+<a href=#185 id=185 data-nosnippet>185</a>    /// `AuthExpired` from the credential that was just replaced, which would
+<a href=#186 id=186 data-nosnippet>186</a>    /// sign the user straight back out of the session they just established, or
+<a href=#187 id=187 data-nosnippet>187</a>    /// a `Connected` that would flip the new plane's liveness to a lie. Events
+<a href=#188 id=188 data-nosnippet>188</a>    /// stamped with a superseded generation are dropped at apply.
+<a href=#189 id=189 data-nosnippet>189</a>    </span>realtime_epoch: std::sync::atomic::AtomicU64,
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="doccomment">/// Live `peer_id → user_id` map for the current call. Seeded by the call at join
+<a href=#191 id=191 data-nosnippet>191</a>    /// (from the REST voice roster + self) and kept current by the realtime voice
+<a href=#192 id=192 data-nosnippet>192</a>    /// events here; the call's control reader joins it into each `CallView` so tiles
+<a href=#193 id=193 data-nosnippet>193</a>    /// show real identities. Cleared on call join/leave so it never leaks across calls.
+<a href=#194 id=194 data-nosnippet>194</a>    </span>call_identities: PeerIdentities,
+<a href=#195 id=195 data-nosnippet>195</a>}
+<a href=#196 id=196 data-nosnippet>196</a>
+<a href=#197 id=197 data-nosnippet>197</a><span class="kw">impl </span>AppState {
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="self">Self </span>{
+<a href=#200 id=200 data-nosnippet>200</a>            auth: watch::channel(AuthState::SignedOut).<span class="number">0</span>,
+<a href=#201 id=201 data-nosnippet>201</a>            community_tree: watch::channel(CommunityTree::new()).<span class="number">0</span>,
+<a href=#202 id=202 data-nosnippet>202</a>            roster: watch::channel(RosterView::new()).<span class="number">0</span>,
+<a href=#203 id=203 data-nosnippet>203</a>            messages: Mutex::new(HashMap::new()),
+<a href=#204 id=204 data-nosnippet>204</a>            detached: Mutex::new(HashMap::new()),
+<a href=#205 id=205 data-nosnippet>205</a>            resync_pending: Mutex::new(HashSet::new()),
+<a href=#206 id=206 data-nosnippet>206</a>            resync_gate: Semaphore::new(<span class="number">1</span>),
+<a href=#207 id=207 data-nosnippet>207</a>            call_view: watch::channel(CallView::default()).<span class="number">0</span>,
+<a href=#208 id=208 data-nosnippet>208</a>            connection: watch::channel(ConnectionState::default()).<span class="number">0</span>,
+<a href=#209 id=209 data-nosnippet>209</a>            levels: watch::channel(LevelsView::default()).<span class="number">0</span>,
+<a href=#210 id=210 data-nosnippet>210</a>            stats: watch::channel(<span class="kw">crate</span>::stats::StatsSnapshot::default()).<span class="number">0</span>,
+<a href=#211 id=211 data-nosnippet>211</a>            realtime_connected: watch::channel(<span class="bool-val">false</span>).<span class="number">0</span>,
+<a href=#212 id=212 data-nosnippet>212</a>            community_signals: tokio::sync::broadcast::channel(COMMUNITY_SIGNAL_BACKLOG).<span class="number">0</span>,
+<a href=#213 id=213 data-nosnippet>213</a>            signal_seq: std::sync::atomic::AtomicU64::new(<span class="number">0</span>),
+<a href=#214 id=214 data-nosnippet>214</a>            realtime_epoch: std::sync::atomic::AtomicU64::new(<span class="number">0</span>),
+<a href=#215 id=215 data-nosnippet>215</a>            call_identities: PeerIdentities::default(),
+<a href=#216 id=216 data-nosnippet>216</a>        }
+<a href=#217 id=217 data-nosnippet>217</a>    }
+<a href=#218 id=218 data-nosnippet>218</a>}
+<a href=#219 id=219 data-nosnippet>219</a>
+<a href=#220 id=220 data-nosnippet>220</a><span class="doccomment">/// The headless application core. Cheap to share via the returned `Arc&lt;Self&gt;`; every
+<a href=#221 id=221 data-nosnippet>221</a>/// command takes `&amp;self`. Holds the REST client, the session, the observable state,
+<a href=#222 id=222 data-nosnippet>222</a>/// and the live realtime connection (replaced on each (re)connect).
+<a href=#223 id=223 data-nosnippet>223</a></span><span class="kw">pub struct </span>HoundClient {
+<a href=#224 id=224 data-nosnippet>224</a>    rest: Arc&lt;RestClient&gt;,
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="doccomment">/// The base URL (kept so the call orchestration can derive the control WS URL).
+<a href=#226 id=226 data-nosnippet>226</a>    </span>base_url: String,
+<a href=#227 id=227 data-nosnippet>227</a>    session: Session,
+<a href=#228 id=228 data-nosnippet>228</a>    state: AppState,
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="doccomment">/// The live realtime connection, if connected. Swapped on connect; dropped (and
+<a href=#230 id=230 data-nosnippet>230</a>    /// its background task ended) on disconnect/logout.
+<a href=#231 id=231 data-nosnippet>231</a>    </span>realtime: Mutex&lt;<span class="prelude-ty">Option</span>&lt;RealtimeClient&gt;&gt;,
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="doccomment">/// The live voice/video call, if joined. At most one at a time.
+<a href=#233 id=233 data-nosnippet>233</a>    </span>call: Mutex&lt;<span class="prelude-ty">Option</span>&lt;CallSession&gt;&gt;,
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="doccomment">/// The settings screen's mic test, while it is running. Mutually exclusive
+<a href=#235 id=235 data-nosnippet>235</a>    /// with `call` by construction — [`Self::mic_monitor_start`] refuses while a
+<a href=#236 id=236 data-nosnippet>236</a>    /// call holds the input device, and [`Self::call_join`] stops any monitor
+<a href=#237 id=237 data-nosnippet>237</a>    /// before it opens one.
+<a href=#238 id=238 data-nosnippet>238</a>    </span>mic_monitor: Mutex&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw">crate</span>::call::MicMonitor&gt;&gt;,
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="doccomment">/// The Steamworks connection when launched through Steam (`None` otherwise,
+<a href=#240 id=240 data-nosnippet>240</a>    /// including all non-Steam builds). Init success *is* the launch detection.
+<a href=#241 id=241 data-nosnippet>241</a>    </span>steam: <span class="prelude-ty">Option</span>&lt;hound_steam::SteamHandle&gt;,
+<a href=#242 id=242 data-nosnippet>242</a>    <span class="doccomment">/// A pending Steam `link_token`: proof of Steam-account ownership awaiting
+<a href=#243 id=243 data-nosnippet>243</a>    /// the user's create-or-link decision (or a settings link). Set when a
+<a href=#244 id=244 data-nosnippet>244</a>    /// Steam sign-in meets an unknown Steam ID; consumed by
+<a href=#245 id=245 data-nosnippet>245</a>    /// [`steam_register`](Self::steam_register) /
+<a href=#246 id=246 data-nosnippet>246</a>    /// [`link_steam_pending`](Self::link_steam_pending), auto-consumed by a
+<a href=#247 id=247 data-nosnippet>247</a>    /// successful sign-in, cleared by [`steam_dismiss`](Self::steam_dismiss).
+<a href=#248 id=248 data-nosnippet>248</a>    </span>pending_steam_link: Mutex&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt;,
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="doccomment">/// A pending browser-deferred login (the bound loopback listener), if the UI
+<a href=#250 id=250 data-nosnippet>250</a>    /// has begun one. At most one at a time; replaced by a re-begin, consumed by
+<a href=#251 id=251 data-nosnippet>251</a>    /// wait, dropped by cancel.
+<a href=#252 id=252 data-nosnippet>252</a>    </span>browser_login: Mutex&lt;<span class="prelude-ty">Option</span>&lt;hound_browser_auth::BrowserLogin&gt;&gt;,
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="doccomment">/// Wakes a blocked [`browser_login_wait`](Self::browser_login_wait) when the
+<a href=#254 id=254 data-nosnippet>254</a>    /// UI cancels (the wait has already consumed the listener by then).
+<a href=#255 id=255 data-nosnippet>255</a>    </span>browser_login_cancelled: tokio::sync::Notify,
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// A pending email `link_token`: proof that a magic-link sign-in met an
+<a href=#257 id=257 data-nosnippet>257</a>    /// unknown email, awaiting the user's create-or-link decision. Set by
+<a href=#258 id=258 data-nosnippet>258</a>    /// [`magic_login_wait`](Self::magic_login_wait) /
+<a href=#259 id=259 data-nosnippet>259</a>    /// [`magic_login_code`](Self::magic_login_code) on `Unknown`; consumed by
+<a href=#260 id=260 data-nosnippet>260</a>    /// [`magic_register`](Self::magic_register).
+<a href=#261 id=261 data-nosnippet>261</a>    </span>pending_magic_link: Mutex&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt;,
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="doccomment">/// A pending email magic-link login (the bound loopback listener), if the
+<a href=#263 id=263 data-nosnippet>263</a>    /// UI has begun one. At most one at a time; replaced by a re-begin,
+<a href=#264 id=264 data-nosnippet>264</a>    /// consumed by wait, dropped by cancel.
+<a href=#265 id=265 data-nosnippet>265</a>    </span>magic_login: Mutex&lt;<span class="prelude-ty">Option</span>&lt;hound_browser_auth::MagicLogin&gt;&gt;,
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="doccomment">/// Wakes a blocked [`magic_login_wait`](Self::magic_login_wait) when the UI
+<a href=#267 id=267 data-nosnippet>267</a>    /// cancels (the wait has already consumed the listener by then).
+<a href=#268 id=268 data-nosnippet>268</a>    </span>magic_login_cancelled: tokio::sync::Notify,
+<a href=#269 id=269 data-nosnippet>269</a>    <span class="doccomment">/// The decode→render sink the call hands decoded video to (keyed by peer). The
+<a href=#270 id=270 data-nosnippet>270</a>    /// FRB layer installs one whose body calls `video_render::push_frame(...)`;
+<a href=#271 id=271 data-nosnippet>271</a>    /// until then a [`NullVideoSink`] keeps the call running (audio + state) headless.
+<a href=#272 id=272 data-nosnippet>272</a>    </span>video_sink: Mutex&lt;Arc&lt;<span class="kw">dyn </span>VideoSink&gt;&gt;,
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="doccomment">/// Which capture backend the next [`call_join`](Self::call_join) opens —
+<a href=#274 id=274 data-nosnippet>274</a>    /// real hardware, or the engine's camera-free/mic-free synthetic test
+<a href=#275 id=275 data-nosnippet>275</a>    /// sources (a headless-bot / test seam; see
+<a href=#276 id=276 data-nosnippet>276</a>    /// [`set_capture_source`](Self::set_capture_source)). `synthetic`-feature-only:
+<a href=#277 id=277 data-nosnippet>277</a>    /// a non-synthetic build carries no field, no method, zero cost.
+<a href=#278 id=278 data-nosnippet>278</a>    </span><span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#279 id=279 data-nosnippet>279</a>    </span>capture_source: Mutex&lt;<span class="kw">crate</span>::call::CaptureSource&gt;,
+<a href=#280 id=280 data-nosnippet>280</a>    <span class="doccomment">/// Live "stop talking" switch for the synthetic mic source (see
+<a href=#281 id=281 data-nosnippet>281</a>    /// [`set_source_silent`](Self::set_source_silent)). Built once and cloned into
+<a href=#282 id=282 data-nosnippet>282</a>    /// every join, so toggling it reaches the running call and survives reconnects.
+<a href=#283 id=283 data-nosnippet>283</a>    /// `synthetic`-feature-only.
+<a href=#284 id=284 data-nosnippet>284</a>    </span><span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#285 id=285 data-nosnippet>285</a>    </span>synthetic_silence: <span class="kw">crate</span>::call::SyntheticSilence,
+<a href=#286 id=286 data-nosnippet>286</a>}
+<a href=#287 id=287 data-nosnippet>287</a>
+<a href=#288 id=288 data-nosnippet>288</a><span class="kw">impl </span>HoundClient {
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="doccomment">/// Build a client bound to `base_url`, persisting tokens through `store`. Does
+<a href=#290 id=290 data-nosnippet>290</a>    /// not touch the network — call [`restore`](Self::restore) or a login command.
+<a href=#291 id=291 data-nosnippet>291</a>    /// `steam_app_id` opts into Steamworks detection (Steam-store builds only);
+<a href=#292 id=292 data-nosnippet>292</a>    /// init failure just means "not launched through Steam".
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">pub fn </span>new(
+<a href=#294 id=294 data-nosnippet>294</a>        base_url: <span class="kw-2">&amp;</span>str,
+<a href=#295 id=295 data-nosnippet>295</a>        store: Arc&lt;<span class="kw">dyn </span>SessionStore&gt;,
+<a href=#296 id=296 data-nosnippet>296</a>        steam_app_id: <span class="prelude-ty">Option</span>&lt;u32&gt;,
+<a href=#297 id=297 data-nosnippet>297</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;<span class="self">Self</span>&gt;&gt; {
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="self">Self</span>::with_steam(base_url, store, steam_app_id.and_then(SteamHandle::init))
+<a href=#299 id=299 data-nosnippet>299</a>    }
+<a href=#300 id=300 data-nosnippet>300</a>
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="doccomment">/// [`new`](Self::new) with the Steamworks handshake taken off the caller's
+<a href=#302 id=302 data-nosnippet>302</a>    /// thread and time-boxed to [`STEAM_INIT_BOUND`] — the constructor a UI host
+<a href=#303 id=303 data-nosnippet>303</a>    /// must use.
+<a href=#304 id=304 data-nosnippet>304</a>    ///
+<a href=#305 id=305 data-nosnippet>305</a>    /// `steamworks::Client::init_app` is a *blocking* IPC handshake with the local
+<a href=#306 id=306 data-nosnippet>306</a>    /// Steam process and carries no deadline of its own: on a cold machine where
+<a href=#307 id=307 data-nosnippet>307</a>    /// Steam is still booting it holds for as long as Steam takes. This runs before
+<a href=#308 id=308 data-nosnippet>308</a>    /// the app's first frame, so that is a black screen rather than a slow launch
+<a href=#309 id=309 data-nosnippet>309</a>    /// (which is exactly how it presented — a bootstrap watchdog firing in
+<a href=#310 id=310 data-nosnippet>310</a>    /// `init_app` with no frame ever rendered).
+<a href=#311 id=311 data-nosnippet>311</a>    ///
+<a href=#312 id=312 data-nosnippet>312</a>    /// A timed-out init is ABANDONED, not cancelled — the SDK call has no cancel —
+<a href=#313 id=313 data-nosnippet>313</a>    /// so the blocking thread may still finish and immediately drop its handle. The
+<a href=#314 id=314 data-nosnippet>314</a>    /// process then simply runs without Steam: `steam_available` is false, the
+<a href=#315 id=315 data-nosnippet>315</a>    /// silent sign-in is skipped, and the login screen stands.
+<a href=#316 id=316 data-nosnippet>316</a>    </span><span class="kw">pub async fn </span>new_bounded(
+<a href=#317 id=317 data-nosnippet>317</a>        base_url: <span class="kw-2">&amp;</span>str,
+<a href=#318 id=318 data-nosnippet>318</a>        store: Arc&lt;<span class="kw">dyn </span>SessionStore&gt;,
+<a href=#319 id=319 data-nosnippet>319</a>        steam_app_id: <span class="prelude-ty">Option</span>&lt;u32&gt;,
+<a href=#320 id=320 data-nosnippet>320</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;<span class="self">Self</span>&gt;&gt; {
+<a href=#321 id=321 data-nosnippet>321</a>        <span class="self">Self</span>::with_steam(base_url, store, bounded_steam_init(steam_app_id).<span class="kw">await</span>)
+<a href=#322 id=322 data-nosnippet>322</a>    }
+<a href=#323 id=323 data-nosnippet>323</a>
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="doccomment">/// The common constructor body: everything here is cheap and non-blocking, so
+<a href=#325 id=325 data-nosnippet>325</a>    /// the two public constructors differ only in how they obtained `steam`.
+<a href=#326 id=326 data-nosnippet>326</a>    </span><span class="kw">fn </span>with_steam(
+<a href=#327 id=327 data-nosnippet>327</a>        base_url: <span class="kw-2">&amp;</span>str,
+<a href=#328 id=328 data-nosnippet>328</a>        store: Arc&lt;<span class="kw">dyn </span>SessionStore&gt;,
+<a href=#329 id=329 data-nosnippet>329</a>        steam: <span class="prelude-ty">Option</span>&lt;SteamHandle&gt;,
+<a href=#330 id=330 data-nosnippet>330</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Arc&lt;<span class="self">Self</span>&gt;&gt; {
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">let </span>rest = Arc::new(RestClient::new(base_url)<span class="question-mark">?</span>);
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw">let </span>session = Session::new(rest.clone(), store);
+<a href=#333 id=333 data-nosnippet>333</a>        <span class="prelude-val">Ok</span>(Arc::new(<span class="self">Self </span>{
+<a href=#334 id=334 data-nosnippet>334</a>            rest,
+<a href=#335 id=335 data-nosnippet>335</a>            base_url: base_url.to_owned(),
+<a href=#336 id=336 data-nosnippet>336</a>            session,
+<a href=#337 id=337 data-nosnippet>337</a>            state: AppState::new(),
+<a href=#338 id=338 data-nosnippet>338</a>            realtime: Mutex::new(<span class="prelude-val">None</span>),
+<a href=#339 id=339 data-nosnippet>339</a>            call: Mutex::new(<span class="prelude-val">None</span>),
+<a href=#340 id=340 data-nosnippet>340</a>            mic_monitor: Mutex::new(<span class="prelude-val">None</span>),
+<a href=#341 id=341 data-nosnippet>341</a>            steam,
+<a href=#342 id=342 data-nosnippet>342</a>            pending_steam_link: Mutex::new(<span class="prelude-val">None</span>),
+<a href=#343 id=343 data-nosnippet>343</a>            browser_login: Mutex::new(<span class="prelude-val">None</span>),
+<a href=#344 id=344 data-nosnippet>344</a>            browser_login_cancelled: tokio::sync::Notify::new(),
+<a href=#345 id=345 data-nosnippet>345</a>            pending_magic_link: Mutex::new(<span class="prelude-val">None</span>),
+<a href=#346 id=346 data-nosnippet>346</a>            magic_login: Mutex::new(<span class="prelude-val">None</span>),
+<a href=#347 id=347 data-nosnippet>347</a>            magic_login_cancelled: tokio::sync::Notify::new(),
+<a href=#348 id=348 data-nosnippet>348</a>            video_sink: Mutex::new(Arc::new(NullVideoSink)),
+<a href=#349 id=349 data-nosnippet>349</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#350 id=350 data-nosnippet>350</a>            </span>capture_source: Mutex::new(<span class="kw">crate</span>::call::CaptureSource::default()),
+<a href=#351 id=351 data-nosnippet>351</a>            <span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#352 id=352 data-nosnippet>352</a>            </span>synthetic_silence: <span class="kw">crate</span>::call::SyntheticSilence::default(),
+<a href=#353 id=353 data-nosnippet>353</a>        }))
+<a href=#354 id=354 data-nosnippet>354</a>    }
+<a href=#355 id=355 data-nosnippet>355</a>
+<a href=#356 id=356 data-nosnippet>356</a>    <span class="doccomment">/// Install the decode→render video sink the call orchestration feeds decoded
+<a href=#357 id=357 data-nosnippet>357</a>    /// frames to (keyed `"self"` / `"cam:{peer}"` / `"screen:{peer}"`). The FRB
+<a href=#358 id=358 data-nosnippet>358</a>    /// layer calls this once at startup with a sink that forwards to
+<a href=#359 id=359 data-nosnippet>359</a>    /// `video_render::push_frame`. Takes effect on the next [`call_join`](Self::call_join).
+<a href=#360 id=360 data-nosnippet>360</a>    </span><span class="kw">pub async fn </span>set_video_sink(<span class="kw-2">&amp;</span><span class="self">self</span>, sink: Arc&lt;<span class="kw">dyn </span>VideoSink&gt;) {
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw-2">*</span><span class="self">self</span>.video_sink.lock().<span class="kw">await </span>= sink;
+<a href=#362 id=362 data-nosnippet>362</a>    }
+<a href=#363 id=363 data-nosnippet>363</a>
+<a href=#364 id=364 data-nosnippet>364</a>    <span class="doccomment">/// Select the capture backend the next [`call_join`](Self::call_join) opens:
+<a href=#365 id=365 data-nosnippet>365</a>    /// real hardware ([`CaptureSource::Default`](crate::call::CaptureSource::Default))
+<a href=#366 id=366 data-nosnippet>366</a>    /// or the engine's camera-free/mic-free synthetic test sources
+<a href=#367 id=367 data-nosnippet>367</a>    /// ([`CaptureSource::Synthetic`](crate::call::CaptureSource::Synthetic)) — for a
+<a href=#368 id=368 data-nosnippet>368</a>    /// headless client (a bot) with no devices. Call before `call_join`; takes
+<a href=#369 id=369 data-nosnippet>369</a>    /// effect on that (and every subsequent) join. `synthetic`-feature-only.
+<a href=#370 id=370 data-nosnippet>370</a>    </span><span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#371 id=371 data-nosnippet>371</a>    </span><span class="kw">pub async fn </span>set_capture_source(<span class="kw-2">&amp;</span><span class="self">self</span>, source: <span class="kw">crate</span>::call::CaptureSource) {
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw-2">*</span><span class="self">self</span>.capture_source.lock().<span class="kw">await </span>= source;
+<a href=#373 id=373 data-nosnippet>373</a>    }
+<a href=#374 id=374 data-nosnippet>374</a>
+<a href=#375 id=375 data-nosnippet>375</a>    <span class="doccomment">/// Make the synthetic mic source emit digital SILENCE (or resume its speech-like
+<a href=#376 id=376 data-nosnippet>376</a>    /// signal). Live — it takes effect on the next captured frame of an in-progress
+<a href=#377 id=377 data-nosnippet>377</a>    /// call, and it survives reconnects.
+<a href=#378 id=378 data-nosnippet>378</a>    ///
+<a href=#379 id=379 data-nosnippet>379</a>    /// The seam a scenario needs to exercise the silence path end to end: the
+<a href=#380 id=380 data-nosnippet>380</a>    /// synthetic source is VAD-active by design, so nothing downstream (Opus DTX, the
+<a href=#381 id=381 data-nosnippet>381</a>    /// publisher's silence suppression) can otherwise engage on a headless client.
+<a href=#382 id=382 data-nosnippet>382</a>    /// This injects the real article — bit-exact zeros — rather than muting, so the
+<a href=#383 id=383 data-nosnippet>383</a>    /// whole chain runs for real. No-op unless the capture source is synthetic;
+<a href=#384 id=384 data-nosnippet>384</a>    /// `synthetic`-feature-only.
+<a href=#385 id=385 data-nosnippet>385</a>    </span><span class="attr">#[cfg(feature = <span class="string">"synthetic"</span>)]
+<a href=#386 id=386 data-nosnippet>386</a>    </span><span class="kw">pub fn </span>set_source_silent(<span class="kw-2">&amp;</span><span class="self">self</span>, silent: bool) {
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="self">self</span>.synthetic_silence.set(silent);
+<a href=#388 id=388 data-nosnippet>388</a>    }
+<a href=#389 id=389 data-nosnippet>389</a>
+<a href=#390 id=390 data-nosnippet>390</a>    <span class="comment">// ─── Observable getters ──────────────────────────────────────────────────────
+<a href=#391 id=391 data-nosnippet>391</a>
+<a href=#392 id=392 data-nosnippet>392</a>    </span><span class="doccomment">/// Auth snapshot stream (signed-out ⇄ signed-in).
+<a href=#393 id=393 data-nosnippet>393</a>    </span><span class="kw">pub fn </span>watch_auth(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; watch::Receiver&lt;AuthState&gt; {
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="self">self</span>.state.auth.subscribe()
+<a href=#395 id=395 data-nosnippet>395</a>    }
+<a href=#396 id=396 data-nosnippet>396</a>
+<a href=#397 id=397 data-nosnippet>397</a>    <span class="doccomment">/// Community → spaces tree stream (the sidebar).
+<a href=#398 id=398 data-nosnippet>398</a>    </span><span class="kw">pub fn </span>watch_community_tree(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; watch::Receiver&lt;CommunityTree&gt; {
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="self">self</span>.state.community_tree.subscribe()
+<a href=#400 id=400 data-nosnippet>400</a>    }
+<a href=#401 id=401 data-nosnippet>401</a>
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="doccomment">/// Display-roster stream (names/avatars the UI joins messages + peers against).
+<a href=#403 id=403 data-nosnippet>403</a>    </span><span class="kw">pub fn </span>watch_roster(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; watch::Receiver&lt;RosterView&gt; {
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="self">self</span>.state.roster.subscribe()
+<a href=#405 id=405 data-nosnippet>405</a>    }
+<a href=#406 id=406 data-nosnippet>406</a>
+<a href=#407 id=407 data-nosnippet>407</a>    <span class="doccomment">/// Realtime-plane liveness: `true` between a `Welcome` and the transport
+<a href=#408 id=408 data-nosnippet>408</a>    /// dying. Purely observational — the plane's supervisor reconnects on its
+<a href=#409 id=409 data-nosnippet>409</a>    /// own, so a `false` here needs no reaction from a caller (a UI may show a
+<a href=#410 id=410 data-nosnippet>410</a>    /// "reconnecting" hint; a test may await a live plane before asserting on
+<a href=#411 id=411 data-nosnippet>411</a>    /// pushed events).
+<a href=#412 id=412 data-nosnippet>412</a>    </span><span class="kw">pub fn </span>watch_realtime_connected(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; watch::Receiver&lt;bool&gt; {
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="self">self</span>.state.realtime_connected.subscribe()
+<a href=#414 id=414 data-nosnippet>414</a>    }
+<a href=#415 id=415 data-nosnippet>415</a>
+<a href=#416 id=416 data-nosnippet>416</a>    <span class="doccomment">/// Per-space message-list stream. Creates the channel on first use so a UI may
+<a href=#417 id=417 data-nosnippet>417</a>    /// subscribe before (or without) calling [`open_space`](Self::open_space); the
+<a href=#418 id=418 data-nosnippet>418</a>    /// list is empty until history is loaded / events arrive.
+<a href=#419 id=419 data-nosnippet>419</a>    </span><span class="kw">pub async fn </span>watch_messages(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid) -&gt; watch::Receiver&lt;MessageList&gt; {
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="self">self</span>.message_sender(space_id).<span class="kw">await</span>.subscribe()
+<a href=#421 id=421 data-nosnippet>421</a>    }
+<a href=#422 id=422 data-nosnippet>422</a>
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="doccomment">/// Get-or-create the `watch` sender for a space's message list.
+<a href=#424 id=424 data-nosnippet>424</a>    </span><span class="kw">async fn </span>message_sender(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid) -&gt; watch::Sender&lt;MessageList&gt; {
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="kw">let </span><span class="kw-2">mut </span>map = <span class="self">self</span>.state.messages.lock().<span class="kw">await</span>;
+<a href=#426 id=426 data-nosnippet>426</a>        map.entry(space_id)
+<a href=#427 id=427 data-nosnippet>427</a>            .or_insert_with(|| watch::channel(MessageList::new()).<span class="number">0</span>)
+<a href=#428 id=428 data-nosnippet>428</a>            .clone()
+<a href=#429 id=429 data-nosnippet>429</a>    }
+<a href=#430 id=430 data-nosnippet>430</a>
+<a href=#431 id=431 data-nosnippet>431</a>    <span class="comment">// ─── Uploads ─────────────────────────────────────────────────────────────────
+<a href=#432 id=432 data-nosnippet>432</a>
+<a href=#433 id=433 data-nosnippet>433</a>    </span><span class="doccomment">/// The media types this deployment accepts for an avatar / attachment upload,
+<a href=#434 id=434 data-nosnippet>434</a>    /// asked of the server rather than assumed (see
+<a href=#435 id=435 data-nosnippet>435</a>    /// [`RestClient::upload_accept_post`] for why, and for what an empty list means).
+<a href=#436 id=436 data-nosnippet>436</a>    </span><span class="kw">pub async fn </span>supported_upload_mime_types(
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#438 id=438 data-nosnippet>438</a>        purpose: <span class="kw">crate</span>::rest::UploadPurpose,
+<a href=#439 id=439 data-nosnippet>439</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;mime::Mime&gt;&gt; {
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="self">self</span>.rest.upload_accept_post(purpose).<span class="kw">await
+<a href=#441 id=441 data-nosnippet>441</a>    </span>}
+<a href=#442 id=442 data-nosnippet>442</a>
+<a href=#443 id=443 data-nosnippet>443</a>    <span class="comment">// ─── Data commands ───────────────────────────────────────────────────────────
+<a href=#444 id=444 data-nosnippet>444</a>
+<a href=#445 id=445 data-nosnippet>445</a>    </span><span class="doccomment">/// Load the communities the signed-in user has JOINED and their spaces,
+<a href=#446 id=446 data-nosnippet>446</a>    /// seeding the community-tree snapshot. Idempotent (re-run on reconnect to
+<a href=#447 id=447 data-nosnippet>447</a>    /// re-seed).
+<a href=#448 id=448 data-nosnippet>448</a>    /// The page is a SNAPSHOT of membership, so a community absent from it is
+<a href=#449 id=449 data-nosnippet>449</a>    /// one this user is no longer in (left from another device, deleted,
+<a href=#450 id=450 data-nosnippet>450</a>    /// kicked) and it leaves the tree — but only if it was there BEFORE the
+<a href=#451 id=451 data-nosnippet>451</a>    /// fetch, which is what `known` records (see
+<a href=#452 id=452 data-nosnippet>452</a>    /// [`CommunityTree::apply_membership`](crate::reducer::CommunityTree::apply_membership)).
+<a href=#453 id=453 data-nosnippet>453</a>    /// Every fetch happens before the single write, and the fold is one
+<a href=#454 id=454 data-nosnippet>454</a>    /// `send_modify` over the live value, so a command that folded its own
+<a href=#455 id=455 data-nosnippet>455</a>    /// answer while this load was in flight survives it.
+<a href=#456 id=456 data-nosnippet>456</a>    </span><span class="kw">pub async fn </span>load_communities(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#457 id=457 data-nosnippet>457</a>        <span class="kw">let </span>known = <span class="self">self</span>.state.community_tree.borrow().community_ids();
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">let </span>communities = <span class="self">self</span>.rest.all_communities().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#459 id=459 data-nosnippet>459</a>        <span class="kw">let </span><span class="kw-2">mut </span>spaces = Vec::with_capacity(communities.len());
+<a href=#460 id=460 data-nosnippet>460</a>        <span class="kw">for </span>community <span class="kw">in </span><span class="kw-2">&amp;</span>communities {
+<a href=#461 id=461 data-nosnippet>461</a>            spaces.push((community.id, <span class="self">self</span>.rest.all_spaces(community.id).<span class="kw">await</span><span class="question-mark">?</span>));
+<a href=#462 id=462 data-nosnippet>462</a>        }
+<a href=#463 id=463 data-nosnippet>463</a>        <span class="comment">// `send_modify`, not `send_replace` of a snapshot: it publishes with no
+<a href=#464 id=464 data-nosnippet>464</a>        // subscribers (a headless caller that subscribes after signing in must
+<a href=#465 id=465 data-nosnippet>465</a>        // still see this load) AND it reads the value as it is NOW.
+<a href=#466 id=466 data-nosnippet>466</a>        </span><span class="self">self</span>.state.community_tree.send_modify(|tree| {
+<a href=#467 id=467 data-nosnippet>467</a>            tree.apply_membership(<span class="kw-2">&amp;</span>known, communities);
+<a href=#468 id=468 data-nosnippet>468</a>            <span class="kw">for </span>(community_id, list) <span class="kw">in </span>spaces {
+<a href=#469 id=469 data-nosnippet>469</a>                tree.set_spaces(community_id, list);
+<a href=#470 id=470 data-nosnippet>470</a>            }
+<a href=#471 id=471 data-nosnippet>471</a>        });
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="prelude-val">Ok</span>(())
+<a href=#473 id=473 data-nosnippet>473</a>    }
+<a href=#474 id=474 data-nosnippet>474</a>
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="doccomment">/// Open a space: load its message history (seeding the per-space `MessageList`
+<a href=#476 id=476 data-nosnippet>476</a>    /// watch and merging the authors into the roster), then subscribe to its
+<a href=#477 id=477 data-nosnippet>477</a>    /// realtime room so subsequent `message:*` events flow into the same channel.
+<a href=#478 id=478 data-nosnippet>478</a>    ///
+<a href=#479 id=479 data-nosnippet>479</a>    /// Returning means **subscribed**, not merely "subscribe requested": the
+<a href=#480 id=480 data-nosnippet>480</a>    /// subscribe is awaited to the server's confirmation (see
+<a href=#481 id=481 data-nosnippet>481</a>    /// [`RealtimeClient::subscribe_space`], which bounds and never fails on
+<a href=#482 id=482 data-nosnippet>482</a>    /// it). A caller may therefore act on the space — send into it, expect its
+<a href=#483 id=483 data-nosnippet>483</a>    /// traffic — knowing events are already being delivered here.
+<a href=#484 id=484 data-nosnippet>484</a>    ///
+<a href=#485 id=485 data-nosnippet>485</a>    /// One window remains and is deliberately out of scope: a message posted
+<a href=#486 id=486 data-nosnippet>486</a>    /// *between* the history page above and that confirmation is in neither, and
+<a href=#487 id=487 data-nosnippet>487</a>    /// nothing re-fetches it. (Its bigger sibling — everything missed while the
+<a href=#488 id=488 data-nosnippet>488</a>    /// plane was DOWN — is repaired by `resync_space`.)
+<a href=#489 id=489 data-nosnippet>489</a>    ///
+<a href=#490 id=490 data-nosnippet>490</a>    /// Re-opening a space that is showing a detached around-window
+<a href=#491 id=491 data-nosnippet>491</a>    /// ([`open_space_around`](Self::open_space_around)) re-attaches it: page 0
+<a href=#492 id=492 data-nosnippet>492</a>    /// *replaces* that window rather than merging into it, because the two are
+<a href=#493 id=493 data-nosnippet>493</a>    /// slices of different parts of the log and merging them would splice a
+<a href=#494 id=494 data-nosnippet>494</a>    /// hole. An ordinary open still merges, as it always did.
+<a href=#495 id=495 data-nosnippet>495</a>    </span><span class="kw">pub async fn </span>open_space(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#496 id=496 data-nosnippet>496</a>        <span class="kw">let </span>page = <span class="self">self</span>.rest.list_messages(space_id, <span class="number">0</span>, MESSAGE_WINDOW).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#497 id=497 data-nosnippet>497</a>
+<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">let </span>sender = <span class="self">self</span>.message_sender(space_id).<span class="kw">await</span>;
+<a href=#499 id=499 data-nosnippet>499</a>        <span class="kw">if </span><span class="self">self</span>.take_detached(space_id).<span class="kw">await </span>{
+<a href=#500 id=500 data-nosnippet>500</a>            <span class="kw">let </span>window = page.messages.items;
+<a href=#501 id=501 data-nosnippet>501</a>            sender.send_if_modified(|list| list.replace(window));
+<a href=#502 id=502 data-nosnippet>502</a>        } <span class="kw">else </span>{
+<a href=#503 id=503 data-nosnippet>503</a>            sender.send_modify(|list| list.apply_page(page.messages.items));
+<a href=#504 id=504 data-nosnippet>504</a>        }
+<a href=#505 id=505 data-nosnippet>505</a>
+<a href=#506 id=506 data-nosnippet>506</a>        <span class="kw">if </span>!page.members.is_empty() {
+<a href=#507 id=507 data-nosnippet>507</a>            <span class="self">self</span>.state
+<a href=#508 id=508 data-nosnippet>508</a>                .roster
+<a href=#509 id=509 data-nosnippet>509</a>                .send_modify(|roster| roster.apply_members(page.members));
+<a href=#510 id=510 data-nosnippet>510</a>        }
+<a href=#511 id=511 data-nosnippet>511</a>
+<a href=#512 id=512 data-nosnippet>512</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(rt) = <span class="self">self</span>.realtime.lock().<span class="kw">await</span>.as_ref() {
+<a href=#513 id=513 data-nosnippet>513</a>            rt.subscribe_space(space_id).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#514 id=514 data-nosnippet>514</a>        }
+<a href=#515 id=515 data-nosnippet>515</a>        <span class="prelude-val">Ok</span>(())
+<a href=#516 id=516 data-nosnippet>516</a>    }
+<a href=#517 id=517 data-nosnippet>517</a>
+<a href=#518 id=518 data-nosnippet>518</a>    <span class="doccomment">/// Send a message. The realtime `message:create` echo seeds the list (the
+<a href=#519 id=519 data-nosnippet>519</a>    /// reducer dedupes by id), so we don't optimistically insert here.
+<a href=#520 id=520 data-nosnippet>520</a>    </span><span class="kw">pub async fn </span>send_message(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid, contents: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#521 id=521 data-nosnippet>521</a>        <span class="self">self</span>.rest.post_message(space_id, contents, <span class="kw-2">&amp;</span>[]).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#522 id=522 data-nosnippet>522</a>        <span class="prelude-val">Ok</span>(())
+<a href=#523 id=523 data-nosnippet>523</a>    }
+<a href=#524 id=524 data-nosnippet>524</a>
+<a href=#525 id=525 data-nosnippet>525</a>    <span class="doccomment">/// Edit a message. The realtime `message:update` echo applies the change.
+<a href=#526 id=526 data-nosnippet>526</a>    </span><span class="kw">pub async fn </span>edit_message(
+<a href=#527 id=527 data-nosnippet>527</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#528 id=528 data-nosnippet>528</a>        space_id: Uuid,
+<a href=#529 id=529 data-nosnippet>529</a>        message_id: Uuid,
+<a href=#530 id=530 data-nosnippet>530</a>        contents: <span class="kw-2">&amp;</span>str,
+<a href=#531 id=531 data-nosnippet>531</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#532 id=532 data-nosnippet>532</a>        <span class="self">self</span>.rest
+<a href=#533 id=533 data-nosnippet>533</a>            .edit_message(space_id, message_id, contents)
+<a href=#534 id=534 data-nosnippet>534</a>            .<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#535 id=535 data-nosnippet>535</a>        <span class="prelude-val">Ok</span>(())
+<a href=#536 id=536 data-nosnippet>536</a>    }
+<a href=#537 id=537 data-nosnippet>537</a>
+<a href=#538 id=538 data-nosnippet>538</a>    <span class="doccomment">/// Fetch a single message by id — e.g. resolving a `&lt;hound:message/…&gt;`
+<a href=#539 id=539 data-nosnippet>539</a>    /// reference preview. Plain request/response, unlike [`Self::watch_messages`]:
+<a href=#540 id=540 data-nosnippet>540</a>    /// no snapshot, no caching, one round trip per call.
+<a href=#541 id=541 data-nosnippet>541</a>    </span><span class="kw">pub async fn </span>fetch_message(<span class="kw-2">&amp;</span><span class="self">self</span>, message_id: Uuid) -&gt; <span class="prelude-ty">Result</span>&lt;Message&gt; {
+<a href=#542 id=542 data-nosnippet>542</a>        <span class="self">self</span>.rest.get_message(message_id).<span class="kw">await
+<a href=#543 id=543 data-nosnippet>543</a>    </span>}
+<a href=#544 id=544 data-nosnippet>544</a>
+<a href=#545 id=545 data-nosnippet>545</a>    <span class="doccomment">/// Unfurl `url` through the server's embed pipeline and return the full
+<a href=#546 id=546 data-nosnippet>546</a>    /// trace — every HTTP hop, every metadata key seen, and what the precedence
+<a href=#547 id=547 data-nosnippet>547</a>    /// rules made of them.
+<a href=#548 id=548 data-nosnippet>548</a>    ///
+<a href=#549 id=549 data-nosnippet>549</a>    /// The embed debugger in developer settings. Nothing here fetches anything
+<a href=#550 id=550 data-nosnippet>550</a>    /// locally: the client has no business making outbound requests to a URL
+<a href=#551 id=551 data-nosnippet>551</a>    /// somebody typed, and the point of the tool is to see what *the server*
+<a href=#552 id=552 data-nosnippet>552</a>    /// does, which is what a message would get.
+<a href=#553 id=553 data-nosnippet>553</a>    </span><span class="kw">pub async fn </span>debug_embed(<span class="kw-2">&amp;</span><span class="self">self</span>, url: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;hound_types::EmbedDebugReport&gt; {
+<a href=#554 id=554 data-nosnippet>554</a>        <span class="self">self</span>.rest.debug_embed(url).<span class="kw">await
+<a href=#555 id=555 data-nosnippet>555</a>    </span>}
+<a href=#556 id=556 data-nosnippet>556</a>}
 </code></pre></div></section></main></body></html>

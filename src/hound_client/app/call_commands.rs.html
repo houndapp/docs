@@ -137,315 +137,350 @@
 <a href=#137 id=137 data-nosnippet>137</a>        <span class="prelude-val">Ok</span>(())
 <a href=#138 id=138 data-nosnippet>138</a>    }
 <a href=#139 id=139 data-nosnippet>139</a>
-<a href=#140 id=140 data-nosnippet>140</a>    <span class="doccomment">/// Mute/unmute the local mic (gates the encoder + tells the roster).
-<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">pub async fn </span>call_set_muted(<span class="kw-2">&amp;</span><span class="self">self</span>, muted: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="self">self</span>.with_call(|s| s.set_muted(muted)).<span class="kw">await
-<a href=#143 id=143 data-nosnippet>143</a>    </span>}
-<a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="doccomment">/// Enable/disable the local camera publish.
-<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="kw">pub async fn </span>call_set_camera_enabled(<span class="kw-2">&amp;</span><span class="self">self</span>, enabled: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="self">self</span>.with_call(|s| s.set_camera_enabled(enabled)).<span class="kw">await
-<a href=#148 id=148 data-nosnippet>148</a>    </span>}
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="doccomment">/// Pause/resume *inbound* video (audio keeps flowing). The UI calls this on app
-<a href=#151 id=151 data-nosnippet>151</a>    /// lifecycle changes — paused when backgrounded / the call surface isn't visible —
-<a href=#152 id=152 data-nosnippet>152</a>    /// so we stop receiving + rendering remote video (notably a heavy screenshare)
-<a href=#153 id=153 data-nosnippet>153</a>    /// nobody can see. No-op when not in a call.
-<a href=#154 id=154 data-nosnippet>154</a>    </span><span class="kw">pub async fn </span>call_set_video_paused(<span class="kw-2">&amp;</span><span class="self">self</span>, paused: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="self">self</span>.with_call(|s| s.set_video_paused(paused)).<span class="kw">await
-<a href=#156 id=156 data-nosnippet>156</a>    </span>}
-<a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="doccomment">/// Report a remote video tile's rendered size + visibility (drives demand-driven
-<a href=#159 id=159 data-nosnippet>159</a>    /// simulcast — small/hidden ⇒ low layer). `source` is `"camera"` | `"screen"`;
-<a href=#160 id=160 data-nosnippet>160</a>    /// an unknown source is a no-op. No-op when not in a call.
-<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="kw">pub async fn </span>call_set_tile_quality(
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#163 id=163 data-nosnippet>163</a>        peer_id: u32,
-<a href=#164 id=164 data-nosnippet>164</a>        source: String,
-<a href=#165 id=165 data-nosnippet>165</a>        width: u32,
-<a href=#166 id=166 data-nosnippet>166</a>        height: u32,
-<a href=#167 id=167 data-nosnippet>167</a>        visible: bool,
-<a href=#168 id=168 data-nosnippet>168</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>source = <span class="kw">match </span>source.as_str() {
-<a href=#170 id=170 data-nosnippet>170</a>            <span class="string">"camera" </span>=&gt; hound_control::Source::Camera,
-<a href=#171 id=171 data-nosnippet>171</a>            <span class="string">"screen" </span>=&gt; hound_control::Source::Screen,
-<a href=#172 id=172 data-nosnippet>172</a>            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(()),
-<a href=#173 id=173 data-nosnippet>173</a>        };
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="self">self</span>.with_call(|s| s.set_tile_quality(peer_id, source, width, height, visible))
-<a href=#175 id=175 data-nosnippet>175</a>            .<span class="kw">await
-<a href=#176 id=176 data-nosnippet>176</a>    </span>}
-<a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="doccomment">/// Set one remote audio stream's playback volume (`0.0` = muted, `1.0` =
-<a href=#179 id=179 data-nosnippet>179</a>    /// unity; clamped ≤ 2.0). `source`: `"mic"` (the peer's voice) or `"screen"`
-<a href=#180 id=180 data-nosnippet>180</a>    /// (their share's app audio). Local-only; takes effect within ~20 ms.
-<a href=#181 id=181 data-nosnippet>181</a>    </span><span class="kw">pub async fn </span>call_set_stream_volume(
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#183 id=183 data-nosnippet>183</a>        peer_id: u32,
-<a href=#184 id=184 data-nosnippet>184</a>        source: String,
-<a href=#185 id=185 data-nosnippet>185</a>        volume: f32,
-<a href=#186 id=186 data-nosnippet>186</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let </span>source = <span class="kw">match </span>source.as_str() {
-<a href=#188 id=188 data-nosnippet>188</a>            <span class="string">"mic" </span>=&gt; hound_control::Source::Microphone,
-<a href=#189 id=189 data-nosnippet>189</a>            <span class="string">"screen" </span>=&gt; hound_control::Source::Screen,
-<a href=#190 id=190 data-nosnippet>190</a>            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(()),
-<a href=#191 id=191 data-nosnippet>191</a>        };
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="self">self</span>.with_call(|s| s.set_stream_volume(peer_id, source, volume))
-<a href=#193 id=193 data-nosnippet>193</a>            .<span class="kw">await
-<a href=#194 id=194 data-nosnippet>194</a>    </span>}
-<a href=#195 id=195 data-nosnippet>195</a>
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="doccomment">/// Toggle whether an active screen share broadcasts its app audio (the
-<a href=#197 id=197 data-nosnippet>197</a>    /// broadcaster's "share audio" control). Zero CPU/wire cost while off.
-<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">pub async fn </span>call_set_screen_audio_enabled(<span class="kw-2">&amp;</span><span class="self">self</span>, enabled: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#199 id=199 data-nosnippet>199</a>        <span class="self">self</span>.with_call(|s| s.set_screen_audio_enabled(enabled))
-<a href=#200 id=200 data-nosnippet>200</a>            .<span class="kw">await
-<a href=#201 id=201 data-nosnippet>201</a>    </span>}
-<a href=#202 id=202 data-nosnippet>202</a>
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="doccomment">/// Set the mic noise-suppression mode: `"off"`, `"moderate"` (default), or
-<a href=#204 id=204 data-nosnippet>204</a>    /// `"high"`. Applies live and survives reconnects.
-<a href=#205 id=205 data-nosnippet>205</a>    </span><span class="kw">pub async fn </span>call_set_noise_suppression(<span class="kw-2">&amp;</span><span class="self">self</span>, mode: String) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">let </span>mode = <span class="kw">match </span>mode.as_str() {
-<a href=#207 id=207 data-nosnippet>207</a>            <span class="string">"off" </span>=&gt; <span class="number">0</span>,
-<a href=#208 id=208 data-nosnippet>208</a>            <span class="string">"high" </span>=&gt; <span class="number">2</span>,
-<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">_ </span>=&gt; <span class="number">1</span>,
-<a href=#210 id=210 data-nosnippet>210</a>        };
-<a href=#211 id=211 data-nosnippet>211</a>        <span class="self">self</span>.with_voice(
-<a href=#212 id=212 data-nosnippet>212</a>            |s| s.set_noise_suppression(mode),
-<a href=#213 id=213 data-nosnippet>213</a>            |m| m.set_noise_suppression(mode),
-<a href=#214 id=214 data-nosnippet>214</a>        )
-<a href=#215 id=215 data-nosnippet>215</a>        .<span class="kw">await
-<a href=#216 id=216 data-nosnippet>216</a>    </span>}
-<a href=#217 id=217 data-nosnippet>217</a>
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="doccomment">/// Toggle mic automatic gain control (default on). Off ships the raw device
-<a href=#219 id=219 data-nosnippet>219</a>    /// level — the escape hatch when AGC misjudges a particular mic.
-<a href=#220 id=220 data-nosnippet>220</a>    </span><span class="kw">pub async fn </span>call_set_agc_enabled(<span class="kw-2">&amp;</span><span class="self">self</span>, enabled: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="self">self</span>.with_voice(
-<a href=#222 id=222 data-nosnippet>222</a>            |s| s.set_agc_enabled(enabled),
-<a href=#223 id=223 data-nosnippet>223</a>            |m| m.set_agc_enabled(enabled),
-<a href=#224 id=224 data-nosnippet>224</a>        )
-<a href=#225 id=225 data-nosnippet>225</a>        .<span class="kw">await
-<a href=#226 id=226 data-nosnippet>226</a>    </span>}
-<a href=#227 id=227 data-nosnippet>227</a>
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="doccomment">/// Manual mic input trim in dB (clamped ±12, default 0).
-<a href=#229 id=229 data-nosnippet>229</a>    </span><span class="kw">pub async fn </span>call_set_input_gain(<span class="kw-2">&amp;</span><span class="self">self</span>, gain_db: f32) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="self">self</span>.with_voice(
-<a href=#231 id=231 data-nosnippet>231</a>            |s| s.set_input_gain_db(gain_db),
-<a href=#232 id=232 data-nosnippet>232</a>            |m| m.set_input_gain_db(gain_db),
-<a href=#233 id=233 data-nosnippet>233</a>        )
-<a href=#234 id=234 data-nosnippet>234</a>        .<span class="kw">await
-<a href=#235 id=235 data-nosnippet>235</a>    </span>}
-<a href=#236 id=236 data-nosnippet>236</a>
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="doccomment">/// Select the active microphone (`None` = host default).
-<a href=#238 id=238 data-nosnippet>238</a>    </span><span class="kw">pub async fn </span>call_select_microphone(<span class="kw-2">&amp;</span><span class="self">self</span>, id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">let </span>for_monitor = id.clone();
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="self">self</span>.with_voice(
-<a href=#241 id=241 data-nosnippet>241</a>            |s| s.select_microphone(id),
-<a href=#242 id=242 data-nosnippet>242</a>            |m| m.select_microphone(for_monitor),
-<a href=#243 id=243 data-nosnippet>243</a>        )
-<a href=#244 id=244 data-nosnippet>244</a>        .<span class="kw">await
-<a href=#245 id=245 data-nosnippet>245</a>    </span>}
-<a href=#246 id=246 data-nosnippet>246</a>
-<a href=#247 id=247 data-nosnippet>247</a>    <span class="comment">// ─── Mic test (out of call) ──────────────────────────────────────────────────
-<a href=#248 id=248 data-nosnippet>248</a>
-<a href=#249 id=249 data-nosnippet>249</a>    </span><span class="doccomment">/// Start the out-of-call microphone monitor: open `mic_id` (`None` = host
-<a href=#250 id=250 data-nosnippet>250</a>    /// default) and publish its level onto [`watch_levels`](Self::watch_levels),
-<a href=#251 id=251 data-nosnippet>251</a>    /// with the same APM chain a call would run so the meter answers "what will
-<a href=#252 id=252 data-nosnippet>252</a>    /// they hear", not "is the device alive".
-<a href=#253 id=253 data-nosnippet>253</a>    ///
-<a href=#254 id=254 data-nosnippet>254</a>    /// Refused while a call is live — the call owns the microphone. Starting one
-<a href=#255 id=255 data-nosnippet>255</a>    /// while another is already running replaces it (the old device is released
-<a href=#256 id=256 data-nosnippet>256</a>    /// first), so a settings screen that re-arms the test never has to sequence a
-<a href=#257 id=257 data-nosnippet>257</a>    /// stop itself. The `Err` is the open failure (notably a TCC denial), so a
-<a href=#258 id=258 data-nosnippet>258</a>    /// mic test that cannot run says why instead of showing a dead meter.
-<a href=#259 id=259 data-nosnippet>259</a>    </span><span class="kw">pub async fn </span>mic_monitor_start(<span class="kw-2">&amp;</span><span class="self">self</span>, mic_id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">if </span><span class="self">self</span>.in_call() {
-<a href=#261 id=261 data-nosnippet>261</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(HoundError::invalid_state(
-<a href=#262 id=262 data-nosnippet>262</a>                StateCode::CallOwnsMicrophone,
-<a href=#263 id=263 data-nosnippet>263</a>                <span class="string">"a call is using the microphone — end it to run the mic test"</span>,
-<a href=#264 id=264 data-nosnippet>264</a>            ));
-<a href=#265 id=265 data-nosnippet>265</a>        }
-<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = <span class="self">self</span>.mic_monitor.lock().<span class="kw">await</span>;
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="comment">// Release the previous device BEFORE opening the next: an exclusive input
-<a href=#268 id=268 data-nosnippet>268</a>        // (ALSA hw) refuses the second open while the first is still held.
-<a href=#269 id=269 data-nosnippet>269</a>        </span>release_monitor(guard.take()).<span class="kw">await</span>;
-<a href=#270 id=270 data-nosnippet>270</a>        <span class="kw-2">*</span>guard = <span class="prelude-val">Some</span>(MicMonitor::start(mic_id, <span class="self">self</span>.state.levels.clone()).<span class="kw">await</span><span class="question-mark">?</span>);
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="prelude-val">Ok</span>(())
-<a href=#272 id=272 data-nosnippet>272</a>    }
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="doccomment">/// Stop the microphone monitor and blank the meter. No-op if none is running.
-<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">pub async fn </span>mic_monitor_stop(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>taken = <span class="self">self</span>.mic_monitor.lock().<span class="kw">await</span>.take();
-<a href=#277 id=277 data-nosnippet>277</a>        release_monitor(taken).<span class="kw">await</span>;
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="prelude-val">Ok</span>(())
-<a href=#279 id=279 data-nosnippet>279</a>    }
-<a href=#280 id=280 data-nosnippet>280</a>
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="doccomment">/// Select the active camera (`None` = host default).
-<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">pub async fn </span>call_select_camera(<span class="kw-2">&amp;</span><span class="self">self</span>, id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#283 id=283 data-nosnippet>283</a>        <span class="self">self</span>.with_call(|s| s.select_camera(id)).<span class="kw">await
-<a href=#284 id=284 data-nosnippet>284</a>    </span>}
-<a href=#285 id=285 data-nosnippet>285</a>
-<a href=#286 id=286 data-nosnippet>286</a>    <span class="doccomment">/// Select the active speaker/output (`None` = host default).
-<a href=#287 id=287 data-nosnippet>287</a>    </span><span class="kw">pub async fn </span>call_select_speaker(<span class="kw-2">&amp;</span><span class="self">self</span>, id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="self">self</span>.with_call(|s| s.select_speaker(id)).<span class="kw">await
-<a href=#289 id=289 data-nosnippet>289</a>    </span>}
-<a href=#290 id=290 data-nosnippet>290</a>
-<a href=#291 id=291 data-nosnippet>291</a>    <span class="doccomment">/// Start sharing a screen source (`source_id` is a token from
-<a href=#292 id=292 data-nosnippet>292</a>    /// [`list_screen_sources`](Self::list_screen_sources)); awaits the open result
-<a href=#293 id=293 data-nosnippet>293</a>    /// so a permission/unsupported error surfaces to the caller.
-<a href=#294 id=294 data-nosnippet>294</a>    </span><span class="kw">pub async fn </span>call_screen_share_start(<span class="kw-2">&amp;</span><span class="self">self</span>, source_id: String) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span>guard = <span class="self">self</span>.call.lock().<span class="kw">await</span>;
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">let </span>session = guard
-<a href=#297 id=297 data-nosnippet>297</a>            .as_ref()
-<a href=#298 id=298 data-nosnippet>298</a>            .ok_or_else(|| HoundError::invalid_state(StateCode::NotInCall, <span class="string">"not in a call"</span>))<span class="question-mark">?</span>;
-<a href=#299 id=299 data-nosnippet>299</a>        session.screen_share_start(source_id).<span class="kw">await
-<a href=#300 id=300 data-nosnippet>300</a>    </span>}
-<a href=#301 id=301 data-nosnippet>301</a>
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="doccomment">/// Stop the active screen share (if any).
-<a href=#303 id=303 data-nosnippet>303</a>    </span><span class="kw">pub async fn </span>call_screen_share_stop(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="self">self</span>.with_call(|s| s.screen_share_stop()).<span class="kw">await
-<a href=#305 id=305 data-nosnippet>305</a>    </span>}
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="doccomment">/// Leave the call **only if** it is the one joined to `space_id`, reporting
+<a href=#141 id=141 data-nosnippet>141</a>    /// whether it left.
+<a href=#142 id=142 data-nosnippet>142</a>    ///
+<a href=#143 id=143 data-nosnippet>143</a>    /// The scoped leave every "this channel is gone" path must use. A bare
+<a href=#144 id=144 data-nosnippet>144</a>    /// [`call_leave`](Self::call_leave) decides nothing: between an event naming
+<a href=#145 id=145 data-nosnippet>145</a>    /// a dead channel and the leave running, the user can have joined a
+<a href=#146 id=146 data-nosnippet>146</a>    /// different call, and the unconditional leave would end that one instead.
+<a href=#147 id=147 data-nosnippet>147</a>    /// The identity check and the take happen under ONE acquisition of the call
+<a href=#148 id=148 data-nosnippet>148</a>    /// lock, so no join can land between them; the teardown itself runs after
+<a href=#149 id=149 data-nosnippet>149</a>    /// the guard is released, because `leave` does IO.
+<a href=#150 id=150 data-nosnippet>150</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>call_leave_if_in(<span class="kw-2">&amp;</span><span class="self">self</span>, space_id: Uuid) -&gt; bool {
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>session = {
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="kw">let </span><span class="kw-2">mut </span>call = <span class="self">self</span>.call.lock().<span class="kw">await</span>;
+<a href=#153 id=153 data-nosnippet>153</a>            <span class="kw">if </span>!call.as_ref().is_some_and(|c| c.space_id() == space_id) {
+<a href=#154 id=154 data-nosnippet>154</a>                <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#155 id=155 data-nosnippet>155</a>            }
+<a href=#156 id=156 data-nosnippet>156</a>            call.take()
+<a href=#157 id=157 data-nosnippet>157</a>        };
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(session) = session {
+<a href=#159 id=159 data-nosnippet>159</a>            session.leave().<span class="kw">await</span>;
+<a href=#160 id=160 data-nosnippet>160</a>        }
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="comment">// Identities are per-call; clear so the next CallView snapshot starts clean.
+<a href=#162 id=162 data-nosnippet>162</a>        </span><span class="self">self</span>.state.call_identities.store(Default::default());
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="bool-val">true
+<a href=#164 id=164 data-nosnippet>164</a>    </span>}
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="doccomment">/// Mute/unmute the local mic (gates the encoder + tells the roster).
+<a href=#167 id=167 data-nosnippet>167</a>    </span><span class="kw">pub async fn </span>call_set_muted(<span class="kw-2">&amp;</span><span class="self">self</span>, muted: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="self">self</span>.with_call(|s| s.set_muted(muted)).<span class="kw">await
+<a href=#169 id=169 data-nosnippet>169</a>    </span>}
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="doccomment">/// Enable/disable the local camera publish.
+<a href=#172 id=172 data-nosnippet>172</a>    </span><span class="kw">pub async fn </span>call_set_camera_enabled(<span class="kw-2">&amp;</span><span class="self">self</span>, enabled: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="self">self</span>.with_call(|s| s.set_camera_enabled(enabled)).<span class="kw">await
+<a href=#174 id=174 data-nosnippet>174</a>    </span>}
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="doccomment">/// Pause/resume *inbound* video (audio keeps flowing). The UI calls this on app
+<a href=#177 id=177 data-nosnippet>177</a>    /// lifecycle changes — paused when backgrounded / the call surface isn't visible —
+<a href=#178 id=178 data-nosnippet>178</a>    /// so we stop receiving + rendering remote video (notably a heavy screenshare)
+<a href=#179 id=179 data-nosnippet>179</a>    /// nobody can see. No-op when not in a call.
+<a href=#180 id=180 data-nosnippet>180</a>    </span><span class="kw">pub async fn </span>call_set_video_paused(<span class="kw-2">&amp;</span><span class="self">self</span>, paused: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="self">self</span>.with_call(|s| s.set_video_paused(paused)).<span class="kw">await
+<a href=#182 id=182 data-nosnippet>182</a>    </span>}
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="doccomment">/// Report a remote video tile's rendered size + visibility (drives demand-driven
+<a href=#185 id=185 data-nosnippet>185</a>    /// simulcast — small/hidden ⇒ low layer). `source` is `"camera"` | `"screen"`;
+<a href=#186 id=186 data-nosnippet>186</a>    /// an unknown source is a no-op. No-op when not in a call.
+<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="kw">pub async fn </span>call_set_tile_quality(
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#189 id=189 data-nosnippet>189</a>        peer_id: u32,
+<a href=#190 id=190 data-nosnippet>190</a>        source: String,
+<a href=#191 id=191 data-nosnippet>191</a>        width: u32,
+<a href=#192 id=192 data-nosnippet>192</a>        height: u32,
+<a href=#193 id=193 data-nosnippet>193</a>        visible: bool,
+<a href=#194 id=194 data-nosnippet>194</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">let </span>source = <span class="kw">match </span>source.as_str() {
+<a href=#196 id=196 data-nosnippet>196</a>            <span class="string">"camera" </span>=&gt; hound_control::Source::Camera,
+<a href=#197 id=197 data-nosnippet>197</a>            <span class="string">"screen" </span>=&gt; hound_control::Source::Screen,
+<a href=#198 id=198 data-nosnippet>198</a>            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(()),
+<a href=#199 id=199 data-nosnippet>199</a>        };
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="self">self</span>.with_call(|s| s.set_tile_quality(peer_id, source, width, height, visible))
+<a href=#201 id=201 data-nosnippet>201</a>            .<span class="kw">await
+<a href=#202 id=202 data-nosnippet>202</a>    </span>}
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="doccomment">/// Set one remote audio stream's playback volume (`0.0` = muted, `1.0` =
+<a href=#205 id=205 data-nosnippet>205</a>    /// unity; clamped ≤ 2.0). `source`: `"mic"` (the peer's voice) or `"screen"`
+<a href=#206 id=206 data-nosnippet>206</a>    /// (their share's app audio). Local-only; takes effect within ~20 ms.
+<a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw">pub async fn </span>call_set_stream_volume(
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#209 id=209 data-nosnippet>209</a>        peer_id: u32,
+<a href=#210 id=210 data-nosnippet>210</a>        source: String,
+<a href=#211 id=211 data-nosnippet>211</a>        volume: f32,
+<a href=#212 id=212 data-nosnippet>212</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">let </span>source = <span class="kw">match </span>source.as_str() {
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="string">"mic" </span>=&gt; hound_control::Source::Microphone,
+<a href=#215 id=215 data-nosnippet>215</a>            <span class="string">"screen" </span>=&gt; hound_control::Source::Screen,
+<a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(()),
+<a href=#217 id=217 data-nosnippet>217</a>        };
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="self">self</span>.with_call(|s| s.set_stream_volume(peer_id, source, volume))
+<a href=#219 id=219 data-nosnippet>219</a>            .<span class="kw">await
+<a href=#220 id=220 data-nosnippet>220</a>    </span>}
+<a href=#221 id=221 data-nosnippet>221</a>
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="doccomment">/// Toggle whether an active screen share broadcasts its app audio (the
+<a href=#223 id=223 data-nosnippet>223</a>    /// broadcaster's "share audio" control). Zero CPU/wire cost while off.
+<a href=#224 id=224 data-nosnippet>224</a>    </span><span class="kw">pub async fn </span>call_set_screen_audio_enabled(<span class="kw-2">&amp;</span><span class="self">self</span>, enabled: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="self">self</span>.with_call(|s| s.set_screen_audio_enabled(enabled))
+<a href=#226 id=226 data-nosnippet>226</a>            .<span class="kw">await
+<a href=#227 id=227 data-nosnippet>227</a>    </span>}
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="doccomment">/// Set the mic noise-suppression mode: `"off"`, `"moderate"` (default), or
+<a href=#230 id=230 data-nosnippet>230</a>    /// `"high"`. Applies live and survives reconnects.
+<a href=#231 id=231 data-nosnippet>231</a>    </span><span class="kw">pub async fn </span>call_set_noise_suppression(<span class="kw-2">&amp;</span><span class="self">self</span>, mode: String) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span>mode = <span class="kw">match </span>mode.as_str() {
+<a href=#233 id=233 data-nosnippet>233</a>            <span class="string">"off" </span>=&gt; <span class="number">0</span>,
+<a href=#234 id=234 data-nosnippet>234</a>            <span class="string">"high" </span>=&gt; <span class="number">2</span>,
+<a href=#235 id=235 data-nosnippet>235</a>            <span class="kw">_ </span>=&gt; <span class="number">1</span>,
+<a href=#236 id=236 data-nosnippet>236</a>        };
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="self">self</span>.with_voice(
+<a href=#238 id=238 data-nosnippet>238</a>            |s| s.set_noise_suppression(mode),
+<a href=#239 id=239 data-nosnippet>239</a>            |m| m.set_noise_suppression(mode),
+<a href=#240 id=240 data-nosnippet>240</a>        )
+<a href=#241 id=241 data-nosnippet>241</a>        .<span class="kw">await
+<a href=#242 id=242 data-nosnippet>242</a>    </span>}
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="doccomment">/// Toggle mic automatic gain control (default on). Off ships the raw device
+<a href=#245 id=245 data-nosnippet>245</a>    /// level — the escape hatch when AGC misjudges a particular mic.
+<a href=#246 id=246 data-nosnippet>246</a>    </span><span class="kw">pub async fn </span>call_set_agc_enabled(<span class="kw-2">&amp;</span><span class="self">self</span>, enabled: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>        <span class="self">self</span>.with_voice(
+<a href=#248 id=248 data-nosnippet>248</a>            |s| s.set_agc_enabled(enabled),
+<a href=#249 id=249 data-nosnippet>249</a>            |m| m.set_agc_enabled(enabled),
+<a href=#250 id=250 data-nosnippet>250</a>        )
+<a href=#251 id=251 data-nosnippet>251</a>        .<span class="kw">await
+<a href=#252 id=252 data-nosnippet>252</a>    </span>}
+<a href=#253 id=253 data-nosnippet>253</a>
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="doccomment">/// Manual mic input trim in dB (clamped ±12, default 0).
+<a href=#255 id=255 data-nosnippet>255</a>    </span><span class="kw">pub async fn </span>call_set_input_gain(<span class="kw-2">&amp;</span><span class="self">self</span>, gain_db: f32) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="self">self</span>.with_voice(
+<a href=#257 id=257 data-nosnippet>257</a>            |s| s.set_input_gain_db(gain_db),
+<a href=#258 id=258 data-nosnippet>258</a>            |m| m.set_input_gain_db(gain_db),
+<a href=#259 id=259 data-nosnippet>259</a>        )
+<a href=#260 id=260 data-nosnippet>260</a>        .<span class="kw">await
+<a href=#261 id=261 data-nosnippet>261</a>    </span>}
+<a href=#262 id=262 data-nosnippet>262</a>
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="doccomment">/// Select the active microphone (`None` = host default).
+<a href=#264 id=264 data-nosnippet>264</a>    </span><span class="kw">pub async fn </span>call_select_microphone(<span class="kw-2">&amp;</span><span class="self">self</span>, id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">let </span>for_monitor = id.clone();
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="self">self</span>.with_voice(
+<a href=#267 id=267 data-nosnippet>267</a>            |s| s.select_microphone(id),
+<a href=#268 id=268 data-nosnippet>268</a>            |m| m.select_microphone(for_monitor),
+<a href=#269 id=269 data-nosnippet>269</a>        )
+<a href=#270 id=270 data-nosnippet>270</a>        .<span class="kw">await
+<a href=#271 id=271 data-nosnippet>271</a>    </span>}
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="comment">// ─── Mic test (out of call) ──────────────────────────────────────────────────
+<a href=#274 id=274 data-nosnippet>274</a>
+<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="doccomment">/// Start the out-of-call microphone monitor: open `mic_id` (`None` = host
+<a href=#276 id=276 data-nosnippet>276</a>    /// default) and publish its level onto [`watch_levels`](Self::watch_levels),
+<a href=#277 id=277 data-nosnippet>277</a>    /// with the same APM chain a call would run so the meter answers "what will
+<a href=#278 id=278 data-nosnippet>278</a>    /// they hear", not "is the device alive".
+<a href=#279 id=279 data-nosnippet>279</a>    ///
+<a href=#280 id=280 data-nosnippet>280</a>    /// Refused while a call is live — the call owns the microphone. Starting one
+<a href=#281 id=281 data-nosnippet>281</a>    /// while another is already running replaces it (the old device is released
+<a href=#282 id=282 data-nosnippet>282</a>    /// first), so a settings screen that re-arms the test never has to sequence a
+<a href=#283 id=283 data-nosnippet>283</a>    /// stop itself. The `Err` is the open failure (notably a TCC denial), so a
+<a href=#284 id=284 data-nosnippet>284</a>    /// mic test that cannot run says why instead of showing a dead meter.
+<a href=#285 id=285 data-nosnippet>285</a>    </span><span class="kw">pub async fn </span>mic_monitor_start(<span class="kw-2">&amp;</span><span class="self">self</span>, mic_id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">if </span><span class="self">self</span>.in_call() {
+<a href=#287 id=287 data-nosnippet>287</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(HoundError::invalid_state(
+<a href=#288 id=288 data-nosnippet>288</a>                StateCode::CallOwnsMicrophone,
+<a href=#289 id=289 data-nosnippet>289</a>                <span class="string">"a call is using the microphone — end it to run the mic test"</span>,
+<a href=#290 id=290 data-nosnippet>290</a>            ));
+<a href=#291 id=291 data-nosnippet>291</a>        }
+<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = <span class="self">self</span>.mic_monitor.lock().<span class="kw">await</span>;
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="comment">// Release the previous device BEFORE opening the next: an exclusive input
+<a href=#294 id=294 data-nosnippet>294</a>        // (ALSA hw) refuses the second open while the first is still held.
+<a href=#295 id=295 data-nosnippet>295</a>        </span>release_monitor(guard.take()).<span class="kw">await</span>;
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw-2">*</span>guard = <span class="prelude-val">Some</span>(MicMonitor::start(mic_id, <span class="self">self</span>.state.levels.clone()).<span class="kw">await</span><span class="question-mark">?</span>);
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="prelude-val">Ok</span>(())
+<a href=#298 id=298 data-nosnippet>298</a>    }
+<a href=#299 id=299 data-nosnippet>299</a>
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// Stop the microphone monitor and blank the meter. No-op if none is running.
+<a href=#301 id=301 data-nosnippet>301</a>    </span><span class="kw">pub async fn </span>mic_monitor_stop(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">let </span>taken = <span class="self">self</span>.mic_monitor.lock().<span class="kw">await</span>.take();
+<a href=#303 id=303 data-nosnippet>303</a>        release_monitor(taken).<span class="kw">await</span>;
+<a href=#304 id=304 data-nosnippet>304</a>        <span class="prelude-val">Ok</span>(())
+<a href=#305 id=305 data-nosnippet>305</a>    }
 <a href=#306 id=306 data-nosnippet>306</a>
-<a href=#307 id=307 data-nosnippet>307</a>    <span class="doccomment">/// Set the live screen-share quality (motion↔legibility + a max resolution/fps cap).
-<a href=#308 id=308 data-nosnippet>308</a>    /// Reconfigures a running share's ladder live (no restart); remembered for the next
-<a href=#309 id=309 data-nosnippet>309</a>    /// share + across a reconnect. Harmless with no active call.
-<a href=#310 id=310 data-nosnippet>310</a>    </span><span class="kw">pub async fn </span>call_set_screen_quality(<span class="kw-2">&amp;</span><span class="self">self</span>, quality: hound_media::ScreenQuality) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#311 id=311 data-nosnippet>311</a>        <span class="self">self</span>.with_call(|s| s.set_screen_quality(quality)).<span class="kw">await
-<a href=#312 id=312 data-nosnippet>312</a>    </span>}
-<a href=#313 id=313 data-nosnippet>313</a>
-<a href=#314 id=314 data-nosnippet>314</a>    <span class="doccomment">/// Enumerate shareable screen sources for the picker. Needs no active call; the
-<a href=#315 id=315 data-nosnippet>315</a>    /// engine enumeration is blocking, so it runs on a blocking thread.
-<a href=#316 id=316 data-nosnippet>316</a>    </span><span class="kw">pub async fn </span>list_screen_sources(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">crate</span>::call::ScreenSourceView&gt;&gt; {
-<a href=#317 id=317 data-nosnippet>317</a>        tokio::task::spawn_blocking(<span class="kw">crate</span>::call::list_screen_sources)
-<a href=#318 id=318 data-nosnippet>318</a>            .<span class="kw">await
-<a href=#319 id=319 data-nosnippet>319</a>            </span>.map_err(|e| {
-<a href=#320 id=320 data-nosnippet>320</a>                HoundError::internal(
-<a href=#321 id=321 data-nosnippet>321</a>                    InternalCode::ScreenSourceTask,
-<a href=#322 id=322 data-nosnippet>322</a>                    <span class="macro">format!</span>(<span class="string">"screen-source enumeration task: {e}"</span>),
-<a href=#323 id=323 data-nosnippet>323</a>                )
-<a href=#324 id=324 data-nosnippet>324</a>            })<span class="question-mark">?
-<a href=#325 id=325 data-nosnippet>325</a>    </span>}
-<a href=#326 id=326 data-nosnippet>326</a>
-<a href=#327 id=327 data-nosnippet>327</a>    <span class="doccomment">/// One-shot preview thumbnail of a screen source for the picker (opaque RGBA,
-<a href=#328 id=328 data-nosnippet>328</a>    /// aspect-fit within `max_w`×`max_h`). The engine capture is blocking, so it runs
-<a href=#329 id=329 data-nosnippet>329</a>    /// on a blocking thread. Best-effort — a failure is the picker's "no thumbnail"
-<a href=#330 id=330 data-nosnippet>330</a>    /// signal, not a hard error.
-<a href=#331 id=331 data-nosnippet>331</a>    </span><span class="kw">pub async fn </span>screen_thumbnail(
-<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#333 id=333 data-nosnippet>333</a>        source_id: String,
-<a href=#334 id=334 data-nosnippet>334</a>        max_w: u32,
-<a href=#335 id=335 data-nosnippet>335</a>        max_h: u32,
-<a href=#336 id=336 data-nosnippet>336</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw">crate</span>::call::ScreenThumbnail&gt; {
-<a href=#337 id=337 data-nosnippet>337</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| <span class="kw">crate</span>::call::screen_thumbnail(source_id, max_w, max_h))
-<a href=#338 id=338 data-nosnippet>338</a>            .<span class="kw">await
-<a href=#339 id=339 data-nosnippet>339</a>            </span>.map_err(|e| {
-<a href=#340 id=340 data-nosnippet>340</a>                HoundError::internal(
-<a href=#341 id=341 data-nosnippet>341</a>                    InternalCode::ScreenThumbnailTask,
-<a href=#342 id=342 data-nosnippet>342</a>                    <span class="macro">format!</span>(<span class="string">"screen-thumbnail task: {e}"</span>),
-<a href=#343 id=343 data-nosnippet>343</a>                )
-<a href=#344 id=344 data-nosnippet>344</a>            })<span class="question-mark">?
-<a href=#345 id=345 data-nosnippet>345</a>    </span>}
-<a href=#346 id=346 data-nosnippet>346</a>
-<a href=#347 id=347 data-nosnippet>347</a>    <span class="doccomment">/// Enumerate the available media devices (mic / camera / speaker) for the Devices
-<a href=#348 id=348 data-nosnippet>348</a>    /// panel. Needs no active call; the engine enumeration is blocking, so it runs on
-<a href=#349 id=349 data-nosnippet>349</a>    /// a blocking thread.
-<a href=#350 id=350 data-nosnippet>350</a>    </span><span class="kw">pub async fn </span>list_devices(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw">crate</span>::call::DeviceListView&gt; {
-<a href=#351 id=351 data-nosnippet>351</a>        tokio::task::spawn_blocking(<span class="kw">crate</span>::call::list_devices)
-<a href=#352 id=352 data-nosnippet>352</a>            .<span class="kw">await
-<a href=#353 id=353 data-nosnippet>353</a>            </span>.map_err(|e| {
-<a href=#354 id=354 data-nosnippet>354</a>                HoundError::internal(
-<a href=#355 id=355 data-nosnippet>355</a>                    InternalCode::DeviceListTask,
-<a href=#356 id=356 data-nosnippet>356</a>                    <span class="macro">format!</span>(<span class="string">"device enumeration task: {e}"</span>),
-<a href=#357 id=357 data-nosnippet>357</a>                )
-<a href=#358 id=358 data-nosnippet>358</a>            })
-<a href=#359 id=359 data-nosnippet>359</a>    }
-<a href=#360 id=360 data-nosnippet>360</a>
-<a href=#361 id=361 data-nosnippet>361</a>    <span class="doccomment">/// Apply `f` to the current call session, or error if not in a call.
-<a href=#362 id=362 data-nosnippet>362</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>with_call(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;</span>CallSession)) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>guard = <span class="self">self</span>.call.lock().<span class="kw">await</span>;
-<a href=#364 id=364 data-nosnippet>364</a>        <span class="kw">let </span>session = guard
-<a href=#365 id=365 data-nosnippet>365</a>            .as_ref()
-<a href=#366 id=366 data-nosnippet>366</a>            .ok_or_else(|| HoundError::invalid_state(StateCode::NotInCall, <span class="string">"not in a call"</span>))<span class="question-mark">?</span>;
-<a href=#367 id=367 data-nosnippet>367</a>        f(session);
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="prelude-val">Ok</span>(())
-<a href=#369 id=369 data-nosnippet>369</a>    }
-<a href=#370 id=370 data-nosnippet>370</a>
-<a href=#371 id=371 data-nosnippet>371</a>    <span class="doccomment">/// Apply a mic voice-processing change to whichever pipeline currently holds
-<a href=#372 id=372 data-nosnippet>372</a>    /// the microphone: the live call, or the settings screen's monitor.
-<a href=#373 id=373 data-nosnippet>373</a>    ///
-<a href=#374 id=374 data-nosnippet>374</a>    /// A routing decision, never a fan-out — the two cannot coexist (see
-<a href=#375 id=375 data-nosnippet>375</a>    /// [`mic_monitor_start`](Self::mic_monitor_start)). With neither running this
-<a href=#376 id=376 data-nosnippet>376</a>    /// is still `NotInCall`: the caller's cue that its preference was recorded but
-<a href=#377 id=377 data-nosnippet>377</a>    /// nothing was listening, which is exactly what the Dart settings store
-<a href=#378 id=378 data-nosnippet>378</a>    /// swallows.
-<a href=#379 id=379 data-nosnippet>379</a>    </span><span class="kw">async fn </span>with_voice(
-<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#381 id=381 data-nosnippet>381</a>        on_call: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;</span>CallSession),
-<a href=#382 id=382 data-nosnippet>382</a>        on_monitor: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;</span>MicMonitor),
-<a href=#383 id=383 data-nosnippet>383</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(monitor) = <span class="self">self</span>.mic_monitor.lock().<span class="kw">await</span>.as_ref() {
-<a href=#385 id=385 data-nosnippet>385</a>            on_monitor(monitor);
-<a href=#386 id=386 data-nosnippet>386</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#387 id=387 data-nosnippet>387</a>        }
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="self">self</span>.with_call(on_call).<span class="kw">await
-<a href=#389 id=389 data-nosnippet>389</a>    </span>}
-<a href=#390 id=390 data-nosnippet>390</a>}
-<a href=#391 id=391 data-nosnippet>391</a>
-<a href=#392 id=392 data-nosnippet>392</a><span class="doccomment">/// Drop a monitor off the async worker.
-<a href=#393 id=393 data-nosnippet>393</a>///
-<a href=#394 id=394 data-nosnippet>394</a>/// `MicMonitor`'s drop JOINS its capture thread — that wait is what makes the
-<a href=#395 id=395 data-nosnippet>395</a>/// input device actually released rather than merely asked to stop — and a join,
-<a href=#396 id=396 data-nosnippet>396</a>/// however short, must not sit on a tokio worker. `None` is the common case (no
-<a href=#397 id=397 data-nosnippet>397</a>/// test was running) and costs nothing.
-<a href=#398 id=398 data-nosnippet>398</a></span><span class="kw">async fn </span>release_monitor(monitor: <span class="prelude-ty">Option</span>&lt;MicMonitor&gt;) {
-<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(monitor) = monitor {
-<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">let _ </span>= tokio::task::spawn_blocking(<span class="kw">move </span>|| drop(monitor)).<span class="kw">await</span>;
-<a href=#401 id=401 data-nosnippet>401</a>    }
-<a href=#402 id=402 data-nosnippet>402</a>}
-<a href=#403 id=403 data-nosnippet>403</a>
-<a href=#404 id=404 data-nosnippet>404</a><span class="attr">#[cfg(test)]
-<a href=#405 id=405 data-nosnippet>405</a></span><span class="kw">mod </span>tests {
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">use </span>std::sync::Arc;
-<a href=#407 id=407 data-nosnippet>407</a>
-<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">use </span><span class="kw">crate</span>::error::{HoundError, StateCode};
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">use </span><span class="kw">crate</span>::session::MemorySessionStore;
-<a href=#410 id=410 data-nosnippet>410</a>
-<a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">use </span><span class="kw">super</span>::HoundClient;
-<a href=#412 id=412 data-nosnippet>412</a>
-<a href=#413 id=413 data-nosnippet>413</a>    <span class="kw">fn </span>client() -&gt; Arc&lt;HoundClient&gt; {
-<a href=#414 id=414 data-nosnippet>414</a>        HoundClient::new(
-<a href=#415 id=415 data-nosnippet>415</a>            <span class="string">"http://localhost:1"</span>,
-<a href=#416 id=416 data-nosnippet>416</a>            Arc::new(MemorySessionStore::new()),
-<a href=#417 id=417 data-nosnippet>417</a>            <span class="prelude-val">None</span>,
-<a href=#418 id=418 data-nosnippet>418</a>        )
-<a href=#419 id=419 data-nosnippet>419</a>        .expect(<span class="string">"client builds without touching the network"</span>)
-<a href=#420 id=420 data-nosnippet>420</a>    }
-<a href=#421 id=421 data-nosnippet>421</a>
-<a href=#422 id=422 data-nosnippet>422</a>    <span class="doccomment">/// The call owns the microphone. The refusal must come BEFORE any device open
-<a href=#423 id=423 data-nosnippet>423</a>    /// — a mic test that "starts" mid-call would either fail on an exclusive
-<a href=#424 id=424 data-nosnippet>424</a>    /// device or run a second APM against the one the call is already adapting.
-<a href=#425 id=425 data-nosnippet>425</a>    </span><span class="attr">#[tokio::test]
-<a href=#426 id=426 data-nosnippet>426</a>    </span><span class="kw">async fn </span>the_mic_test_is_refused_while_a_call_holds_the_device() {
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">let </span>client = client();
-<a href=#428 id=428 data-nosnippet>428</a>        client.state.call_view.send_modify(|v| v.self_id = <span class="prelude-val">Some</span>(<span class="number">7</span>));
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="doccomment">/// Select the active camera (`None` = host default).
+<a href=#308 id=308 data-nosnippet>308</a>    </span><span class="kw">pub async fn </span>call_select_camera(<span class="kw-2">&amp;</span><span class="self">self</span>, id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="self">self</span>.with_call(|s| s.select_camera(id)).<span class="kw">await
+<a href=#310 id=310 data-nosnippet>310</a>    </span>}
+<a href=#311 id=311 data-nosnippet>311</a>
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="doccomment">/// Select the active speaker/output (`None` = host default).
+<a href=#313 id=313 data-nosnippet>313</a>    </span><span class="kw">pub async fn </span>call_select_speaker(<span class="kw-2">&amp;</span><span class="self">self</span>, id: <span class="prelude-ty">Option</span>&lt;String&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#314 id=314 data-nosnippet>314</a>        <span class="self">self</span>.with_call(|s| s.select_speaker(id)).<span class="kw">await
+<a href=#315 id=315 data-nosnippet>315</a>    </span>}
+<a href=#316 id=316 data-nosnippet>316</a>
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="doccomment">/// Start sharing a screen source (`source_id` is a token from
+<a href=#318 id=318 data-nosnippet>318</a>    /// [`list_screen_sources`](Self::list_screen_sources)); awaits the open result
+<a href=#319 id=319 data-nosnippet>319</a>    /// so a permission/unsupported error surfaces to the caller.
+<a href=#320 id=320 data-nosnippet>320</a>    </span><span class="kw">pub async fn </span>call_screen_share_start(<span class="kw-2">&amp;</span><span class="self">self</span>, source_id: String) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#321 id=321 data-nosnippet>321</a>        <span class="kw">let </span>guard = <span class="self">self</span>.call.lock().<span class="kw">await</span>;
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">let </span>session = guard
+<a href=#323 id=323 data-nosnippet>323</a>            .as_ref()
+<a href=#324 id=324 data-nosnippet>324</a>            .ok_or_else(|| HoundError::invalid_state(StateCode::NotInCall, <span class="string">"not in a call"</span>))<span class="question-mark">?</span>;
+<a href=#325 id=325 data-nosnippet>325</a>        session.screen_share_start(source_id).<span class="kw">await
+<a href=#326 id=326 data-nosnippet>326</a>    </span>}
+<a href=#327 id=327 data-nosnippet>327</a>
+<a href=#328 id=328 data-nosnippet>328</a>    <span class="doccomment">/// Stop the active screen share (if any).
+<a href=#329 id=329 data-nosnippet>329</a>    </span><span class="kw">pub async fn </span>call_screen_share_stop(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="self">self</span>.with_call(|s| s.screen_share_stop()).<span class="kw">await
+<a href=#331 id=331 data-nosnippet>331</a>    </span>}
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="doccomment">/// Set the live screen-share quality (motion↔legibility + a max resolution/fps cap).
+<a href=#334 id=334 data-nosnippet>334</a>    /// Reconfigures a running share's ladder live (no restart); remembered for the next
+<a href=#335 id=335 data-nosnippet>335</a>    /// share + across a reconnect. Harmless with no active call.
+<a href=#336 id=336 data-nosnippet>336</a>    </span><span class="kw">pub async fn </span>call_set_screen_quality(<span class="kw-2">&amp;</span><span class="self">self</span>, quality: hound_media::ScreenQuality) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#337 id=337 data-nosnippet>337</a>        <span class="self">self</span>.with_call(|s| s.set_screen_quality(quality)).<span class="kw">await
+<a href=#338 id=338 data-nosnippet>338</a>    </span>}
+<a href=#339 id=339 data-nosnippet>339</a>
+<a href=#340 id=340 data-nosnippet>340</a>    <span class="doccomment">/// Enumerate shareable screen sources for the picker. Needs no active call; the
+<a href=#341 id=341 data-nosnippet>341</a>    /// engine enumeration is blocking, so it runs on a blocking thread.
+<a href=#342 id=342 data-nosnippet>342</a>    </span><span class="kw">pub async fn </span>list_screen_sources(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">crate</span>::call::ScreenSourceView&gt;&gt; {
+<a href=#343 id=343 data-nosnippet>343</a>        tokio::task::spawn_blocking(<span class="kw">crate</span>::call::list_screen_sources)
+<a href=#344 id=344 data-nosnippet>344</a>            .<span class="kw">await
+<a href=#345 id=345 data-nosnippet>345</a>            </span>.map_err(|e| {
+<a href=#346 id=346 data-nosnippet>346</a>                HoundError::internal(
+<a href=#347 id=347 data-nosnippet>347</a>                    InternalCode::ScreenSourceTask,
+<a href=#348 id=348 data-nosnippet>348</a>                    <span class="macro">format!</span>(<span class="string">"screen-source enumeration task: {e}"</span>),
+<a href=#349 id=349 data-nosnippet>349</a>                )
+<a href=#350 id=350 data-nosnippet>350</a>            })<span class="question-mark">?
+<a href=#351 id=351 data-nosnippet>351</a>    </span>}
+<a href=#352 id=352 data-nosnippet>352</a>
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="doccomment">/// One-shot preview thumbnail of a screen source for the picker (opaque RGBA,
+<a href=#354 id=354 data-nosnippet>354</a>    /// aspect-fit within `max_w`×`max_h`). The engine capture is blocking, so it runs
+<a href=#355 id=355 data-nosnippet>355</a>    /// on a blocking thread. Best-effort — a failure is the picker's "no thumbnail"
+<a href=#356 id=356 data-nosnippet>356</a>    /// signal, not a hard error.
+<a href=#357 id=357 data-nosnippet>357</a>    </span><span class="kw">pub async fn </span>screen_thumbnail(
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#359 id=359 data-nosnippet>359</a>        source_id: String,
+<a href=#360 id=360 data-nosnippet>360</a>        max_w: u32,
+<a href=#361 id=361 data-nosnippet>361</a>        max_h: u32,
+<a href=#362 id=362 data-nosnippet>362</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw">crate</span>::call::ScreenThumbnail&gt; {
+<a href=#363 id=363 data-nosnippet>363</a>        tokio::task::spawn_blocking(<span class="kw">move </span>|| <span class="kw">crate</span>::call::screen_thumbnail(source_id, max_w, max_h))
+<a href=#364 id=364 data-nosnippet>364</a>            .<span class="kw">await
+<a href=#365 id=365 data-nosnippet>365</a>            </span>.map_err(|e| {
+<a href=#366 id=366 data-nosnippet>366</a>                HoundError::internal(
+<a href=#367 id=367 data-nosnippet>367</a>                    InternalCode::ScreenThumbnailTask,
+<a href=#368 id=368 data-nosnippet>368</a>                    <span class="macro">format!</span>(<span class="string">"screen-thumbnail task: {e}"</span>),
+<a href=#369 id=369 data-nosnippet>369</a>                )
+<a href=#370 id=370 data-nosnippet>370</a>            })<span class="question-mark">?
+<a href=#371 id=371 data-nosnippet>371</a>    </span>}
+<a href=#372 id=372 data-nosnippet>372</a>
+<a href=#373 id=373 data-nosnippet>373</a>    <span class="doccomment">/// Enumerate the available media devices (mic / camera / speaker) for the Devices
+<a href=#374 id=374 data-nosnippet>374</a>    /// panel. Needs no active call; the engine enumeration is blocking, so it runs on
+<a href=#375 id=375 data-nosnippet>375</a>    /// a blocking thread.
+<a href=#376 id=376 data-nosnippet>376</a>    </span><span class="kw">pub async fn </span>list_devices(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw">crate</span>::call::DeviceListView&gt; {
+<a href=#377 id=377 data-nosnippet>377</a>        tokio::task::spawn_blocking(<span class="kw">crate</span>::call::list_devices)
+<a href=#378 id=378 data-nosnippet>378</a>            .<span class="kw">await
+<a href=#379 id=379 data-nosnippet>379</a>            </span>.map_err(|e| {
+<a href=#380 id=380 data-nosnippet>380</a>                HoundError::internal(
+<a href=#381 id=381 data-nosnippet>381</a>                    InternalCode::DeviceListTask,
+<a href=#382 id=382 data-nosnippet>382</a>                    <span class="macro">format!</span>(<span class="string">"device enumeration task: {e}"</span>),
+<a href=#383 id=383 data-nosnippet>383</a>                )
+<a href=#384 id=384 data-nosnippet>384</a>            })
+<a href=#385 id=385 data-nosnippet>385</a>    }
+<a href=#386 id=386 data-nosnippet>386</a>
+<a href=#387 id=387 data-nosnippet>387</a>    <span class="doccomment">/// Apply `f` to the current call session, or error if not in a call.
+<a href=#388 id=388 data-nosnippet>388</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>with_call(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;</span>CallSession)) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">let </span>guard = <span class="self">self</span>.call.lock().<span class="kw">await</span>;
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">let </span>session = guard
+<a href=#391 id=391 data-nosnippet>391</a>            .as_ref()
+<a href=#392 id=392 data-nosnippet>392</a>            .ok_or_else(|| HoundError::invalid_state(StateCode::NotInCall, <span class="string">"not in a call"</span>))<span class="question-mark">?</span>;
+<a href=#393 id=393 data-nosnippet>393</a>        f(session);
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="prelude-val">Ok</span>(())
+<a href=#395 id=395 data-nosnippet>395</a>    }
+<a href=#396 id=396 data-nosnippet>396</a>
+<a href=#397 id=397 data-nosnippet>397</a>    <span class="doccomment">/// Apply a mic voice-processing change to whichever pipeline currently holds
+<a href=#398 id=398 data-nosnippet>398</a>    /// the microphone: the live call, or the settings screen's monitor.
+<a href=#399 id=399 data-nosnippet>399</a>    ///
+<a href=#400 id=400 data-nosnippet>400</a>    /// A routing decision, never a fan-out — the two cannot coexist (see
+<a href=#401 id=401 data-nosnippet>401</a>    /// [`mic_monitor_start`](Self::mic_monitor_start)). With neither running this
+<a href=#402 id=402 data-nosnippet>402</a>    /// is still `NotInCall`: the caller's cue that its preference was recorded but
+<a href=#403 id=403 data-nosnippet>403</a>    /// nothing was listening, which is exactly what the Dart settings store
+<a href=#404 id=404 data-nosnippet>404</a>    /// swallows.
+<a href=#405 id=405 data-nosnippet>405</a>    </span><span class="kw">async fn </span>with_voice(
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#407 id=407 data-nosnippet>407</a>        on_call: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;</span>CallSession),
+<a href=#408 id=408 data-nosnippet>408</a>        on_monitor: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;</span>MicMonitor),
+<a href=#409 id=409 data-nosnippet>409</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(monitor) = <span class="self">self</span>.mic_monitor.lock().<span class="kw">await</span>.as_ref() {
+<a href=#411 id=411 data-nosnippet>411</a>            on_monitor(monitor);
+<a href=#412 id=412 data-nosnippet>412</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#413 id=413 data-nosnippet>413</a>        }
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="self">self</span>.with_call(on_call).<span class="kw">await
+<a href=#415 id=415 data-nosnippet>415</a>    </span>}
+<a href=#416 id=416 data-nosnippet>416</a>}
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a><span class="doccomment">/// Drop a monitor off the async worker.
+<a href=#419 id=419 data-nosnippet>419</a>///
+<a href=#420 id=420 data-nosnippet>420</a>/// `MicMonitor`'s drop JOINS its capture thread — that wait is what makes the
+<a href=#421 id=421 data-nosnippet>421</a>/// input device actually released rather than merely asked to stop — and a join,
+<a href=#422 id=422 data-nosnippet>422</a>/// however short, must not sit on a tokio worker. `None` is the common case (no
+<a href=#423 id=423 data-nosnippet>423</a>/// test was running) and costs nothing.
+<a href=#424 id=424 data-nosnippet>424</a></span><span class="kw">async fn </span>release_monitor(monitor: <span class="prelude-ty">Option</span>&lt;MicMonitor&gt;) {
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(monitor) = monitor {
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">let _ </span>= tokio::task::spawn_blocking(<span class="kw">move </span>|| drop(monitor)).<span class="kw">await</span>;
+<a href=#427 id=427 data-nosnippet>427</a>    }
+<a href=#428 id=428 data-nosnippet>428</a>}
 <a href=#429 id=429 data-nosnippet>429</a>
-<a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">let </span>err = client
-<a href=#431 id=431 data-nosnippet>431</a>            .mic_monitor_start(<span class="prelude-val">None</span>)
-<a href=#432 id=432 data-nosnippet>432</a>            .<span class="kw">await
-<a href=#433 id=433 data-nosnippet>433</a>            </span>.expect_err(<span class="string">"a live call must refuse the mic test"</span>);
-<a href=#434 id=434 data-nosnippet>434</a>
-<a href=#435 id=435 data-nosnippet>435</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#436 id=436 data-nosnippet>436</a>            err,
-<a href=#437 id=437 data-nosnippet>437</a>            HoundError::InvalidState {
-<a href=#438 id=438 data-nosnippet>438</a>                code: StateCode::CallOwnsMicrophone,
-<a href=#439 id=439 data-nosnippet>439</a>                ..
-<a href=#440 id=440 data-nosnippet>440</a>            }
-<a href=#441 id=441 data-nosnippet>441</a>        ));
-<a href=#442 id=442 data-nosnippet>442</a>    }
-<a href=#443 id=443 data-nosnippet>443</a>
-<a href=#444 id=444 data-nosnippet>444</a>    <span class="doccomment">/// Stopping a monitor that never started is the settings screen leaving the
-<a href=#445 id=445 data-nosnippet>445</a>    /// section — an idempotent teardown, not a fault.
-<a href=#446 id=446 data-nosnippet>446</a>    </span><span class="attr">#[tokio::test]
-<a href=#447 id=447 data-nosnippet>447</a>    </span><span class="kw">async fn </span>stopping_an_unstarted_mic_test_is_a_no_op() {
-<a href=#448 id=448 data-nosnippet>448</a>        <span class="macro">assert!</span>(client().mic_monitor_stop().<span class="kw">await</span>.is_ok());
-<a href=#449 id=449 data-nosnippet>449</a>    }
-<a href=#450 id=450 data-nosnippet>450</a>}
+<a href=#430 id=430 data-nosnippet>430</a><span class="attr">#[cfg(test)]
+<a href=#431 id=431 data-nosnippet>431</a></span><span class="kw">mod </span>tests {
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">use </span>std::sync::Arc;
+<a href=#433 id=433 data-nosnippet>433</a>
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">use </span><span class="kw">crate</span>::error::{HoundError, StateCode};
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="kw">use </span><span class="kw">crate</span>::session::MemorySessionStore;
+<a href=#436 id=436 data-nosnippet>436</a>
+<a href=#437 id=437 data-nosnippet>437</a>    <span class="kw">use </span><span class="kw">super</span>::HoundClient;
+<a href=#438 id=438 data-nosnippet>438</a>
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="kw">fn </span>client() -&gt; Arc&lt;HoundClient&gt; {
+<a href=#440 id=440 data-nosnippet>440</a>        HoundClient::new(
+<a href=#441 id=441 data-nosnippet>441</a>            <span class="string">"http://localhost:1"</span>,
+<a href=#442 id=442 data-nosnippet>442</a>            Arc::new(MemorySessionStore::new()),
+<a href=#443 id=443 data-nosnippet>443</a>            <span class="prelude-val">None</span>,
+<a href=#444 id=444 data-nosnippet>444</a>        )
+<a href=#445 id=445 data-nosnippet>445</a>        .expect(<span class="string">"client builds without touching the network"</span>)
+<a href=#446 id=446 data-nosnippet>446</a>    }
+<a href=#447 id=447 data-nosnippet>447</a>
+<a href=#448 id=448 data-nosnippet>448</a>    <span class="doccomment">/// The call owns the microphone. The refusal must come BEFORE any device open
+<a href=#449 id=449 data-nosnippet>449</a>    /// — a mic test that "starts" mid-call would either fail on an exclusive
+<a href=#450 id=450 data-nosnippet>450</a>    /// device or run a second APM against the one the call is already adapting.
+<a href=#451 id=451 data-nosnippet>451</a>    </span><span class="attr">#[tokio::test]
+<a href=#452 id=452 data-nosnippet>452</a>    </span><span class="kw">async fn </span>the_mic_test_is_refused_while_a_call_holds_the_device() {
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="kw">let </span>client = client();
+<a href=#454 id=454 data-nosnippet>454</a>        client.state.call_view.send_modify(|v| v.self_id = <span class="prelude-val">Some</span>(<span class="number">7</span>));
+<a href=#455 id=455 data-nosnippet>455</a>
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">let </span>err = client
+<a href=#457 id=457 data-nosnippet>457</a>            .mic_monitor_start(<span class="prelude-val">None</span>)
+<a href=#458 id=458 data-nosnippet>458</a>            .<span class="kw">await
+<a href=#459 id=459 data-nosnippet>459</a>            </span>.expect_err(<span class="string">"a live call must refuse the mic test"</span>);
+<a href=#460 id=460 data-nosnippet>460</a>
+<a href=#461 id=461 data-nosnippet>461</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#462 id=462 data-nosnippet>462</a>            err,
+<a href=#463 id=463 data-nosnippet>463</a>            HoundError::InvalidState {
+<a href=#464 id=464 data-nosnippet>464</a>                code: StateCode::CallOwnsMicrophone,
+<a href=#465 id=465 data-nosnippet>465</a>                ..
+<a href=#466 id=466 data-nosnippet>466</a>            }
+<a href=#467 id=467 data-nosnippet>467</a>        ));
+<a href=#468 id=468 data-nosnippet>468</a>    }
+<a href=#469 id=469 data-nosnippet>469</a>
+<a href=#470 id=470 data-nosnippet>470</a>    <span class="doccomment">/// Stopping a monitor that never started is the settings screen leaving the
+<a href=#471 id=471 data-nosnippet>471</a>    /// section — an idempotent teardown, not a fault.
+<a href=#472 id=472 data-nosnippet>472</a>    </span><span class="attr">#[tokio::test]
+<a href=#473 id=473 data-nosnippet>473</a>    </span><span class="kw">async fn </span>stopping_an_unstarted_mic_test_is_a_no_op() {
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="macro">assert!</span>(client().mic_monitor_stop().<span class="kw">await</span>.is_ok());
+<a href=#475 id=475 data-nosnippet>475</a>    }
+<a href=#476 id=476 data-nosnippet>476</a>
+<a href=#477 id=477 data-nosnippet>477</a>    <span class="doccomment">/// The scoped leave is a no-op with no call — the common case, since every
+<a href=#478 id=478 data-nosnippet>478</a>    /// "this channel is gone" event fires whether or not anyone is in a call,
+<a href=#479 id=479 data-nosnippet>479</a>    /// and it must never report a leave that did not happen.
+<a href=#480 id=480 data-nosnippet>480</a>    </span><span class="attr">#[tokio::test]
+<a href=#481 id=481 data-nosnippet>481</a>    </span><span class="kw">async fn </span>a_scoped_leave_with_no_call_leaves_nothing() {
+<a href=#482 id=482 data-nosnippet>482</a>        <span class="kw">let </span>client = client();
+<a href=#483 id=483 data-nosnippet>483</a>        <span class="macro">assert!</span>(!client.call_leave_if_in(uuid::Uuid::nil()).<span class="kw">await</span>);
+<a href=#484 id=484 data-nosnippet>484</a>    }
+<a href=#485 id=485 data-nosnippet>485</a>}
 </code></pre></div></section></main></body></html>

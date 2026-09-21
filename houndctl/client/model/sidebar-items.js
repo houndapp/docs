@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["InstancePermission","SpaceDetail","SpaceKind"],"struct":["Attachment","Community","Instance","Member","MergedProfile","Message","Messages","Page","Profile","Reindexed","Space"]};
+window.SIDEBAR_ITEMS = {"enum":["InstancePermission","SpaceDetail","SpaceKind"],"struct":["Attachment","Community","CommunityMember","Instance","Member","MergedProfile","Message","Messages","Page","Profile","Reindexed","Space","UserLookup"]};

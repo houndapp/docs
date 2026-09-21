@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["UsersCommand"],"fn":["run"],"struct":["UsersArgs"]};
+window.SIDEBAR_ITEMS = {"enum":["UserRef","UsersCommand"],"fn":["resolve_user","run"],"struct":["UsersArgs"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CommunitiesCommand"],"fn":["confirm_reset","resolve_community_id","resolve_default_community_id","run"],"struct":["CommunitiesArgs"]};
+window.SIDEBAR_ITEMS = {"enum":["CommunitiesCommand","CommunityRight"],"fn":["confirm_reset","resolve_community_id","resolve_default_community_id","run"],"struct":["CommunitiesArgs"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["delete_community_organiser","put_community_organiser"]};

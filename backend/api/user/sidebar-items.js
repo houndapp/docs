@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["get_user_communities","router"]};
+window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["get_user_communities","get_user_lookup","router"],"struct":["UserLookupModel","UserLookupParameters"]};
