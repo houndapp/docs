@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["build_bin","run_captured","target_debug_dir"]};
+window.SIDEBAR_ITEMS = {"constant":["STACK_SELECTION"],"fn":["build_bin","build_bins","cargo","nextest_binaries","run_captured","target_debug_dir"]};

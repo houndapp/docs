@@ -39,7 +39,7 @@ audio-starvation monitor. <code>houndbot</code>’s CI verdict and
 construction — this module just adapts it to a <code>&amp;HoundClient</code>.</dd><dt><a class="mod" href="sfu_process/index.html" title="mod hound_testkit::sfu_process">sfu_<wbr>process</a></dt><dd>A second, test-owned <code>hound-sfu</code> process — the seamless-rollout migration
 scenario (<code>tests/call_scenarios.rs</code>’s
 <code>sfu_seamless_rollout_migrates_clients_and_drains</code>) spawns it from the
-SAME binary <code>hound-stack e2e</code> already builds for the stack’s own <code>sfu1</code>
-(a compose service), on fresh ports and a short <code>DRAIN_DEADLINE_SECS</code>, to
-prove the backend’s newest-registration routing + <code>SfuMigrate</code> broadcast +
-SIGTERM-drain contract end-to-end.</dd></dl></section></div></main></body></html>
+SAME binary <code>hound-stack e2e</code> already builds for the stack’s own host SFU,
+on fresh ports and a short <code>DRAIN_DEADLINE_SECS</code>, to prove the backend’s
+newest-registration routing + <code>SfuMigrate</code> broadcast + SIGTERM-drain
+contract end-to-end.</dd></dl></section></div></main></body></html>

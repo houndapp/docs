@@ -4,9 +4,9 @@ server’s embed pipeline for the debugger.</p>
 attacker-controlled text — so both validate the scheme before doing anything
 with it. That check is here rather than in the UI because it must hold for
 every caller, and because the consequence of missing it is
-platform-specific and severe: [<code>open::that_detached</code>] resolves to
-<code>ShellExecute</code> on Windows and <code>open(1)</code> on macOS, either of which will
-cheerfully act on <code>file:</code>, <code>smb:</code>, or a registered custom scheme.</p>
+platform-specific and severe: the launcher resolves to <code>ShellExecuteExW</code> on
+Windows and <code>open(1)</code> on macOS, either of which will cheerfully act on
+<code>file:</code>, <code>smb:</code>, or a registered custom scheme.</p>
 </div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.debug_embed.html" title="fn rust_lib_houndchat::api::links::debug_embed">debug_<wbr>embed</a></dt><dd>Unfurl <code>url</code> through the backend and return the full trace: every HTTP hop
 (with the address the guard resolved and allowed), every Open Graph, Twitter
 Card and oEmbed key seen, the warnings, and the embed the precedence rules

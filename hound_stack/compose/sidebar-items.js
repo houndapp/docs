@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["probe"],"struct":["Compose"]};
+window.SIDEBAR_ITEMS = {"fn":["down_args","probe"],"struct":["Compose"]};

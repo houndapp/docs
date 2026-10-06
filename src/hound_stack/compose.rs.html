@@ -3,12 +3,12 @@
 <a href=#3 id=3 data-nosnippet>3</a>//! harnesses used, so a CI host that ships bare docker (no plugin, no
 <a href=#4 id=4 data-nosnippet>4</a>//! standalone binary — the X64 runner) still works without a host install.
 <a href=#5 id=5 data-nosnippet>5</a>//!
-<a href=#6 id=6 data-nosnippet>6</a>//! Noise policy: lifecycle invocations (`up`, `restart`, teardown `down`)
+<a href=#6 id=6 data-nosnippet>6</a>//! Noise policy: lifecycle invocations (`up`, teardown `down`)
 <a href=#7 id=7 data-nosnippet>7</a>//! append their full output to a `compose.log` artifact and print nothing on
 <a href=#8 id=8 data-nosnippet>8</a>//! success — the harness console gets one progress line per step, and a
 <a href=#9 id=9 data-nosnippet>9</a>//! failure surfaces the log tail inline. The manual `hound-stack down`
-<a href=#10 id=10 data-nosnippet>10</a>//! escape hatch uses [`Compose::down_volumes_inherit`] instead, since an
-<a href=#11 id=11 data-nosnippet>11</a>//! operator invoking it directly wants to watch it happen.
+<a href=#10 id=10 data-nosnippet>10</a>//! escape hatch uses [`Compose::down_inherit`] instead, since an operator
+<a href=#11 id=11 data-nosnippet>11</a>//! invoking it directly wants to watch it happen.
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">use </span>std::io::Write;
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>std::path::{Path, PathBuf};
@@ -90,93 +90,92 @@
 <a href=#90 id=90 data-nosnippet>90</a>        <span class="prelude-val">Ok</span>(out.status)
 <a href=#91 id=91 data-nosnippet>91</a>    }
 <a href=#92 id=92 data-nosnippet>92</a>
-<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">pub fn </span>up_d_build(<span class="kw-2">&amp;</span><span class="self">self</span>, log: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>status = <span class="self">self</span>.run_to_log(<span class="kw-2">&amp;</span>[<span class="string">"up"</span>, <span class="string">"-d"</span>, <span class="string">"--build"</span>], log)<span class="question-mark">?</span>;
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">if </span>!status.success() {
-<a href=#96 id=96 data-nosnippet>96</a>            logs::print_tail(<span class="string">"docker compose up"</span>, log, <span class="number">40</span>);
-<a href=#97 id=97 data-nosnippet>97</a>            <span class="macro">bail!</span>(
-<a href=#98 id=98 data-nosnippet>98</a>                <span class="string">"docker compose up -d --build exited {status} — full output in {}"</span>,
-<a href=#99 id=99 data-nosnippet>99</a>                log.display()
-<a href=#100 id=100 data-nosnippet>100</a>            );
-<a href=#101 id=101 data-nosnippet>101</a>        }
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="prelude-val">Ok</span>(())
-<a href=#103 id=103 data-nosnippet>103</a>    }
-<a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">pub fn </span>restart(<span class="kw-2">&amp;</span><span class="self">self</span>, service: <span class="kw-2">&amp;</span>str, log: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span>status = <span class="self">self</span>.run_to_log(<span class="kw-2">&amp;</span>[<span class="string">"restart"</span>, service], log)<span class="question-mark">?</span>;
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">if </span>!status.success() {
-<a href=#108 id=108 data-nosnippet>108</a>            logs::print_tail(<span class="string">"docker compose restart"</span>, log, <span class="number">20</span>);
-<a href=#109 id=109 data-nosnippet>109</a>            <span class="macro">bail!</span>(<span class="string">"docker compose restart {service} exited {status}"</span>);
-<a href=#110 id=110 data-nosnippet>110</a>        }
-<a href=#111 id=111 data-nosnippet>111</a>        <span class="prelude-val">Ok</span>(())
-<a href=#112 id=112 data-nosnippet>112</a>    }
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="doccomment">/// `compose ps -q &lt;service&gt;` — the container id, or `None` if not found.
-<a href=#115 id=115 data-nosnippet>115</a>    </span><span class="kw">pub fn </span>ps_q(<span class="kw-2">&amp;</span><span class="self">self</span>, service: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; {
-<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>output = <span class="self">self
-<a href=#117 id=117 data-nosnippet>117</a>            </span>.command(<span class="kw-2">&amp;</span>[<span class="string">"ps"</span>, <span class="string">"-q"</span>, service])
-<a href=#118 id=118 data-nosnippet>118</a>            .output()
-<a href=#119 id=119 data-nosnippet>119</a>            .context(<span class="string">"docker compose ps -q"</span>)<span class="question-mark">?</span>;
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span>id = String::from_utf8_lossy(<span class="kw-2">&amp;</span>output.stdout).trim().to_owned();
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="prelude-val">Ok</span>((!id.is_empty()).then_some(id))
-<a href=#122 id=122 data-nosnippet>122</a>    }
-<a href=#123 id=123 data-nosnippet>123</a>
-<a href=#124 id=124 data-nosnippet>124</a>    <span class="doccomment">/// `compose logs --no-color &lt;service&gt;` — best-effort: the caller wants
-<a href=#125 id=125 data-nosnippet>125</a>    /// the log captured to a file even if compose itself errors here (a
-<a href=#126 id=126 data-nosnippet>126</a>    /// teardown step must never let this mask the run's real outcome).
-<a href=#127 id=127 data-nosnippet>127</a>    </span><span class="kw">pub fn </span>logs_no_color(<span class="kw-2">&amp;</span><span class="self">self</span>, service: <span class="kw-2">&amp;</span>str) -&gt; String {
-<a href=#128 id=128 data-nosnippet>128</a>        <span class="self">self</span>.command(<span class="kw-2">&amp;</span>[<span class="string">"logs"</span>, <span class="string">"--no-color"</span>, service])
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="doccomment">/// `compose up -d &lt;services…&gt;`, plus `--build` when `build` is set.
+<a href=#94 id=94 data-nosnippet>94</a>    ///
+<a href=#95 id=95 data-nosnippet>95</a>    /// The service list is EXPLICIT (compose starts those plus their
+<a href=#96 id=96 data-nosnippet>96</a>    /// `depends_on`), because the compose file defines more than this stack
+<a href=#97 id=97 data-nosnippet>97</a>    /// runs: `hound-sfu` is a host process here (see `crate::lifecycle`), and
+<a href=#98 id=98 data-nosnippet>98</a>    /// naming the services is also what keeps `--build` from rebuilding its
+<a href=#99 id=99 data-nosnippet>99</a>    /// image.
+<a href=#100 id=100 data-nosnippet>100</a>    ///
+<a href=#101 id=101 data-nosnippet>101</a>    /// The rule for `build`: ONLY for `--fresh`. Compose already builds an
+<a href=#102 id=102 data-nosnippet>102</a>    /// image that does not exist yet, so a plain `up -d` covers the
+<a href=#103 id=103 data-nosnippet>103</a>    /// first-ever run; `--build` on every bring-up instead re-runs the
+<a href=#104 id=104 data-nosnippet>104</a>    /// Dockerfiles' build steps on a stack that is meant to be cheap to
+<a href=#105 id=105 data-nosnippet>105</a>    /// re-enter. `--fresh` is where "rebuild the images from source" is the
+<a href=#106 id=106 data-nosnippet>106</a>    /// stated intent.
+<a href=#107 id=107 data-nosnippet>107</a>    </span><span class="kw">pub fn </span>up(<span class="kw-2">&amp;</span><span class="self">self</span>, log: <span class="kw-2">&amp;</span>Path, build: bool, services: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">let </span><span class="kw-2">mut </span>args = <span class="macro">vec!</span>[<span class="string">"up"</span>, <span class="string">"-d"</span>];
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">if </span>build {
+<a href=#110 id=110 data-nosnippet>110</a>            args.push(<span class="string">"--build"</span>);
+<a href=#111 id=111 data-nosnippet>111</a>        }
+<a href=#112 id=112 data-nosnippet>112</a>        args.extend_from_slice(services);
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let </span>status = <span class="self">self</span>.run_to_log(<span class="kw-2">&amp;</span>args, log)<span class="question-mark">?</span>;
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">if </span>!status.success() {
+<a href=#115 id=115 data-nosnippet>115</a>            logs::print_tail(<span class="string">"docker compose up"</span>, log, <span class="number">40</span>);
+<a href=#116 id=116 data-nosnippet>116</a>            <span class="macro">bail!</span>(
+<a href=#117 id=117 data-nosnippet>117</a>                <span class="string">"docker compose {} exited {status} — full output in {}"</span>,
+<a href=#118 id=118 data-nosnippet>118</a>                args.join(<span class="string">" "</span>),
+<a href=#119 id=119 data-nosnippet>119</a>                log.display()
+<a href=#120 id=120 data-nosnippet>120</a>            );
+<a href=#121 id=121 data-nosnippet>121</a>        }
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="prelude-val">Ok</span>(())
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="doccomment">/// `compose ps -q &lt;service&gt;` — the container id, or `None` if not found.
+<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="kw">pub fn </span>ps_q(<span class="kw-2">&amp;</span><span class="self">self</span>, service: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt; {
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span>output = <span class="self">self
+<a href=#128 id=128 data-nosnippet>128</a>            </span>.command(<span class="kw-2">&amp;</span>[<span class="string">"ps"</span>, <span class="string">"-q"</span>, service])
 <a href=#129 id=129 data-nosnippet>129</a>            .output()
-<a href=#130 id=130 data-nosnippet>130</a>            .map(|o| {
-<a href=#131 id=131 data-nosnippet>131</a>                <span class="kw">let </span><span class="kw-2">mut </span>combined = String::from_utf8_lossy(<span class="kw-2">&amp;</span>o.stdout).into_owned();
-<a href=#132 id=132 data-nosnippet>132</a>                combined.push_str(<span class="kw-2">&amp;</span>String::from_utf8_lossy(<span class="kw-2">&amp;</span>o.stderr));
-<a href=#133 id=133 data-nosnippet>133</a>                combined
-<a href=#134 id=134 data-nosnippet>134</a>            })
-<a href=#135 id=135 data-nosnippet>135</a>            .unwrap_or_default()
-<a href=#136 id=136 data-nosnippet>136</a>    }
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="doccomment">/// `compose down --volumes`, output to `log` — best-effort, same
-<a href=#139 id=139 data-nosnippet>139</a>    /// rationale as [`Self::logs_no_color`].
-<a href=#140 id=140 data-nosnippet>140</a>    ///
-<a href=#141 id=141 data-nosnippet>141</a>    /// `--profile passkeys` widens the sweep to the opt-in native-passkey TLS
-<a href=#142 id=142 data-nosnippet>142</a>    /// front (compose.dev.yaml) — a plain `down` only removes default-profile
-<a href=#143 id=143 data-nosnippet>143</a>    /// services and would strand it holding :443. `--remove-orphans` also
-<a href=#144 id=144 data-nosnippet>144</a>    /// clears containers whose service was since renamed/removed from the
-<a href=#145 id=145 data-nosnippet>145</a>    /// compose file — those otherwise linger holding their ports forever.
-<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="kw">pub fn </span>down_volumes(<span class="kw-2">&amp;</span><span class="self">self</span>, log: <span class="kw-2">&amp;</span>Path) {
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let _ </span>= <span class="self">self</span>.run_to_log(
-<a href=#148 id=148 data-nosnippet>148</a>            <span class="kw-2">&amp;</span>[
-<a href=#149 id=149 data-nosnippet>149</a>                <span class="string">"--profile"</span>,
-<a href=#150 id=150 data-nosnippet>150</a>                <span class="string">"passkeys"</span>,
-<a href=#151 id=151 data-nosnippet>151</a>                <span class="string">"down"</span>,
-<a href=#152 id=152 data-nosnippet>152</a>                <span class="string">"--volumes"</span>,
-<a href=#153 id=153 data-nosnippet>153</a>                <span class="string">"--remove-orphans"</span>,
-<a href=#154 id=154 data-nosnippet>154</a>            ],
-<a href=#155 id=155 data-nosnippet>155</a>            log,
-<a href=#156 id=156 data-nosnippet>156</a>        );
-<a href=#157 id=157 data-nosnippet>157</a>    }
-<a href=#158 id=158 data-nosnippet>158</a>
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="doccomment">/// `compose down --volumes` with output on the console — for the manual
-<a href=#160 id=160 data-nosnippet>160</a>    /// `hound-stack down` command only (see the module doc).
-<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="kw">pub fn </span>down_volumes_inherit(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="kw">let _ </span>= <span class="self">self
-<a href=#163 id=163 data-nosnippet>163</a>            </span>.command(<span class="kw-2">&amp;</span>[
-<a href=#164 id=164 data-nosnippet>164</a>                <span class="string">"--profile"</span>,
-<a href=#165 id=165 data-nosnippet>165</a>                <span class="string">"passkeys"</span>,
-<a href=#166 id=166 data-nosnippet>166</a>                <span class="string">"down"</span>,
-<a href=#167 id=167 data-nosnippet>167</a>                <span class="string">"--volumes"</span>,
-<a href=#168 id=168 data-nosnippet>168</a>                <span class="string">"--remove-orphans"</span>,
-<a href=#169 id=169 data-nosnippet>169</a>            ])
-<a href=#170 id=170 data-nosnippet>170</a>            .status();
-<a href=#171 id=171 data-nosnippet>171</a>    }
-<a href=#172 id=172 data-nosnippet>172</a>}
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a><span class="kw">fn </span>probe(program: <span class="kw-2">&amp;</span>str, args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; bool {
-<a href=#175 id=175 data-nosnippet>175</a>    Command::new(program)
-<a href=#176 id=176 data-nosnippet>176</a>        .args(args)
-<a href=#177 id=177 data-nosnippet>177</a>        .stdout(Stdio::null())
-<a href=#178 id=178 data-nosnippet>178</a>        .stderr(Stdio::null())
-<a href=#179 id=179 data-nosnippet>179</a>        .status()
-<a href=#180 id=180 data-nosnippet>180</a>        .is_ok_and(|s| s.success())
-<a href=#181 id=181 data-nosnippet>181</a>}
+<a href=#130 id=130 data-nosnippet>130</a>            .context(<span class="string">"docker compose ps -q"</span>)<span class="question-mark">?</span>;
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let </span>id = String::from_utf8_lossy(<span class="kw-2">&amp;</span>output.stdout).trim().to_owned();
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="prelude-val">Ok</span>((!id.is_empty()).then_some(id))
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// `compose down`, output to `log` — best-effort: a teardown step's
+<a href=#136 id=136 data-nosnippet>136</a>    /// failure must never mask the run's real outcome.
+<a href=#137 id=137 data-nosnippet>137</a>    ///
+<a href=#138 id=138 data-nosnippet>138</a>    /// `volumes` adds `--volumes`, which wipes postgres's data volume. It is
+<a href=#139 id=139 data-nosnippet>139</a>    /// NOT the default: the backend runs `MIGRATE=fresh`, so every backend
+<a href=#140 id=140 data-nosnippet>140</a>    /// start already resets the schema, and keeping the volume keeps the
+<a href=#141 id=141 data-nosnippet>141</a>    /// container's initdb out of the next bring-up. Wiping is reserved for
+<a href=#142 id=142 data-nosnippet>142</a>    /// the explicit asks — `--fresh` and `down --volumes`.
+<a href=#143 id=143 data-nosnippet>143</a>    ///
+<a href=#144 id=144 data-nosnippet>144</a>    /// `--profile passkeys` widens the sweep to the opt-in native-passkey TLS
+<a href=#145 id=145 data-nosnippet>145</a>    /// front (compose.dev.yaml) — a plain `down` only removes default-profile
+<a href=#146 id=146 data-nosnippet>146</a>    /// services and would strand it holding :443. `--remove-orphans` also
+<a href=#147 id=147 data-nosnippet>147</a>    /// clears containers whose service was since renamed/removed from the
+<a href=#148 id=148 data-nosnippet>148</a>    /// compose file — those otherwise linger holding their ports forever.
+<a href=#149 id=149 data-nosnippet>149</a>    ///
+<a href=#150 id=150 data-nosnippet>150</a>    /// Deliberately a FULL down, not a down of the services [`Self::up`]
+<a href=#151 id=151 data-nosnippet>151</a>    /// starts: it also removes a `hound-sfu` or `hound-auth` container from
+<a href=#152 id=152 data-nosnippet>152</a>    /// an older run (or started by hand), which would squat :7890/udp or
+<a href=#153 id=153 data-nosnippet>153</a>    /// :3100 against the host SFU or auth page.
+<a href=#154 id=154 data-nosnippet>154</a>    </span><span class="kw">pub fn </span>down(<span class="kw-2">&amp;</span><span class="self">self</span>, log: <span class="kw-2">&amp;</span>Path, volumes: bool) {
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let _ </span>= <span class="self">self</span>.run_to_log(<span class="kw-2">&amp;</span>down_args(volumes), log);
+<a href=#156 id=156 data-nosnippet>156</a>    }
+<a href=#157 id=157 data-nosnippet>157</a>
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="doccomment">/// [`Self::down`] with output on the console — for the manual
+<a href=#159 id=159 data-nosnippet>159</a>    /// `hound-stack down` command only (see the module doc).
+<a href=#160 id=160 data-nosnippet>160</a>    </span><span class="kw">pub fn </span>down_inherit(<span class="kw-2">&amp;</span><span class="self">self</span>, volumes: bool) {
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let _ </span>= <span class="self">self</span>.command(<span class="kw-2">&amp;</span>down_args(volumes)).status();
+<a href=#162 id=162 data-nosnippet>162</a>    }
+<a href=#163 id=163 data-nosnippet>163</a>}
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a><span class="kw">fn </span>down_args(volumes: bool) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">let </span><span class="kw-2">mut </span>args = <span class="macro">vec!</span>[<span class="string">"--profile"</span>, <span class="string">"passkeys"</span>, <span class="string">"down"</span>, <span class="string">"--remove-orphans"</span>];
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">if </span>volumes {
+<a href=#168 id=168 data-nosnippet>168</a>        args.push(<span class="string">"--volumes"</span>);
+<a href=#169 id=169 data-nosnippet>169</a>    }
+<a href=#170 id=170 data-nosnippet>170</a>    args
+<a href=#171 id=171 data-nosnippet>171</a>}
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a><span class="kw">fn </span>probe(program: <span class="kw-2">&amp;</span>str, args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; bool {
+<a href=#174 id=174 data-nosnippet>174</a>    Command::new(program)
+<a href=#175 id=175 data-nosnippet>175</a>        .args(args)
+<a href=#176 id=176 data-nosnippet>176</a>        .stdout(Stdio::null())
+<a href=#177 id=177 data-nosnippet>177</a>        .stderr(Stdio::null())
+<a href=#178 id=178 data-nosnippet>178</a>        .status()
+<a href=#179 id=179 data-nosnippet>179</a>        .is_ok_and(|s| s.success())
+<a href=#180 id=180 data-nosnippet>180</a>}
 </code></pre></div></section></main></body></html>

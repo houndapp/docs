@@ -13,7 +13,7 @@
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">use </span>axum::{Json, extract::Path, extract::State, http::StatusCode};
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>hound_passkey::dto::{LinkEmailFinishRequest, LinkEmailStartRequest, StartRegisterResponse};
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>sea_orm::{QueryOrder, TransactionTrait, prelude::<span class="kw-2">*</span>};
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>sea_orm::{QueryOrder, prelude::<span class="kw-2">*</span>};
 <a href=#17 id=17 data-nosnippet>17</a>
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">super</span>::jwt::Claims;
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use super</span>::{InFlightRegistration, TAG};
@@ -216,7 +216,7 @@
 <a href=#216 id=216 data-nosnippet>216</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ApiError::IdentityAlreadyLinked);
 <a href=#217 id=217 data-nosnippet>217</a>    }
 <a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#220 id=220 data-nosnippet>220</a>    api.insert_identity(<span class="kw-2">&amp;</span>txn, user_id, IdentityProvider::Email, inflight.email)
 <a href=#221 id=221 data-nosnippet>221</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#222 id=222 data-nosnippet>222</a>    api.insert_passkey(<span class="kw-2">&amp;</span>txn, user_id, inflight.name, passkey)
@@ -242,7 +242,7 @@
 <a href=#242 id=242 data-nosnippet>242</a>        user_id: Uuid,
 <a href=#243 id=243 data-nosnippet>243</a>        provider: IdentityProvider,
 <a href=#244 id=244 data-nosnippet>244</a>    ) -&gt; ApiResult&lt;()&gt; {
-<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span>txn = <span class="self">self</span>.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span>txn = <span class="self">self</span>.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#246 id=246 data-nosnippet>246</a>
 <a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">let </span>identities = identity::Entity::find()
 <a href=#248 id=248 data-nosnippet>248</a>            .filter(identity::Column::UserId.eq(user_id))

@@ -1,0 +1,42 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Optional stable code signature for the binaries this harness builds (macOS only, opt-in)."><title>hound_stack::codesign - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="hound_stack" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module codesign</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../hound_stack/index.html">hound_<wbr>stack</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module codesign</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#why" title="Why">Why</a></li><li><a href="#opting-in" title="Opting in">Opting in</a></li></ul><h3><a href="#constants">Module Items</a></h3><ul class="block"><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate hound_<wbr>stack</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">hound_stack</a></div><h1>Module <span>codesign</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/hound_stack/codesign.rs.html#1-171">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Optional stable code signature for the binaries this harness builds
+(macOS only, opt-in).</p>
+<h2 id="why"><a class="doc-anchor" href="#why">§</a>Why</h2>
+<p>Every Mach-O cargo produces is ad-hoc signed by the linker: no team, no
+stable identifier, and a designated requirement that is a bare <code>cdhash</code>
+of the binary’s own bytes. macOS keys its permission grants on that
+requirement, so a rebuild — any rebuild, one changed line — produces a
+different cdhash, a different “application” as far as TCC is concerned,
+and every grant the previous binary held is void.</p>
+<p>The grant that bites this harness is Local Network privacy: the scenario
+suite’s test client runs an iroh endpoint that binds <code>0.0.0.0</code>, and macOS
+gates such a socket’s non-loopback traffic behind a per-application grant.
+Ad-hoc signed, each run is a new application — either a fresh prompt, or
+(unattended) silent denial and a suite that fails on “no route” in ways
+that look like an SFU bug.</p>
+<p>The stack’s SFU now runs on the host and advertises 127.0.0.1 only (see
+<code>crate::sfu</code>), so the only peer address a scenario is handed is loopback
+and there is no LAN traffic left to gate. Signing stays worth doing as
+belt and braces — the wildcard bind itself is unchanged, a firewall-on
+machine still prompts per application, and a stable identity keeps every
+other TCC grant (screen recording, microphone) alive across rebuilds.</p>
+<p>Signing with a real Apple identity replaces that requirement with one
+keyed on identifier + team, both of which we hold fixed here
+(<code>chat.hound.stack.&lt;binary&gt;</code>). The grant is then made once and survives
+every rebuild.</p>
+<h2 id="opting-in"><a class="doc-anchor" href="#opting-in">§</a>Opting in</h2>
+<p>Set <code>APPLE_SIGNING_IDENTITY</code> in the gitignored per-developer
+<code>.mise.local.toml</code> <code>[env]</code> (the same variable the Tauri-era note in that
+file already documents); list candidates with
+<code>security find-identity -v -p codesigning</code>. Unset — the default, and CI —
+this module is a no-op and the harness behaves exactly as it did before
+it existed.</p>
+</div></details><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.IDENTITY_ENV.html" title="constant hound_stack::codesign::IDENTITY_ENV">IDENTITY_<wbr>ENV</a></dt><dd>The signing identity, as <code>codesign --sign</code> takes it. Named to match what
+<code>.mise.local.toml</code> already exports for the macOS app bundle.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.enabled.html" title="fn hound_stack::codesign::enabled">enabled</a></dt><dd>Whether signing is configured for this run: a non-empty identity AND a
+macOS host. Callers check this before doing work that only exists to feed
+<a href="fn.sign.html" title="fn hound_stack::codesign::sign"><code>sign</code></a> (e.g. asking nextest to list its test binaries).</dd><dt><a class="fn" href="fn.identifier.html" title="fn hound_stack::codesign::identifier">identifier</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The stable identifier for a harness binary: half of the designated
+requirement (the team anchor is the other half). It must NOT be derived
+from the binary’s content — that is precisely what the linker’s ad-hoc
+signature does — and must not collide with the shipped app’s
+<code>chat.hound.app</code>.</dd><dt><a class="fn" href="fn.identity.html" title="fn hound_stack::codesign::identity">identity</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.requirement.html" title="fn hound_stack::codesign::requirement">requirement</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The designated requirement this module signs for: our identifier, signed
+under an Apple-issued certificate chain.</dd><dt><a class="fn" href="fn.satisfies_requirement.html" title="fn hound_stack::codesign::satisfies_requirement">satisfies_<wbr>requirement</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Does <code>binary</code> ALREADY carry a signature satisfying <a href="fn.requirement.html" title="fn hound_stack::codesign::requirement"><code>requirement</code></a>?</dd><dt><a class="fn" href="fn.sign.html" title="fn hound_stack::codesign::sign">sign</a></dt><dd>Sign <code>binary</code> in place with the configured identity, output appended to
+<code>build_log</code>. No-op when signing isn’t <a href="fn.enabled.html" title="fn hound_stack::codesign::enabled"><code>enabled</code></a>.</dd></dl></section></div></main></body></html>

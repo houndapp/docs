@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["LiveStack","StackPaths"]};
+window.SIDEBAR_ITEMS = {"constant":["COMPOSE_SERVICES"],"fn":["backend_answers","build_stack_bins","stop_recorded","teardown"],"mod":["repair"],"struct":["LiveStack","StackBins","StackPaths"]};

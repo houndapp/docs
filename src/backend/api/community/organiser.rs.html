@@ -22,7 +22,7 @@
 <a href=#22 id=22 data-nosnippet>22</a>    Json,
 <a href=#23 id=23 data-nosnippet>23</a>    extract::{Path, State},
 <a href=#24 id=24 data-nosnippet>24</a>};
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>sea_orm::{ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>uuid::Uuid;
 <a href=#27 id=27 data-nosnippet>27</a>
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span><span class="kw">crate</span>::api::{
@@ -82,7 +82,7 @@
 <a href=#82 id=82 data-nosnippet>82</a>        .<span class="kw">await</span><span class="question-mark">?
 <a href=#83 id=83 data-nosnippet>83</a>        </span>.ok_or(ApiError::CommunityNotFound(community_id))<span class="question-mark">?</span>;
 <a href=#84 id=84 data-nosnippet>84</a>
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#86 id=86 data-nosnippet>86</a>    api.admit_member(<span class="kw-2">&amp;</span>txn, community_id, user_id, <span class="kw-2">&amp;</span>[organisers.id])
 <a href=#87 id=87 data-nosnippet>87</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#88 id=88 data-nosnippet>88</a>    txn.commit().<span class="kw">await</span><span class="question-mark">?</span>;
@@ -143,7 +143,7 @@
 <a href=#143 id=143 data-nosnippet>143</a>        .<span class="kw">await</span><span class="question-mark">?
 <a href=#144 id=144 data-nosnippet>144</a>        </span>.ok_or(ApiError::CommunityNotFound(community_id))<span class="question-mark">?</span>;
 <a href=#145 id=145 data-nosnippet>145</a>
-<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#147 id=147 data-nosnippet>147</a>    <span class="comment">// Inside the transaction that performs the delete: the count and the
 <a href=#148 id=148 data-nosnippet>148</a>    // removal must not straddle another operator's demotion.
 <a href=#149 id=149 data-nosnippet>149</a>    </span>api.assert_not_last_organiser(<span class="kw-2">&amp;</span>txn, community_id, user_id)

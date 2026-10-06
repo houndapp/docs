@@ -263,254 +263,252 @@
 <a href=#263 id=263 data-nosnippet>263</a>        message_id: Uuid,
 <a href=#264 id=264 data-nosnippet>264</a>        embed_ids: <span class="kw-2">&amp;</span>[Uuid],
 <a href=#265 id=265 data-nosnippet>265</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), sea_orm::DbErr&gt; {
-<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">use </span>sea_orm::TransactionTrait <span class="kw">as _</span>;
-<a href=#267 id=267 data-nosnippet>267</a>
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>txn = <span class="self">self</span>.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#269 id=269 data-nosnippet>269</a>        <span class="self">self</span>.set_message_embeds(<span class="kw-2">&amp;</span>txn, message_id, embed_ids).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#270 id=270 data-nosnippet>270</a>        <span class="self">self</span>.rederive_message(<span class="kw-2">&amp;</span>txn, message_id).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#271 id=271 data-nosnippet>271</a>        txn.commit().<span class="kw">await
-<a href=#272 id=272 data-nosnippet>272</a>    </span>}
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="doccomment">/// Push a message's embed list to its space.
-<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>emit_message_embeds(
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#277 id=277 data-nosnippet>277</a>        message_id: Uuid,
-<a href=#278 id=278 data-nosnippet>278</a>        space_id: Uuid,
-<a href=#279 id=279 data-nosnippet>279</a>        embeds: Vec&lt;LinkEmbed&gt;,
-<a href=#280 id=280 data-nosnippet>280</a>    ) {
-<a href=#281 id=281 data-nosnippet>281</a>        <span class="self">self</span>.realtime.route(<span class="kw-2">&amp;</span>[hound_realtime::Outgoing::to(
-<a href=#282 id=282 data-nosnippet>282</a>            hound_realtime::Target::Room(hound_realtime::Room::Space(space_id)),
-<a href=#283 id=283 data-nosnippet>283</a>            hound_realtime::ServerMessage::MessageEmbedsUpdated {
-<a href=#284 id=284 data-nosnippet>284</a>                message_id,
-<a href=#285 id=285 data-nosnippet>285</a>                space_id,
-<a href=#286 id=286 data-nosnippet>286</a>                embeds,
-<a href=#287 id=287 data-nosnippet>287</a>            },
-<a href=#288 id=288 data-nosnippet>288</a>        )]);
-<a href=#289 id=289 data-nosnippet>289</a>    }
-<a href=#290 id=290 data-nosnippet>290</a>}
-<a href=#291 id=291 data-nosnippet>291</a>
-<a href=#292 id=292 data-nosnippet>292</a><span class="doccomment">/// What one URL unfurled to.
-<a href=#293 id=293 data-nosnippet>293</a></span><span class="kw">enum </span>Outcome {
-<a href=#294 id=294 data-nosnippet>294</a>    <span class="doccomment">/// Boxed: a `LinkEmbed` is ~700 bytes and the other two variants are a
-<a href=#295 id=295 data-nosnippet>295</a>    /// `String` and nothing, so an unboxed enum would pay the largest variant's
-<a href=#296 id=296 data-nosnippet>296</a>    /// size on every unfurl that failed or found nothing — the common case.
-<a href=#297 id=297 data-nosnippet>297</a>    </span>Embed(Box&lt;LinkEmbed&gt;),
-<a href=#298 id=298 data-nosnippet>298</a>    <span class="doccomment">/// Fetched successfully; there was nothing worth a card.
-<a href=#299 id=299 data-nosnippet>299</a>    </span>Empty,
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// Refused, unreachable, or an error status. The string is shown in the
-<a href=#301 id=301 data-nosnippet>301</a>    /// debugger and stored on the cache row.
-<a href=#302 id=302 data-nosnippet>302</a>    </span>Failed(String),
-<a href=#303 id=303 data-nosnippet>303</a>}
-<a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a><span class="doccomment">/// Everything a traced unfurl saw. The message path throws all but `outcome`
-<a href=#306 id=306 data-nosnippet>306</a>/// away; the debugger keeps the lot.
-<a href=#307 id=307 data-nosnippet>307</a></span><span class="kw">struct </span>Trace {
-<a href=#308 id=308 data-nosnippet>308</a>    outcome: Outcome,
-<a href=#309 id=309 data-nosnippet>309</a>    steps: Vec&lt;hound_types::EmbedFetchStep&gt;,
-<a href=#310 id=310 data-nosnippet>310</a>    raw: Vec&lt;hound_types::EmbedRawField&gt;,
-<a href=#311 id=311 data-nosnippet>311</a>    oembed_endpoint: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#312 id=312 data-nosnippet>312</a>    oembed_html: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#313 id=313 data-nosnippet>313</a>    warnings: Vec&lt;String&gt;,
-<a href=#314 id=314 data-nosnippet>314</a>}
-<a href=#315 id=315 data-nosnippet>315</a>
-<a href=#316 id=316 data-nosnippet>316</a><span class="kw">async fn </span>unfurl(url: <span class="kw-2">&amp;</span>Url) -&gt; Outcome {
-<a href=#317 id=317 data-nosnippet>317</a>    unfurl_traced(url).<span class="kw">await</span>.outcome
-<a href=#318 id=318 data-nosnippet>318</a>}
-<a href=#319 id=319 data-nosnippet>319</a>
-<a href=#320 id=320 data-nosnippet>320</a><span class="doccomment">/// Fetch, parse, discover oEmbed, and build — the whole pipeline for one URL.
-<a href=#321 id=321 data-nosnippet>321</a></span><span class="kw">async fn </span>unfurl_traced(url: <span class="kw-2">&amp;</span>Url) -&gt; Trace {
-<a href=#322 id=322 data-nosnippet>322</a>    <span class="kw">let </span><span class="kw-2">mut </span>trace = Trace {
-<a href=#323 id=323 data-nosnippet>323</a>        outcome: Outcome::Empty,
-<a href=#324 id=324 data-nosnippet>324</a>        steps: Vec::new(),
-<a href=#325 id=325 data-nosnippet>325</a>        raw: Vec::new(),
-<a href=#326 id=326 data-nosnippet>326</a>        oembed_endpoint: <span class="prelude-val">None</span>,
-<a href=#327 id=327 data-nosnippet>327</a>        oembed_html: <span class="prelude-val">None</span>,
-<a href=#328 id=328 data-nosnippet>328</a>        warnings: Vec::new(),
-<a href=#329 id=329 data-nosnippet>329</a>    };
-<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">let </span>fetcher = SafeFetcher::new();
-<a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">let </span>fetched = <span class="kw">match </span>fetcher
-<a href=#333 id=333 data-nosnippet>333</a>        .get(url, FetchLimits::page(), PAGE_ACCEPT, <span class="kw-2">&amp;mut </span>trace.steps)
-<a href=#334 id=334 data-nosnippet>334</a>        .<span class="kw">await
-<a href=#335 id=335 data-nosnippet>335</a>    </span>{
-<a href=#336 id=336 data-nosnippet>336</a>        <span class="prelude-val">Ok</span>(fetched) =&gt; fetched,
-<a href=#337 id=337 data-nosnippet>337</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#338 id=338 data-nosnippet>338</a>            <span class="comment">// The page is not the only thing that can describe this URL. For a
-<a href=#339 id=339 data-nosnippet>339</a>            // host we recognise, the provider's own endpoint answers for it —
-<a href=#340 id=340 data-nosnippet>340</a>            // and routinely answers well when the page did not load at all.
-<a href=#341 id=341 data-nosnippet>341</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(embed) = provider_only(<span class="kw-2">&amp;</span>fetcher, url, <span class="kw-2">&amp;mut </span>trace).<span class="kw">await </span>{
-<a href=#342 id=342 data-nosnippet>342</a>                trace.outcome = <span class="kw">if </span>embed.is_renderable() {
-<a href=#343 id=343 data-nosnippet>343</a>                    Outcome::Embed(Box::new(embed))
-<a href=#344 id=344 data-nosnippet>344</a>                } <span class="kw">else </span>{
-<a href=#345 id=345 data-nosnippet>345</a>                    Outcome::Empty
-<a href=#346 id=346 data-nosnippet>346</a>                };
-<a href=#347 id=347 data-nosnippet>347</a>                <span class="kw">return </span>trace;
-<a href=#348 id=348 data-nosnippet>348</a>            }
-<a href=#349 id=349 data-nosnippet>349</a>            trace.outcome = Outcome::Failed(describe(<span class="kw-2">&amp;</span>e));
-<a href=#350 id=350 data-nosnippet>350</a>            <span class="kw">return </span>trace;
-<a href=#351 id=351 data-nosnippet>351</a>        }
-<a href=#352 id=352 data-nosnippet>352</a>    };
-<a href=#353 id=353 data-nosnippet>353</a>
-<a href=#354 id=354 data-nosnippet>354</a>    <span class="kw">let </span>mime = fetched
-<a href=#355 id=355 data-nosnippet>355</a>        .content_type
-<a href=#356 id=356 data-nosnippet>356</a>        .as_deref()
-<a href=#357 id=357 data-nosnippet>357</a>        .and_then(|ct| ct.split(<span class="string">';'</span>).next())
-<a href=#358 id=358 data-nosnippet>358</a>        .unwrap_or_default()
-<a href=#359 id=359 data-nosnippet>359</a>        .trim()
-<a href=#360 id=360 data-nosnippet>360</a>        .to_ascii_lowercase();
-<a href=#361 id=361 data-nosnippet>361</a>
-<a href=#362 id=362 data-nosnippet>362</a>    <span class="comment">// A URL that IS an image/video/audio file has no markup to scrape; the
-<a href=#363 id=363 data-nosnippet>363</a>    // resource is its own preview.
-<a href=#364 id=364 data-nosnippet>364</a>    </span><span class="kw">if </span>mime.starts_with(<span class="string">"image/"</span>) || mime.starts_with(<span class="string">"video/"</span>) || mime.starts_with(<span class="string">"audio/"</span>) {
-<a href=#365 id=365 data-nosnippet>365</a>        trace.outcome = Outcome::Embed(Box::new(build::from_media(
-<a href=#366 id=366 data-nosnippet>366</a>            url.to_string(),
-<a href=#367 id=367 data-nosnippet>367</a>            <span class="kw-2">&amp;</span>fetched.final_url,
-<a href=#368 id=368 data-nosnippet>368</a>            <span class="kw-2">&amp;</span>mime,
-<a href=#369 id=369 data-nosnippet>369</a>        )));
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">return </span>trace;
-<a href=#371 id=371 data-nosnippet>371</a>    }
-<a href=#372 id=372 data-nosnippet>372</a>    <span class="kw">if </span>!(mime.is_empty() || mime.contains(<span class="string">"html"</span>) || mime.contains(<span class="string">"xml"</span>)) {
-<a href=#373 id=373 data-nosnippet>373</a>        <span class="comment">// A PDF, a zip, a JSON API response: fetched fine, nothing to scrape.
-<a href=#374 id=374 data-nosnippet>374</a>        </span>trace.outcome = Outcome::Failed(describe(<span class="kw-2">&amp;</span>FetchError::UnsupportedContentType(mime)));
-<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">return </span>trace;
-<a href=#376 id=376 data-nosnippet>376</a>    }
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">if </span>fetched.truncated {
-<a href=#378 id=378 data-nosnippet>378</a>        <span class="comment">// Not a nicety: this is the state in which the metadata is MISSING
-<a href=#379 id=379 data-nosnippet>379</a>        // rather than merely incomplete, and it reads as a site with no Open
-<a href=#380 id=380 data-nosnippet>380</a>        // Graph tags at all. Say which it is.
-<a href=#381 id=381 data-nosnippet>381</a>        </span>trace.warnings.push(
-<a href=#382 id=382 data-nosnippet>382</a>            <span class="string">"the page never closed its &lt;head&gt; within the fetch limit, so its Open Graph \
-<a href=#383 id=383 data-nosnippet>383</a>             and Twitter Card tags were never reached — anything below comes from oEmbed \
-<a href=#384 id=384 data-nosnippet>384</a>             or the bare HTML"
-<a href=#385 id=385 data-nosnippet>385</a>                </span>.to_owned(),
-<a href=#386 id=386 data-nosnippet>386</a>        );
-<a href=#387 id=387 data-nosnippet>387</a>    }
-<a href=#388 id=388 data-nosnippet>388</a>
-<a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">let </span>html = parse::decode_html(<span class="kw-2">&amp;</span>fetched.body, fetched.content_type.as_deref());
-<a href=#390 id=390 data-nosnippet>390</a>    <span class="kw">let </span>meta = parse::scrape(<span class="kw-2">&amp;</span>html);
-<a href=#391 id=391 data-nosnippet>391</a>    <span class="comment">// The registry wins over discovery. A page that advertises nothing is the
-<a href=#392 id=392 data-nosnippet>392</a>    // common failure — a shell served to a bot, or a provider that simply never
-<a href=#393 id=393 data-nosnippet>393</a>    // adds the link — and for a host we know, the endpoint is not something we
-<a href=#394 id=394 data-nosnippet>394</a>    // need the page's permission to use.
-<a href=#395 id=395 data-nosnippet>395</a>    </span><span class="kw">let </span>endpoint = providers::lookup(url)
-<a href=#396 id=396 data-nosnippet>396</a>        .and_then(|provider| provider.oembed_endpoint(url))
-<a href=#397 id=397 data-nosnippet>397</a>        .map(|endpoint| endpoint.to_string())
-<a href=#398 id=398 data-nosnippet>398</a>        .or_else(|| meta.oembed_json.clone());
-<a href=#399 id=399 data-nosnippet>399</a>    trace.oembed_endpoint = endpoint.clone();
-<a href=#400 id=400 data-nosnippet>400</a>
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">let </span>oembed = <span class="kw">match </span><span class="kw-2">&amp;</span>endpoint {
-<a href=#402 id=402 data-nosnippet>402</a>        <span class="prelude-val">Some</span>(endpoint) =&gt; fetch_oembed(<span class="kw-2">&amp;</span>fetcher, <span class="kw-2">&amp;</span>fetched.final_url, endpoint, <span class="kw-2">&amp;mut </span>trace).<span class="kw">await</span>,
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#404 id=404 data-nosnippet>404</a>    };
-<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(oe) = <span class="kw-2">&amp;</span>oembed {
-<a href=#406 id=406 data-nosnippet>406</a>        trace.oembed_html = oe.html.clone();
-<a href=#407 id=407 data-nosnippet>407</a>    }
-<a href=#408 id=408 data-nosnippet>408</a>
-<a href=#409 id=409 data-nosnippet>409</a>    trace.raw = build::raw_fields(<span class="kw-2">&amp;</span>meta, oembed.as_ref());
-<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span>embed = build::from_html(
-<a href=#411 id=411 data-nosnippet>411</a>        Scraped {
-<a href=#412 id=412 data-nosnippet>412</a>            request_url: url.to_string(),
-<a href=#413 id=413 data-nosnippet>413</a>            final_url: fetched.final_url.clone(),
-<a href=#414 id=414 data-nosnippet>414</a>            meta,
-<a href=#415 id=415 data-nosnippet>415</a>            oembed,
-<a href=#416 id=416 data-nosnippet>416</a>        },
-<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw-2">&amp;mut </span>trace.warnings,
-<a href=#418 id=418 data-nosnippet>418</a>    );
-<a href=#419 id=419 data-nosnippet>419</a>    trace.outcome = <span class="kw">if </span>embed.is_renderable() {
-<a href=#420 id=420 data-nosnippet>420</a>        Outcome::Embed(Box::new(embed))
-<a href=#421 id=421 data-nosnippet>421</a>    } <span class="kw">else </span>{
-<a href=#422 id=422 data-nosnippet>422</a>        Outcome::Empty
-<a href=#423 id=423 data-nosnippet>423</a>    };
-<a href=#424 id=424 data-nosnippet>424</a>    trace
-<a href=#425 id=425 data-nosnippet>425</a>}
-<a href=#426 id=426 data-nosnippet>426</a>
-<a href=#427 id=427 data-nosnippet>427</a><span class="doccomment">/// Build a card from a known provider's oEmbed endpoint alone.
-<a href=#428 id=428 data-nosnippet>428</a>///
-<a href=#429 id=429 data-nosnippet>429</a>/// Used when the page fetch failed. Returns `None` when the host is unknown or
-<a href=#430 id=430 data-nosnippet>430</a>/// the endpoint could not answer either, so the caller reports the page's own
-<a href=#431 id=431 data-nosnippet>431</a>/// failure — the more useful error in that case.
-<a href=#432 id=432 data-nosnippet>432</a></span><span class="kw">async fn </span>provider_only(fetcher: <span class="kw-2">&amp;</span>SafeFetcher, url: <span class="kw-2">&amp;</span>Url, trace: <span class="kw-2">&amp;mut </span>Trace) -&gt; <span class="prelude-ty">Option</span>&lt;LinkEmbed&gt; {
-<a href=#433 id=433 data-nosnippet>433</a>    <span class="kw">let </span>provider = providers::lookup(url)<span class="question-mark">?</span>;
-<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">let </span>endpoint = provider.oembed_endpoint(url)<span class="question-mark">?</span>;
-<a href=#435 id=435 data-nosnippet>435</a>    trace.oembed_endpoint = <span class="prelude-val">Some</span>(endpoint.to_string());
-<a href=#436 id=436 data-nosnippet>436</a>    <span class="kw">let </span>oembed = fetch_oembed(fetcher, url, endpoint.as_str(), trace).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#437 id=437 data-nosnippet>437</a>    trace.oembed_html = oembed.html.clone();
-<a href=#438 id=438 data-nosnippet>438</a>    trace.raw = build::raw_fields(<span class="kw-2">&amp;</span>parse::PageMetadata::default(), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>oembed));
-<a href=#439 id=439 data-nosnippet>439</a>    trace.warnings.push(<span class="macro">format!</span>(
-<a href=#440 id=440 data-nosnippet>440</a>        <span class="string">"the page itself could not be read; this preview comes from {}'s oEmbed endpoint"</span>,
-<a href=#441 id=441 data-nosnippet>441</a>        provider.name
-<a href=#442 id=442 data-nosnippet>442</a>    ));
-<a href=#443 id=443 data-nosnippet>443</a>    <span class="prelude-val">Some</span>(build::from_oembed(
-<a href=#444 id=444 data-nosnippet>444</a>        url.to_string(),
-<a href=#445 id=445 data-nosnippet>445</a>        url,
-<a href=#446 id=446 data-nosnippet>446</a>        <span class="kw-2">&amp;</span>oembed,
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw-2">&amp;mut </span>trace.warnings,
-<a href=#448 id=448 data-nosnippet>448</a>    ))
-<a href=#449 id=449 data-nosnippet>449</a>}
-<a href=#450 id=450 data-nosnippet>450</a>
-<a href=#451 id=451 data-nosnippet>451</a><span class="doccomment">/// Fetch and decode the discovered oEmbed endpoint.
-<a href=#452 id=452 data-nosnippet>452</a>///
-<a href=#453 id=453 data-nosnippet>453</a>/// Guarded exactly like the page fetch — the endpoint URL comes out of the same
-<a href=#454 id=454 data-nosnippet>454</a>/// untrusted markup, so it gets no more trust than the page did. A failure here
-<a href=#455 id=455 data-nosnippet>455</a>/// is a warning, never the end of the unfurl: Open Graph alone usually carries
-<a href=#456 id=456 data-nosnippet>456</a>/// enough for a card.
-<a href=#457 id=457 data-nosnippet>457</a></span><span class="kw">async fn </span>fetch_oembed(
-<a href=#458 id=458 data-nosnippet>458</a>    fetcher: <span class="kw-2">&amp;</span>SafeFetcher,
-<a href=#459 id=459 data-nosnippet>459</a>    base: <span class="kw-2">&amp;</span>Url,
-<a href=#460 id=460 data-nosnippet>460</a>    endpoint: <span class="kw-2">&amp;</span>str,
-<a href=#461 id=461 data-nosnippet>461</a>    trace: <span class="kw-2">&amp;mut </span>Trace,
-<a href=#462 id=462 data-nosnippet>462</a>) -&gt; <span class="prelude-ty">Option</span>&lt;OEmbed&gt; {
-<a href=#463 id=463 data-nosnippet>463</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(url) = base.join(endpoint) <span class="kw">else </span>{
-<a href=#464 id=464 data-nosnippet>464</a>        trace
-<a href=#465 id=465 data-nosnippet>465</a>            .warnings
-<a href=#466 id=466 data-nosnippet>466</a>            .push(<span class="string">"the declared oEmbed endpoint is not a URL"</span>.to_owned());
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#468 id=468 data-nosnippet>468</a>    };
-<a href=#469 id=469 data-nosnippet>469</a>    <span class="kw">let </span>fetched: Fetched = <span class="kw">match </span>fetcher
-<a href=#470 id=470 data-nosnippet>470</a>        .get(
-<a href=#471 id=471 data-nosnippet>471</a>            <span class="kw-2">&amp;</span>url,
-<a href=#472 id=472 data-nosnippet>472</a>            FetchLimits::oembed(),
-<a href=#473 id=473 data-nosnippet>473</a>            <span class="string">"application/json,text/json;q=0.9"</span>,
-<a href=#474 id=474 data-nosnippet>474</a>            <span class="kw-2">&amp;mut </span>trace.steps,
-<a href=#475 id=475 data-nosnippet>475</a>        )
-<a href=#476 id=476 data-nosnippet>476</a>        .<span class="kw">await
-<a href=#477 id=477 data-nosnippet>477</a>    </span>{
-<a href=#478 id=478 data-nosnippet>478</a>        <span class="prelude-val">Ok</span>(fetched) =&gt; fetched,
-<a href=#479 id=479 data-nosnippet>479</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#480 id=480 data-nosnippet>480</a>            trace
-<a href=#481 id=481 data-nosnippet>481</a>                .warnings
-<a href=#482 id=482 data-nosnippet>482</a>                .push(<span class="macro">format!</span>(<span class="string">"oEmbed endpoint: {}"</span>, describe(<span class="kw-2">&amp;</span>e)));
-<a href=#483 id=483 data-nosnippet>483</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#484 id=484 data-nosnippet>484</a>        }
-<a href=#485 id=485 data-nosnippet>485</a>    };
-<a href=#486 id=486 data-nosnippet>486</a>    <span class="kw">match </span>serde_json::from_slice::&lt;OEmbed&gt;(<span class="kw-2">&amp;</span>fetched.body) {
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="prelude-val">Ok</span>(oe) <span class="kw">if </span>oe.is_useful() =&gt; <span class="prelude-val">Some</span>(oe),
-<a href=#488 id=488 data-nosnippet>488</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
-<a href=#489 id=489 data-nosnippet>489</a>            trace
-<a href=#490 id=490 data-nosnippet>490</a>                .warnings
-<a href=#491 id=491 data-nosnippet>491</a>                .push(<span class="string">"the oEmbed endpoint answered with nothing usable"</span>.to_owned());
-<a href=#492 id=492 data-nosnippet>492</a>            <span class="prelude-val">None
-<a href=#493 id=493 data-nosnippet>493</a>        </span>}
-<a href=#494 id=494 data-nosnippet>494</a>        <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#495 id=495 data-nosnippet>495</a>            trace
-<a href=#496 id=496 data-nosnippet>496</a>                .warnings
-<a href=#497 id=497 data-nosnippet>497</a>                .push(<span class="macro">format!</span>(<span class="string">"the oEmbed response is not valid JSON: {e}"</span>));
-<a href=#498 id=498 data-nosnippet>498</a>            <span class="prelude-val">None
-<a href=#499 id=499 data-nosnippet>499</a>        </span>}
-<a href=#500 id=500 data-nosnippet>500</a>    }
-<a href=#501 id=501 data-nosnippet>501</a>}
-<a href=#502 id=502 data-nosnippet>502</a>
-<a href=#503 id=503 data-nosnippet>503</a><span class="doccomment">/// A fetch failure as a person should read it.
-<a href=#504 id=504 data-nosnippet>504</a>///
-<a href=#505 id=505 data-nosnippet>505</a>/// The guard's own `Display` is already written for humans; this exists so the
-<a href=#506 id=506 data-nosnippet>506</a>/// one case that is genuinely ambiguous — a blocked address — says why rather
-<a href=#507 id=507 data-nosnippet>507</a>/// than leaking the impression that the service is broken.
-<a href=#508 id=508 data-nosnippet>508</a></span><span class="kw">fn </span>describe(error: <span class="kw-2">&amp;</span>FetchError) -&gt; String {
-<a href=#509 id=509 data-nosnippet>509</a>    <span class="kw">match </span>error {
-<a href=#510 id=510 data-nosnippet>510</a>        FetchError::PrivateAddress { .. } =&gt; {
-<a href=#511 id=511 data-nosnippet>511</a>            <span class="string">"that address is not on the public internet, so it is not previewed"</span>.to_owned()
-<a href=#512 id=512 data-nosnippet>512</a>        }
-<a href=#513 id=513 data-nosnippet>513</a>        other =&gt; other.to_string(),
-<a href=#514 id=514 data-nosnippet>514</a>    }
-<a href=#515 id=515 data-nosnippet>515</a>}
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">let </span>txn = <span class="self">self</span>.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="self">self</span>.set_message_embeds(<span class="kw-2">&amp;</span>txn, message_id, embed_ids).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="self">self</span>.rederive_message(<span class="kw-2">&amp;</span>txn, message_id).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#269 id=269 data-nosnippet>269</a>        txn.commit().<span class="kw">await
+<a href=#270 id=270 data-nosnippet>270</a>    </span>}
+<a href=#271 id=271 data-nosnippet>271</a>
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="doccomment">/// Push a message's embed list to its space.
+<a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>emit_message_embeds(
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#275 id=275 data-nosnippet>275</a>        message_id: Uuid,
+<a href=#276 id=276 data-nosnippet>276</a>        space_id: Uuid,
+<a href=#277 id=277 data-nosnippet>277</a>        embeds: Vec&lt;LinkEmbed&gt;,
+<a href=#278 id=278 data-nosnippet>278</a>    ) {
+<a href=#279 id=279 data-nosnippet>279</a>        <span class="self">self</span>.realtime.route(<span class="kw-2">&amp;</span>[hound_realtime::Outgoing::to(
+<a href=#280 id=280 data-nosnippet>280</a>            hound_realtime::Target::Room(hound_realtime::Room::Space(space_id)),
+<a href=#281 id=281 data-nosnippet>281</a>            hound_realtime::ServerMessage::MessageEmbedsUpdated {
+<a href=#282 id=282 data-nosnippet>282</a>                message_id,
+<a href=#283 id=283 data-nosnippet>283</a>                space_id,
+<a href=#284 id=284 data-nosnippet>284</a>                embeds,
+<a href=#285 id=285 data-nosnippet>285</a>            },
+<a href=#286 id=286 data-nosnippet>286</a>        )]);
+<a href=#287 id=287 data-nosnippet>287</a>    }
+<a href=#288 id=288 data-nosnippet>288</a>}
+<a href=#289 id=289 data-nosnippet>289</a>
+<a href=#290 id=290 data-nosnippet>290</a><span class="doccomment">/// What one URL unfurled to.
+<a href=#291 id=291 data-nosnippet>291</a></span><span class="kw">enum </span>Outcome {
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="doccomment">/// Boxed: a `LinkEmbed` is ~700 bytes and the other two variants are a
+<a href=#293 id=293 data-nosnippet>293</a>    /// `String` and nothing, so an unboxed enum would pay the largest variant's
+<a href=#294 id=294 data-nosnippet>294</a>    /// size on every unfurl that failed or found nothing — the common case.
+<a href=#295 id=295 data-nosnippet>295</a>    </span>Embed(Box&lt;LinkEmbed&gt;),
+<a href=#296 id=296 data-nosnippet>296</a>    <span class="doccomment">/// Fetched successfully; there was nothing worth a card.
+<a href=#297 id=297 data-nosnippet>297</a>    </span>Empty,
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="doccomment">/// Refused, unreachable, or an error status. The string is shown in the
+<a href=#299 id=299 data-nosnippet>299</a>    /// debugger and stored on the cache row.
+<a href=#300 id=300 data-nosnippet>300</a>    </span>Failed(String),
+<a href=#301 id=301 data-nosnippet>301</a>}
+<a href=#302 id=302 data-nosnippet>302</a>
+<a href=#303 id=303 data-nosnippet>303</a><span class="doccomment">/// Everything a traced unfurl saw. The message path throws all but `outcome`
+<a href=#304 id=304 data-nosnippet>304</a>/// away; the debugger keeps the lot.
+<a href=#305 id=305 data-nosnippet>305</a></span><span class="kw">struct </span>Trace {
+<a href=#306 id=306 data-nosnippet>306</a>    outcome: Outcome,
+<a href=#307 id=307 data-nosnippet>307</a>    steps: Vec&lt;hound_types::EmbedFetchStep&gt;,
+<a href=#308 id=308 data-nosnippet>308</a>    raw: Vec&lt;hound_types::EmbedRawField&gt;,
+<a href=#309 id=309 data-nosnippet>309</a>    oembed_endpoint: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#310 id=310 data-nosnippet>310</a>    oembed_html: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#311 id=311 data-nosnippet>311</a>    warnings: Vec&lt;String&gt;,
+<a href=#312 id=312 data-nosnippet>312</a>}
+<a href=#313 id=313 data-nosnippet>313</a>
+<a href=#314 id=314 data-nosnippet>314</a><span class="kw">async fn </span>unfurl(url: <span class="kw-2">&amp;</span>Url) -&gt; Outcome {
+<a href=#315 id=315 data-nosnippet>315</a>    unfurl_traced(url).<span class="kw">await</span>.outcome
+<a href=#316 id=316 data-nosnippet>316</a>}
+<a href=#317 id=317 data-nosnippet>317</a>
+<a href=#318 id=318 data-nosnippet>318</a><span class="doccomment">/// Fetch, parse, discover oEmbed, and build — the whole pipeline for one URL.
+<a href=#319 id=319 data-nosnippet>319</a></span><span class="kw">async fn </span>unfurl_traced(url: <span class="kw-2">&amp;</span>Url) -&gt; Trace {
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">let </span><span class="kw-2">mut </span>trace = Trace {
+<a href=#321 id=321 data-nosnippet>321</a>        outcome: Outcome::Empty,
+<a href=#322 id=322 data-nosnippet>322</a>        steps: Vec::new(),
+<a href=#323 id=323 data-nosnippet>323</a>        raw: Vec::new(),
+<a href=#324 id=324 data-nosnippet>324</a>        oembed_endpoint: <span class="prelude-val">None</span>,
+<a href=#325 id=325 data-nosnippet>325</a>        oembed_html: <span class="prelude-val">None</span>,
+<a href=#326 id=326 data-nosnippet>326</a>        warnings: Vec::new(),
+<a href=#327 id=327 data-nosnippet>327</a>    };
+<a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">let </span>fetcher = SafeFetcher::new();
+<a href=#329 id=329 data-nosnippet>329</a>
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">let </span>fetched = <span class="kw">match </span>fetcher
+<a href=#331 id=331 data-nosnippet>331</a>        .get(url, FetchLimits::page(), PAGE_ACCEPT, <span class="kw-2">&amp;mut </span>trace.steps)
+<a href=#332 id=332 data-nosnippet>332</a>        .<span class="kw">await
+<a href=#333 id=333 data-nosnippet>333</a>    </span>{
+<a href=#334 id=334 data-nosnippet>334</a>        <span class="prelude-val">Ok</span>(fetched) =&gt; fetched,
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#336 id=336 data-nosnippet>336</a>            <span class="comment">// The page is not the only thing that can describe this URL. For a
+<a href=#337 id=337 data-nosnippet>337</a>            // host we recognise, the provider's own endpoint answers for it —
+<a href=#338 id=338 data-nosnippet>338</a>            // and routinely answers well when the page did not load at all.
+<a href=#339 id=339 data-nosnippet>339</a>            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(embed) = provider_only(<span class="kw-2">&amp;</span>fetcher, url, <span class="kw-2">&amp;mut </span>trace).<span class="kw">await </span>{
+<a href=#340 id=340 data-nosnippet>340</a>                trace.outcome = <span class="kw">if </span>embed.is_renderable() {
+<a href=#341 id=341 data-nosnippet>341</a>                    Outcome::Embed(Box::new(embed))
+<a href=#342 id=342 data-nosnippet>342</a>                } <span class="kw">else </span>{
+<a href=#343 id=343 data-nosnippet>343</a>                    Outcome::Empty
+<a href=#344 id=344 data-nosnippet>344</a>                };
+<a href=#345 id=345 data-nosnippet>345</a>                <span class="kw">return </span>trace;
+<a href=#346 id=346 data-nosnippet>346</a>            }
+<a href=#347 id=347 data-nosnippet>347</a>            trace.outcome = Outcome::Failed(describe(<span class="kw-2">&amp;</span>e));
+<a href=#348 id=348 data-nosnippet>348</a>            <span class="kw">return </span>trace;
+<a href=#349 id=349 data-nosnippet>349</a>        }
+<a href=#350 id=350 data-nosnippet>350</a>    };
+<a href=#351 id=351 data-nosnippet>351</a>
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">let </span>mime = fetched
+<a href=#353 id=353 data-nosnippet>353</a>        .content_type
+<a href=#354 id=354 data-nosnippet>354</a>        .as_deref()
+<a href=#355 id=355 data-nosnippet>355</a>        .and_then(|ct| ct.split(<span class="string">';'</span>).next())
+<a href=#356 id=356 data-nosnippet>356</a>        .unwrap_or_default()
+<a href=#357 id=357 data-nosnippet>357</a>        .trim()
+<a href=#358 id=358 data-nosnippet>358</a>        .to_ascii_lowercase();
+<a href=#359 id=359 data-nosnippet>359</a>
+<a href=#360 id=360 data-nosnippet>360</a>    <span class="comment">// A URL that IS an image/video/audio file has no markup to scrape; the
+<a href=#361 id=361 data-nosnippet>361</a>    // resource is its own preview.
+<a href=#362 id=362 data-nosnippet>362</a>    </span><span class="kw">if </span>mime.starts_with(<span class="string">"image/"</span>) || mime.starts_with(<span class="string">"video/"</span>) || mime.starts_with(<span class="string">"audio/"</span>) {
+<a href=#363 id=363 data-nosnippet>363</a>        trace.outcome = Outcome::Embed(Box::new(build::from_media(
+<a href=#364 id=364 data-nosnippet>364</a>            url.to_string(),
+<a href=#365 id=365 data-nosnippet>365</a>            <span class="kw-2">&amp;</span>fetched.final_url,
+<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw-2">&amp;</span>mime,
+<a href=#367 id=367 data-nosnippet>367</a>        )));
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">return </span>trace;
+<a href=#369 id=369 data-nosnippet>369</a>    }
+<a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">if </span>!(mime.is_empty() || mime.contains(<span class="string">"html"</span>) || mime.contains(<span class="string">"xml"</span>)) {
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="comment">// A PDF, a zip, a JSON API response: fetched fine, nothing to scrape.
+<a href=#372 id=372 data-nosnippet>372</a>        </span>trace.outcome = Outcome::Failed(describe(<span class="kw-2">&amp;</span>FetchError::UnsupportedContentType(mime)));
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="kw">return </span>trace;
+<a href=#374 id=374 data-nosnippet>374</a>    }
+<a href=#375 id=375 data-nosnippet>375</a>    <span class="kw">if </span>fetched.truncated {
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="comment">// Not a nicety: this is the state in which the metadata is MISSING
+<a href=#377 id=377 data-nosnippet>377</a>        // rather than merely incomplete, and it reads as a site with no Open
+<a href=#378 id=378 data-nosnippet>378</a>        // Graph tags at all. Say which it is.
+<a href=#379 id=379 data-nosnippet>379</a>        </span>trace.warnings.push(
+<a href=#380 id=380 data-nosnippet>380</a>            <span class="string">"the page never closed its &lt;head&gt; within the fetch limit, so its Open Graph \
+<a href=#381 id=381 data-nosnippet>381</a>             and Twitter Card tags were never reached — anything below comes from oEmbed \
+<a href=#382 id=382 data-nosnippet>382</a>             or the bare HTML"
+<a href=#383 id=383 data-nosnippet>383</a>                </span>.to_owned(),
+<a href=#384 id=384 data-nosnippet>384</a>        );
+<a href=#385 id=385 data-nosnippet>385</a>    }
+<a href=#386 id=386 data-nosnippet>386</a>
+<a href=#387 id=387 data-nosnippet>387</a>    <span class="kw">let </span>html = parse::decode_html(<span class="kw-2">&amp;</span>fetched.body, fetched.content_type.as_deref());
+<a href=#388 id=388 data-nosnippet>388</a>    <span class="kw">let </span>meta = parse::scrape(<span class="kw-2">&amp;</span>html);
+<a href=#389 id=389 data-nosnippet>389</a>    <span class="comment">// The registry wins over discovery. A page that advertises nothing is the
+<a href=#390 id=390 data-nosnippet>390</a>    // common failure — a shell served to a bot, or a provider that simply never
+<a href=#391 id=391 data-nosnippet>391</a>    // adds the link — and for a host we know, the endpoint is not something we
+<a href=#392 id=392 data-nosnippet>392</a>    // need the page's permission to use.
+<a href=#393 id=393 data-nosnippet>393</a>    </span><span class="kw">let </span>endpoint = providers::lookup(url)
+<a href=#394 id=394 data-nosnippet>394</a>        .and_then(|provider| provider.oembed_endpoint(url))
+<a href=#395 id=395 data-nosnippet>395</a>        .map(|endpoint| endpoint.to_string())
+<a href=#396 id=396 data-nosnippet>396</a>        .or_else(|| meta.oembed_json.clone());
+<a href=#397 id=397 data-nosnippet>397</a>    trace.oembed_endpoint = endpoint.clone();
+<a href=#398 id=398 data-nosnippet>398</a>
+<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">let </span>oembed = <span class="kw">match </span><span class="kw-2">&amp;</span>endpoint {
+<a href=#400 id=400 data-nosnippet>400</a>        <span class="prelude-val">Some</span>(endpoint) =&gt; fetch_oembed(<span class="kw-2">&amp;</span>fetcher, <span class="kw-2">&amp;</span>fetched.final_url, endpoint, <span class="kw-2">&amp;mut </span>trace).<span class="kw">await</span>,
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#402 id=402 data-nosnippet>402</a>    };
+<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(oe) = <span class="kw-2">&amp;</span>oembed {
+<a href=#404 id=404 data-nosnippet>404</a>        trace.oembed_html = oe.html.clone();
+<a href=#405 id=405 data-nosnippet>405</a>    }
+<a href=#406 id=406 data-nosnippet>406</a>
+<a href=#407 id=407 data-nosnippet>407</a>    trace.raw = build::raw_fields(<span class="kw-2">&amp;</span>meta, oembed.as_ref());
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">let </span>embed = build::from_html(
+<a href=#409 id=409 data-nosnippet>409</a>        Scraped {
+<a href=#410 id=410 data-nosnippet>410</a>            request_url: url.to_string(),
+<a href=#411 id=411 data-nosnippet>411</a>            final_url: fetched.final_url.clone(),
+<a href=#412 id=412 data-nosnippet>412</a>            meta,
+<a href=#413 id=413 data-nosnippet>413</a>            oembed,
+<a href=#414 id=414 data-nosnippet>414</a>        },
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw-2">&amp;mut </span>trace.warnings,
+<a href=#416 id=416 data-nosnippet>416</a>    );
+<a href=#417 id=417 data-nosnippet>417</a>    trace.outcome = <span class="kw">if </span>embed.is_renderable() {
+<a href=#418 id=418 data-nosnippet>418</a>        Outcome::Embed(Box::new(embed))
+<a href=#419 id=419 data-nosnippet>419</a>    } <span class="kw">else </span>{
+<a href=#420 id=420 data-nosnippet>420</a>        Outcome::Empty
+<a href=#421 id=421 data-nosnippet>421</a>    };
+<a href=#422 id=422 data-nosnippet>422</a>    trace
+<a href=#423 id=423 data-nosnippet>423</a>}
+<a href=#424 id=424 data-nosnippet>424</a>
+<a href=#425 id=425 data-nosnippet>425</a><span class="doccomment">/// Build a card from a known provider's oEmbed endpoint alone.
+<a href=#426 id=426 data-nosnippet>426</a>///
+<a href=#427 id=427 data-nosnippet>427</a>/// Used when the page fetch failed. Returns `None` when the host is unknown or
+<a href=#428 id=428 data-nosnippet>428</a>/// the endpoint could not answer either, so the caller reports the page's own
+<a href=#429 id=429 data-nosnippet>429</a>/// failure — the more useful error in that case.
+<a href=#430 id=430 data-nosnippet>430</a></span><span class="kw">async fn </span>provider_only(fetcher: <span class="kw-2">&amp;</span>SafeFetcher, url: <span class="kw-2">&amp;</span>Url, trace: <span class="kw-2">&amp;mut </span>Trace) -&gt; <span class="prelude-ty">Option</span>&lt;LinkEmbed&gt; {
+<a href=#431 id=431 data-nosnippet>431</a>    <span class="kw">let </span>provider = providers::lookup(url)<span class="question-mark">?</span>;
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">let </span>endpoint = provider.oembed_endpoint(url)<span class="question-mark">?</span>;
+<a href=#433 id=433 data-nosnippet>433</a>    trace.oembed_endpoint = <span class="prelude-val">Some</span>(endpoint.to_string());
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">let </span>oembed = fetch_oembed(fetcher, url, endpoint.as_str(), trace).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#435 id=435 data-nosnippet>435</a>    trace.oembed_html = oembed.html.clone();
+<a href=#436 id=436 data-nosnippet>436</a>    trace.raw = build::raw_fields(<span class="kw-2">&amp;</span>parse::PageMetadata::default(), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>oembed));
+<a href=#437 id=437 data-nosnippet>437</a>    trace.warnings.push(<span class="macro">format!</span>(
+<a href=#438 id=438 data-nosnippet>438</a>        <span class="string">"the page itself could not be read; this preview comes from {}'s oEmbed endpoint"</span>,
+<a href=#439 id=439 data-nosnippet>439</a>        provider.name
+<a href=#440 id=440 data-nosnippet>440</a>    ));
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="prelude-val">Some</span>(build::from_oembed(
+<a href=#442 id=442 data-nosnippet>442</a>        url.to_string(),
+<a href=#443 id=443 data-nosnippet>443</a>        url,
+<a href=#444 id=444 data-nosnippet>444</a>        <span class="kw-2">&amp;</span>oembed,
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="kw-2">&amp;mut </span>trace.warnings,
+<a href=#446 id=446 data-nosnippet>446</a>    ))
+<a href=#447 id=447 data-nosnippet>447</a>}
+<a href=#448 id=448 data-nosnippet>448</a>
+<a href=#449 id=449 data-nosnippet>449</a><span class="doccomment">/// Fetch and decode the discovered oEmbed endpoint.
+<a href=#450 id=450 data-nosnippet>450</a>///
+<a href=#451 id=451 data-nosnippet>451</a>/// Guarded exactly like the page fetch — the endpoint URL comes out of the same
+<a href=#452 id=452 data-nosnippet>452</a>/// untrusted markup, so it gets no more trust than the page did. A failure here
+<a href=#453 id=453 data-nosnippet>453</a>/// is a warning, never the end of the unfurl: Open Graph alone usually carries
+<a href=#454 id=454 data-nosnippet>454</a>/// enough for a card.
+<a href=#455 id=455 data-nosnippet>455</a></span><span class="kw">async fn </span>fetch_oembed(
+<a href=#456 id=456 data-nosnippet>456</a>    fetcher: <span class="kw-2">&amp;</span>SafeFetcher,
+<a href=#457 id=457 data-nosnippet>457</a>    base: <span class="kw-2">&amp;</span>Url,
+<a href=#458 id=458 data-nosnippet>458</a>    endpoint: <span class="kw-2">&amp;</span>str,
+<a href=#459 id=459 data-nosnippet>459</a>    trace: <span class="kw-2">&amp;mut </span>Trace,
+<a href=#460 id=460 data-nosnippet>460</a>) -&gt; <span class="prelude-ty">Option</span>&lt;OEmbed&gt; {
+<a href=#461 id=461 data-nosnippet>461</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(url) = base.join(endpoint) <span class="kw">else </span>{
+<a href=#462 id=462 data-nosnippet>462</a>        trace
+<a href=#463 id=463 data-nosnippet>463</a>            .warnings
+<a href=#464 id=464 data-nosnippet>464</a>            .push(<span class="string">"the declared oEmbed endpoint is not a URL"</span>.to_owned());
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#466 id=466 data-nosnippet>466</a>    };
+<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">let </span>fetched: Fetched = <span class="kw">match </span>fetcher
+<a href=#468 id=468 data-nosnippet>468</a>        .get(
+<a href=#469 id=469 data-nosnippet>469</a>            <span class="kw-2">&amp;</span>url,
+<a href=#470 id=470 data-nosnippet>470</a>            FetchLimits::oembed(),
+<a href=#471 id=471 data-nosnippet>471</a>            <span class="string">"application/json,text/json;q=0.9"</span>,
+<a href=#472 id=472 data-nosnippet>472</a>            <span class="kw-2">&amp;mut </span>trace.steps,
+<a href=#473 id=473 data-nosnippet>473</a>        )
+<a href=#474 id=474 data-nosnippet>474</a>        .<span class="kw">await
+<a href=#475 id=475 data-nosnippet>475</a>    </span>{
+<a href=#476 id=476 data-nosnippet>476</a>        <span class="prelude-val">Ok</span>(fetched) =&gt; fetched,
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#478 id=478 data-nosnippet>478</a>            trace
+<a href=#479 id=479 data-nosnippet>479</a>                .warnings
+<a href=#480 id=480 data-nosnippet>480</a>                .push(<span class="macro">format!</span>(<span class="string">"oEmbed endpoint: {}"</span>, describe(<span class="kw-2">&amp;</span>e)));
+<a href=#481 id=481 data-nosnippet>481</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#482 id=482 data-nosnippet>482</a>        }
+<a href=#483 id=483 data-nosnippet>483</a>    };
+<a href=#484 id=484 data-nosnippet>484</a>    <span class="kw">match </span>serde_json::from_slice::&lt;OEmbed&gt;(<span class="kw-2">&amp;</span>fetched.body) {
+<a href=#485 id=485 data-nosnippet>485</a>        <span class="prelude-val">Ok</span>(oe) <span class="kw">if </span>oe.is_useful() =&gt; <span class="prelude-val">Some</span>(oe),
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
+<a href=#487 id=487 data-nosnippet>487</a>            trace
+<a href=#488 id=488 data-nosnippet>488</a>                .warnings
+<a href=#489 id=489 data-nosnippet>489</a>                .push(<span class="string">"the oEmbed endpoint answered with nothing usable"</span>.to_owned());
+<a href=#490 id=490 data-nosnippet>490</a>            <span class="prelude-val">None
+<a href=#491 id=491 data-nosnippet>491</a>        </span>}
+<a href=#492 id=492 data-nosnippet>492</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#493 id=493 data-nosnippet>493</a>            trace
+<a href=#494 id=494 data-nosnippet>494</a>                .warnings
+<a href=#495 id=495 data-nosnippet>495</a>                .push(<span class="macro">format!</span>(<span class="string">"the oEmbed response is not valid JSON: {e}"</span>));
+<a href=#496 id=496 data-nosnippet>496</a>            <span class="prelude-val">None
+<a href=#497 id=497 data-nosnippet>497</a>        </span>}
+<a href=#498 id=498 data-nosnippet>498</a>    }
+<a href=#499 id=499 data-nosnippet>499</a>}
+<a href=#500 id=500 data-nosnippet>500</a>
+<a href=#501 id=501 data-nosnippet>501</a><span class="doccomment">/// A fetch failure as a person should read it.
+<a href=#502 id=502 data-nosnippet>502</a>///
+<a href=#503 id=503 data-nosnippet>503</a>/// The guard's own `Display` is already written for humans; this exists so the
+<a href=#504 id=504 data-nosnippet>504</a>/// one case that is genuinely ambiguous — a blocked address — says why rather
+<a href=#505 id=505 data-nosnippet>505</a>/// than leaking the impression that the service is broken.
+<a href=#506 id=506 data-nosnippet>506</a></span><span class="kw">fn </span>describe(error: <span class="kw-2">&amp;</span>FetchError) -&gt; String {
+<a href=#507 id=507 data-nosnippet>507</a>    <span class="kw">match </span>error {
+<a href=#508 id=508 data-nosnippet>508</a>        FetchError::PrivateAddress { .. } =&gt; {
+<a href=#509 id=509 data-nosnippet>509</a>            <span class="string">"that address is not on the public internet, so it is not previewed"</span>.to_owned()
+<a href=#510 id=510 data-nosnippet>510</a>        }
+<a href=#511 id=511 data-nosnippet>511</a>        other =&gt; other.to_string(),
+<a href=#512 id=512 data-nosnippet>512</a>    }
+<a href=#513 id=513 data-nosnippet>513</a>}
 </code></pre></div></section></main></body></html>

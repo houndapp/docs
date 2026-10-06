@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>    Json,
 <a href=#5 id=5 data-nosnippet>5</a>    extract::{Path, Query, State},
 <a href=#6 id=6 data-nosnippet>6</a>};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>sea_orm::{ColumnTrait, QueryFilter, QuerySelect, Set, TransactionTrait, prelude::<span class="kw-2">*</span>};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>sea_orm::{ColumnTrait, QueryFilter, QuerySelect, Set, prelude::<span class="kw-2">*</span>};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>uuid::Uuid;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::api::{
@@ -138,7 +138,7 @@
 <a href=#138 id=138 data-nosnippet>138</a>) -&gt; ApiResult&lt;()&gt; {
 <a href=#139 id=139 data-nosnippet>139</a>    <span class="comment">// One transaction: the refusal and the three rows it guards must not
 <a href=#140 id=140 data-nosnippet>140</a>    // straddle a ban landing between them.
-<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">if </span>api.is_banned(<span class="kw-2">&amp;</span>txn, req.id, claims.sub).<span class="kw">await</span><span class="question-mark">? </span>{
 <a href=#143 id=143 data-nosnippet>143</a>        txn.rollback().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ApiError::Banned);
@@ -175,7 +175,7 @@
 <a href=#175 id=175 data-nosnippet>175</a>    Query(params): Query&lt;LeaveCommunityParameters&gt;,
 <a href=#176 id=176 data-nosnippet>176</a>    State(api): State&lt;Api&gt;,
 <a href=#177 id=177 data-nosnippet>177</a>) -&gt; ApiResult&lt;()&gt; {
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#179 id=179 data-nosnippet>179</a>    api.assert_not_last_organiser(<span class="kw-2">&amp;</span>txn, params.id, claims.sub)
 <a href=#180 id=180 data-nosnippet>180</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#181 id=181 data-nosnippet>181</a>    api.drop_all_user_role_memberships(<span class="kw-2">&amp;</span>txn, params.id, claims.sub)
@@ -229,7 +229,7 @@
 <a href=#229 id=229 data-nosnippet>229</a>    }
 <a href=#230 id=230 data-nosnippet>230</a>    api.require_outranks(community_id, claims.sub, user_id)
 <a href=#231 id=231 data-nosnippet>231</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#233 id=233 data-nosnippet>233</a>    api.assert_not_last_organiser(<span class="kw-2">&amp;</span>txn, community_id, user_id)
 <a href=#234 id=234 data-nosnippet>234</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#235 id=235 data-nosnippet>235</a>    api.drop_all_user_role_memberships(<span class="kw-2">&amp;</span>txn, community_id, user_id)
@@ -399,7 +399,7 @@
 <a href=#399 id=399 data-nosnippet>399</a>
 <a href=#400 id=400 data-nosnippet>400</a><span class="attr">#[cfg(test)]
 <a href=#401 id=401 data-nosnippet>401</a></span><span class="kw">mod </span>tests {
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">use </span>sea_orm::{ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">use </span>sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 <a href=#403 id=403 data-nosnippet>403</a>
 <a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">use </span><span class="kw">crate</span>::api::data::Page;
 <a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">use </span><span class="kw">crate</span>::api::data::entity::sea_orm_active_enums::Permission;
@@ -510,7 +510,7 @@
 <a href=#510 id=510 data-nosnippet>510</a>            .<span class="kw">await
 <a href=#511 id=511 data-nosnippet>511</a>            </span>.unwrap();
 <a href=#512 id=512 data-nosnippet>512</a>
-<a href=#513 id=513 data-nosnippet>513</a>        <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span>.unwrap();
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span>.unwrap();
 <a href=#514 id=514 data-nosnippet>514</a>        api.assert_not_last_organiser(<span class="kw-2">&amp;</span>txn, community.id, owner.id)
 <a href=#515 id=515 data-nosnippet>515</a>            .<span class="kw">await
 <a href=#516 id=516 data-nosnippet>516</a>            </span>.unwrap();

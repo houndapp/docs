@@ -5,9 +5,9 @@
 <a href=#5 id=5 data-nosnippet>5</a>//! attacker-controlled text — so both validate the scheme before doing anything
 <a href=#6 id=6 data-nosnippet>6</a>//! with it. That check is here rather than in the UI because it must hold for
 <a href=#7 id=7 data-nosnippet>7</a>//! every caller, and because the consequence of missing it is
-<a href=#8 id=8 data-nosnippet>8</a>//! platform-specific and severe: [`open::that_detached`] resolves to
-<a href=#9 id=9 data-nosnippet>9</a>//! `ShellExecute` on Windows and `open(1)` on macOS, either of which will
-<a href=#10 id=10 data-nosnippet>10</a>//! cheerfully act on `file:`, `smb:`, or a registered custom scheme.
+<a href=#8 id=8 data-nosnippet>8</a>//! platform-specific and severe: the launcher resolves to `ShellExecuteExW` on
+<a href=#9 id=9 data-nosnippet>9</a>//! Windows and `open(1)` on macOS, either of which will cheerfully act on
+<a href=#10 id=10 data-nosnippet>10</a>//! `file:`, `smb:`, or a registered custom scheme.
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">use </span>hound_client::error::{HoundError, InternalCode, StateCode};
 <a href=#13 id=13 data-nosnippet>13</a>
@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>            <span class="macro">format!</span>(<span class="string">"refusing to open a `{}` link"</span>, parsed.scheme()),
 <a href=#32 id=32 data-nosnippet>32</a>        ));
 <a href=#33 id=33 data-nosnippet>33</a>    }
-<a href=#34 id=34 data-nosnippet>34</a>    open::that_detached(parsed.as_str()).map_err(|e| {
+<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">crate</span>::desktop::open(parsed.as_str().as_ref()).map_err(|e| {
 <a href=#35 id=35 data-nosnippet>35</a>        HoundError::internal(
 <a href=#36 id=36 data-nosnippet>36</a>            InternalCode::Unclassified,
 <a href=#37 id=37 data-nosnippet>37</a>            <span class="macro">format!</span>(<span class="string">"could not open the browser: {e}"</span>),

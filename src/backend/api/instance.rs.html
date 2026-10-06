@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>sea_orm::{
 <a href=#6 id=6 data-nosnippet>6</a>    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder,
-<a href=#7 id=7 data-nosnippet>7</a>    QuerySelect, Set, TransactionTrait, sea_query::Expr,
+<a href=#7 id=7 data-nosnippet>7</a>    QuerySelect, Set, sea_query::Expr,
 <a href=#8 id=8 data-nosnippet>8</a>};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>uuid::Uuid;
 <a href=#10 id=10 data-nosnippet>10</a>
@@ -156,7 +156,7 @@
 <a href=#156 id=156 data-nosnippet>156</a>    State(api): State&lt;Api&gt;,
 <a href=#157 id=157 data-nosnippet>157</a>    Json(req): Json&lt;PutUserPermissionsRequest&gt;,
 <a href=#158 id=158 data-nosnippet>158</a>) -&gt; ApiResult&lt;()&gt; {
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#160 id=160 data-nosnippet>160</a>    instance_user_permission::Entity::delete_many()
 <a href=#161 id=161 data-nosnippet>161</a>        .filter(instance_user_permission::Column::UserId.eq(user_id))
 <a href=#162 id=162 data-nosnippet>162</a>        .exec(<span class="kw-2">&amp;</span>txn)
@@ -265,7 +265,7 @@
 <a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ApiError::EmptyCommunityName);
 <a href=#266 id=266 data-nosnippet>266</a>        }
 <a href=#267 id=267 data-nosnippet>267</a>
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>txn = <span class="self">self</span>.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>txn = <span class="self">self</span>.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">let </span>community = <span class="self">self</span>.insert_community(<span class="kw-2">&amp;</span>txn).<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#270 id=270 data-nosnippet>270</a>        <span class="self">self</span>.provision_default_layout(<span class="kw-2">&amp;</span>txn, community.id, name.to_owned(), <span class="prelude-val">None</span>)
 <a href=#271 id=271 data-nosnippet>271</a>            .<span class="kw">await</span><span class="question-mark">?</span>;

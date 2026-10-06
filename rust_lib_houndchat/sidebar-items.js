@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["api","frame_size","frb_generated","keyring","logfile","telemetry"]};
+window.SIDEBAR_ITEMS = {"mod":["api","desktop","frame_size","frb_generated","keyring","logfile","telemetry"]};

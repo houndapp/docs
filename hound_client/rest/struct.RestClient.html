@@ -433,9 +433,9 @@ surface, not a view-model, so there is nothing to reshape and no wire
 quirk to confine.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.get_profile" class="method"><a class="src rightside" href="../../src/hound_client/rest.rs.html#1504-1507">Source</a><h4 class="code-header">pub async fn <a href="#method.get_profile" class="fn">get_profile</a>(&amp;self) -&gt; <a class="type" href="../error/type.Result.html" title="type hound_client::error::Result">Result</a>&lt;<a class="struct" href="../model/struct.Profile.html" title="struct hound_client::model::Profile">Profile</a>&gt;</h4></section></summary><div class="docblock"><p><code>GET /profile/global</code> — the signed-in user’s global profile.
 <strong>Wire quirk:</strong> the backend route is <code>/profile/global</code> (not <code>/profile</code>) and
-the response carries <code>name</code> as a (possibly empty) <code>String</code> with no avatar; we
-normalise an empty name to <code>None</code> and leave <code>picture</code> empty (the UI resolves it
-from the merged community profile elsewhere).</p>
+the response carries <code>name</code> as a (possibly empty) <code>String</code>; we normalise an
+empty name to <code>None</code>. <code>picture</code> is the resolved avatar URL, empty against a
+backend too old to send one.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.set_avatar" class="method"><a class="src rightside" href="../../src/hound_client/rest.rs.html#1511-1514">Source</a><h4 class="code-header">pub async fn <a href="#method.set_avatar" class="fn">set_avatar</a>(&amp;self, avatar_upload_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>) -&gt; <a class="type" href="../error/type.Result.html" title="type hound_client::error::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.98.1/std/primitive.unit.html">()</a>&gt;</h4></section></summary><div class="docblock"><p><code>PATCH /profile/global</code> — set the global avatar to a previously uploaded file.
 Returns <code>()</code> (the backend answers <code>204 No Content</code>).</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.upload_accept_post" class="method"><a class="src rightside" href="../../src/hound_client/rest.rs.html#1532-1539">Source</a><h4 class="code-header">pub async fn <a href="#method.upload_accept_post" class="fn">upload_accept_post</a>(

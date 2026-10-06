@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["STACK_PORTS"],"enum":["Proto"],"fn":["busy","preflight"],"struct":["Port"]};
+window.SIDEBAR_ITEMS = {"constant":["STACK_PORTS"],"enum":["Proto"],"fn":["any_busy","busy","preflight","wait_free"],"struct":["Port"]};

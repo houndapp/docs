@@ -7,7 +7,7 @@
 <a href=#7 id=7 data-nosnippet>7</a>    Json,
 <a href=#8 id=8 data-nosnippet>8</a>    extract::{Path, State},
 <a href=#9 id=9 data-nosnippet>9</a>};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>sea_orm::{ColumnTrait, QueryFilter, QuerySelect, Set, TransactionTrait, prelude::<span class="kw-2">*</span>};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>sea_orm::{ColumnTrait, QueryFilter, QuerySelect, Set, prelude::<span class="kw-2">*</span>};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>strum::IntoEnumIterator;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>uuid::Uuid;
 <a href=#13 id=13 data-nosnippet>13</a>
@@ -65,7 +65,7 @@
 <a href=#65 id=65 data-nosnippet>65</a>    Path(id): Path&lt;Uuid&gt;,
 <a href=#66 id=66 data-nosnippet>66</a>    State(api): State&lt;Api&gt;,
 <a href=#67 id=67 data-nosnippet>67</a>) -&gt; ApiResult&lt;Json&lt;CommunityModel&gt;&gt; {
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">let </span>txn = api.db.begin().<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">let </span>txn = api.write_txn().<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#69 id=69 data-nosnippet>69</a>
 <a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">let </span>name = CommunitySettings::find()
 <a href=#71 id=71 data-nosnippet>71</a>        .filter(community_settings::Column::CommunityId.eq(id))

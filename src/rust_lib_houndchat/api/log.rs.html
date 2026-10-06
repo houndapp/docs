@@ -218,7 +218,7 @@
 <a href=#218 id=218 data-nosnippet>218</a><span class="doccomment">/// Absolute path of the file this instance's logs are written to, or `None` when
 <a href=#219 id=219 data-nosnippet>219</a>/// file logging could not be brought up (no usable OS log directory — see
 <a href=#220 id=220 data-nosnippet>220</a>/// [`crate::logfile`]). Settings shows it so the path can be typed into a support
-<a href=#221 id=221 data-nosnippet>221</a>/// thread or pasted into a file dialog; `None` is why the reveal button is hidden.
+<a href=#221 id=221 data-nosnippet>221</a>/// thread or pasted into a file dialog; `None` is why its actions are hidden.
 <a href=#222 id=222 data-nosnippet>222</a>///
 <a href=#223 id=223 data-nosnippet>223</a>/// Only meaningful after [`init_log`] has run — which the Dart bootstrap does
 <a href=#224 id=224 data-nosnippet>224</a>/// before anything can call this.
@@ -231,37 +231,58 @@
 <a href=#231 id=231 data-nosnippet>231</a>///
 <a href=#232 id=232 data-nosnippet>232</a>/// Detached, like the browser-login launcher: the handler is a foreign GUI app and
 <a href=#233 id=233 data-nosnippet>233</a>/// awaiting it would block an FRB worker for as long as the user leaves the window
-<a href=#234 id=234 data-nosnippet>234</a>/// open. So the `Ok` means "handed to the OS", not "the user saw it" — a launcher
-<a href=#235 id=235 data-nosnippet>235</a>/// that fails *after* forking is indistinguishable from success here, which is why
-<a href=#236 id=236 data-nosnippet>236</a>/// [`log_file_path`] is shown alongside as the fallback.
-<a href=#237 id=237 data-nosnippet>237</a></span><span class="kw">pub fn </span>open_log_file() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">let </span>path = <span class="kw">crate</span>::logfile::path().ok_or_else(|| {
-<a href=#239 id=239 data-nosnippet>239</a>        HoundError::invalid_state(
-<a href=#240 id=240 data-nosnippet>240</a>            StateCode::NotInitialised,
-<a href=#241 id=241 data-nosnippet>241</a>            <span class="string">"there is no log file this session"</span>,
-<a href=#242 id=242 data-nosnippet>242</a>        )
-<a href=#243 id=243 data-nosnippet>243</a>    })<span class="question-mark">?</span>;
-<a href=#244 id=244 data-nosnippet>244</a>    open::that_detached(path).map_err(|e| {
-<a href=#245 id=245 data-nosnippet>245</a>        HoundError::internal(
-<a href=#246 id=246 data-nosnippet>246</a>            InternalCode::Unclassified,
-<a href=#247 id=247 data-nosnippet>247</a>            <span class="macro">format!</span>(<span class="string">"could not open {}: {e}"</span>, path.display()),
-<a href=#248 id=248 data-nosnippet>248</a>        )
-<a href=#249 id=249 data-nosnippet>249</a>    })
-<a href=#250 id=250 data-nosnippet>250</a>}
-<a href=#251 id=251 data-nosnippet>251</a>
-<a href=#252 id=252 data-nosnippet>252</a><span class="attr">#[cfg(test)]
-<a href=#253 id=253 data-nosnippet>253</a></span><span class="kw">mod </span>tests {
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#255 id=255 data-nosnippet>255</a>
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// The smoke's log-marker contract: a runner-role process mirrors engine
-<a href=#257 id=257 data-nosnippet>257</a>    /// logs to stderr; a user's never does. Regression guard for the nightly
-<a href=#258 id=258 data-nosnippet>258</a>    /// launch gate going blind on release builds (where the Dart relay's
-<a href=#259 id=259 data-nosnippet>259</a>    /// delivery is an embedder detail).
-<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="attr">#[test]
-<a href=#261 id=261 data-nosnippet>261</a>    </span><span class="kw">fn </span>only_the_ci_smoke_role_mirrors_logs_to_stderr() {
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="macro">assert!</span>(mirrors_logs_to_stderr(<span class="string">"ci-smoke"</span>));
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">"user"</span>));
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">""</span>));
-<a href=#265 id=265 data-nosnippet>265</a>    }
-<a href=#266 id=266 data-nosnippet>266</a>}
+<a href=#234 id=234 data-nosnippet>234</a>/// open. So the `Ok` means "handed to the OS", not "the user saw it" — on macOS and
+<a href=#235 id=235 data-nosnippet>235</a>/// Linux a launcher that fails *after* forking is indistinguishable from success
+<a href=#236 id=236 data-nosnippet>236</a>/// (Windows reports a missing handler), which is why [`log_file_path`] is shown
+<a href=#237 id=237 data-nosnippet>237</a>/// alongside as the fallback.
+<a href=#238 id=238 data-nosnippet>238</a></span><span class="kw">pub fn </span>open_log_file() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">let </span>path = current_log_file()<span class="question-mark">?</span>;
+<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">crate</span>::desktop::open(path.as_os_str()).map_err(|e| {
+<a href=#241 id=241 data-nosnippet>241</a>        HoundError::internal(
+<a href=#242 id=242 data-nosnippet>242</a>            InternalCode::Unclassified,
+<a href=#243 id=243 data-nosnippet>243</a>            <span class="macro">format!</span>(<span class="string">"could not open {}: {e}"</span>, path.display()),
+<a href=#244 id=244 data-nosnippet>244</a>        )
+<a href=#245 id=245 data-nosnippet>245</a>    })
+<a href=#246 id=246 data-nosnippet>246</a>}
+<a href=#247 id=247 data-nosnippet>247</a>
+<a href=#248 id=248 data-nosnippet>248</a><span class="doccomment">/// Show the current log file selected in the platform file manager (Explorer,
+<a href=#249 id=249 data-nosnippet>249</a>/// Finder, the freedesktop file manager) — the settings screen's "show in folder"
+<a href=#250 id=250 data-nosnippet>250</a>/// action, for dragging the file into a support thread. Returns once the file
+<a href=#251 id=251 data-nosnippet>251</a>/// manager has been asked; a failure to ask is the error.
+<a href=#252 id=252 data-nosnippet>252</a></span><span class="kw">pub fn </span>reveal_log_file() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">let </span>path = current_log_file()<span class="question-mark">?</span>;
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">crate</span>::desktop::reveal(path).map_err(|e| {
+<a href=#255 id=255 data-nosnippet>255</a>        HoundError::internal(
+<a href=#256 id=256 data-nosnippet>256</a>            InternalCode::Unclassified,
+<a href=#257 id=257 data-nosnippet>257</a>            <span class="macro">format!</span>(<span class="string">"could not show {} in its folder: {e}"</span>, path.display()),
+<a href=#258 id=258 data-nosnippet>258</a>        )
+<a href=#259 id=259 data-nosnippet>259</a>    })
+<a href=#260 id=260 data-nosnippet>260</a>}
+<a href=#261 id=261 data-nosnippet>261</a>
+<a href=#262 id=262 data-nosnippet>262</a><span class="doccomment">/// This session's log file, or the error a command about it reports when file
+<a href=#263 id=263 data-nosnippet>263</a>/// logging never came up.
+<a href=#264 id=264 data-nosnippet>264</a></span><span class="kw">fn </span>current_log_file() -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>std::path::Path, HoundError&gt; {
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">crate</span>::logfile::path().ok_or_else(|| {
+<a href=#266 id=266 data-nosnippet>266</a>        HoundError::invalid_state(
+<a href=#267 id=267 data-nosnippet>267</a>            StateCode::NotInitialised,
+<a href=#268 id=268 data-nosnippet>268</a>            <span class="string">"there is no log file this session"</span>,
+<a href=#269 id=269 data-nosnippet>269</a>        )
+<a href=#270 id=270 data-nosnippet>270</a>    })
+<a href=#271 id=271 data-nosnippet>271</a>}
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a><span class="attr">#[cfg(test)]
+<a href=#274 id=274 data-nosnippet>274</a></span><span class="kw">mod </span>tests {
+<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#276 id=276 data-nosnippet>276</a>
+<a href=#277 id=277 data-nosnippet>277</a>    <span class="doccomment">/// The smoke's log-marker contract: a runner-role process mirrors engine
+<a href=#278 id=278 data-nosnippet>278</a>    /// logs to stderr; a user's never does. Regression guard for the nightly
+<a href=#279 id=279 data-nosnippet>279</a>    /// launch gate going blind on release builds (where the Dart relay's
+<a href=#280 id=280 data-nosnippet>280</a>    /// delivery is an embedder detail).
+<a href=#281 id=281 data-nosnippet>281</a>    </span><span class="attr">#[test]
+<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">fn </span>only_the_ci_smoke_role_mirrors_logs_to_stderr() {
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="macro">assert!</span>(mirrors_logs_to_stderr(<span class="string">"ci-smoke"</span>));
+<a href=#284 id=284 data-nosnippet>284</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">"user"</span>));
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="macro">assert!</span>(!mirrors_logs_to_stderr(<span class="string">""</span>));
+<a href=#286 id=286 data-nosnippet>286</a>    }
+<a href=#287 id=287 data-nosnippet>287</a>}
 </code></pre></div></section></main></body></html>

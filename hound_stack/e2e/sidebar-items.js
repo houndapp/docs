@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["INFRA_FAILURE","OUT_DIR_ENV","RELAY_URL_DEV","TARGET_URL_ENV"],"fn":["run"]};
+window.SIDEBAR_ITEMS = {"constant":["INFRA_FAILURE","NEXTEST_PROFILE","OUT_DIR_ENV","TARGET_URL_ENV"],"fn":["run","sign_test_binaries"],"struct":["E2eOptions"]};

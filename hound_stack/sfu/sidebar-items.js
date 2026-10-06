@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["reregister"]};
+window.SIDEBAR_ITEMS = {"constant":["ADVERTISE_IPV4","DRAIN_DEADLINE_SECS","HEALTHY_BUDGET","HEALTH_PORT","LISTEN_PORT","REGISTERED_BUDGET"],"fn":["has_live_node","health_url","is_healthy","spawn","wait_ready"]};

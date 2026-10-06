@@ -356,7 +356,7 @@
 <a href=#356 id=356 data-nosnippet>356</a>
 <a href=#357 id=357 data-nosnippet>357</a><span class="attr">#[cfg(test)]
 <a href=#358 id=358 data-nosnippet>358</a></span><span class="kw">mod </span>tests {
-<a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">use </span>std::time::{Duration, Instant};
+<a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">use </span>std::time::Duration;
 <a href=#360 id=360 data-nosnippet>360</a>
 <a href=#361 id=361 data-nosnippet>361</a>    <span class="kw">use </span>proptest::prelude::<span class="kw-2">*</span>;
 <a href=#362 id=362 data-nosnippet>362</a>    <span class="kw">use </span>uuid::Uuid;
@@ -991,83 +991,85 @@
 <a href=#991 id=991 data-nosnippet>991</a>        );
 <a href=#992 id=992 data-nosnippet>992</a>    }
 <a href=#993 id=993 data-nosnippet>993</a>
-<a href=#994 id=994 data-nosnippet>994</a>    <span class="kw">fn </span>wall_clock_bounded(label: <span class="kw-2">&amp;</span>str, source: <span class="kw-2">&amp;</span>str) {
-<a href=#995 id=995 data-nosnippet>995</a>        <span class="kw">let </span>start = Instant::now();
-<a href=#996 id=996 data-nosnippet>996</a>        <span class="kw">let _ </span>= parse(source);
-<a href=#997 id=997 data-nosnippet>997</a>        <span class="kw">let </span>elapsed = start.elapsed();
-<a href=#998 id=998 data-nosnippet>998</a>        <span class="macro">assert!</span>(
-<a href=#999 id=999 data-nosnippet>999</a>            elapsed &lt; Duration::from_secs(<span class="number">2</span>),
-<a href=#1000 id=1000 data-nosnippet>1000</a>            <span class="string">"{label} took {elapsed:?}, over the 2s bound"
-<a href=#1001 id=1001 data-nosnippet>1001</a>        </span>);
-<a href=#1002 id=1002 data-nosnippet>1002</a>    }
-<a href=#1003 id=1003 data-nosnippet>1003</a>
-<a href=#1004 id=1004 data-nosnippet>1004</a>    <span class="attr">#[test]
-<a href=#1005 id=1005 data-nosnippet>1005</a>    </span><span class="kw">fn </span>pathological_unmatched_brackets() {
-<a href=#1006 id=1006 data-nosnippet>1006</a>        wall_clock_bounded(<span class="string">"50k unmatched ["</span>, <span class="kw-2">&amp;</span><span class="string">"["</span>.repeat(<span class="number">50_000</span>));
-<a href=#1007 id=1007 data-nosnippet>1007</a>    }
-<a href=#1008 id=1008 data-nosnippet>1008</a>
-<a href=#1009 id=1009 data-nosnippet>1009</a>    <span class="attr">#[test]
-<a href=#1010 id=1010 data-nosnippet>1010</a>    </span><span class="kw">fn </span>pathological_nested_blockquotes() {
-<a href=#1011 id=1011 data-nosnippet>1011</a>        wall_clock_bounded(<span class="string">"20k nested blockquotes"</span>, <span class="kw-2">&amp;</span><span class="string">"&gt; "</span>.repeat(<span class="number">20_000</span>));
-<a href=#1012 id=1012 data-nosnippet>1012</a>    }
-<a href=#1013 id=1013 data-nosnippet>1013</a>
-<a href=#1014 id=1014 data-nosnippet>1014</a>    <span class="attr">#[test]
-<a href=#1015 id=1015 data-nosnippet>1015</a>    </span><span class="kw">fn </span>pathological_unmatched_emphasis() {
-<a href=#1016 id=1016 data-nosnippet>1016</a>        wall_clock_bounded(<span class="string">"20k unmatched *"</span>, <span class="kw-2">&amp;</span><span class="string">"*"</span>.repeat(<span class="number">20_000</span>));
-<a href=#1017 id=1017 data-nosnippet>1017</a>    }
-<a href=#1018 id=1018 data-nosnippet>1018</a>
-<a href=#1019 id=1019 data-nosnippet>1019</a>    <span class="attr">#[test]
-<a href=#1020 id=1020 data-nosnippet>1020</a>    </span><span class="kw">fn </span>pathological_unmatched_spoilers() {
-<a href=#1021 id=1021 data-nosnippet>1021</a>        wall_clock_bounded(<span class="string">"4000 chars of ||"</span>, <span class="kw-2">&amp;</span><span class="string">"|"</span>.repeat(<span class="number">4_000</span>));
-<a href=#1022 id=1022 data-nosnippet>1022</a>    }
-<a href=#1023 id=1023 data-nosnippet>1023</a>
-<a href=#1024 id=1024 data-nosnippet>1024</a>    <span class="attr">#[test]
-<a href=#1025 id=1025 data-nosnippet>1025</a>    </span><span class="kw">fn </span>pathological_deeply_nested_lists() {
-<a href=#1026 id=1026 data-nosnippet>1026</a>        <span class="kw">let </span><span class="kw-2">mut </span>source = String::new();
-<a href=#1027 id=1027 data-nosnippet>1027</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">2_000 </span>{
-<a href=#1028 id=1028 data-nosnippet>1028</a>            source.push_str(<span class="kw-2">&amp;</span><span class="string">" "</span>.repeat(i * <span class="number">2</span>));
-<a href=#1029 id=1029 data-nosnippet>1029</a>            source.push_str(<span class="string">"- x\n"</span>);
-<a href=#1030 id=1030 data-nosnippet>1030</a>        }
-<a href=#1031 id=1031 data-nosnippet>1031</a>        wall_clock_bounded(<span class="string">"deeply nested lists"</span>, <span class="kw-2">&amp;</span>source);
-<a href=#1032 id=1032 data-nosnippet>1032</a>    }
-<a href=#1033 id=1033 data-nosnippet>1033</a>
-<a href=#1034 id=1034 data-nosnippet>1034</a>    <span class="attr">#[test]
-<a href=#1035 id=1035 data-nosnippet>1035</a>    </span><span class="kw">fn </span>pathological_unmatched_angle_brackets() {
-<a href=#1036 id=1036 data-nosnippet>1036</a>        wall_clock_bounded(<span class="string">"100k &lt;"</span>, <span class="kw-2">&amp;</span><span class="string">"&lt;"</span>.repeat(<span class="number">100_000</span>));
-<a href=#1037 id=1037 data-nosnippet>1037</a>    }
-<a href=#1038 id=1038 data-nosnippet>1038</a>
-<a href=#1039 id=1039 data-nosnippet>1039</a>    <span class="attr">#[test]
-<a href=#1040 id=1040 data-nosnippet>1040</a>    </span><span class="kw">fn </span>pathological_repeated_hound_prefixes() {
-<a href=#1041 id=1041 data-nosnippet>1041</a>        wall_clock_bounded(
-<a href=#1042 id=1042 data-nosnippet>1042</a>            <span class="string">"4000 chars of hound:user/ prefixes"</span>,
-<a href=#1043 id=1043 data-nosnippet>1043</a>            <span class="kw-2">&amp;</span><span class="string">"&lt;hound:user/"</span>.repeat(<span class="number">400</span>),
-<a href=#1044 id=1044 data-nosnippet>1044</a>        );
-<a href=#1045 id=1045 data-nosnippet>1045</a>    }
-<a href=#1046 id=1046 data-nosnippet>1046</a>
-<a href=#1047 id=1047 data-nosnippet>1047</a>    <span class="macro">proptest!</span> {
-<a href=#1048 id=1048 data-nosnippet>1048</a>        <span class="attr">#[test]
-<a href=#1049 id=1049 data-nosnippet>1049</a>        </span><span class="kw">fn </span>parse_never_panics(source <span class="kw">in </span><span class="string">".*"</span>) {
-<a href=#1050 id=1050 data-nosnippet>1050</a>            <span class="kw">let _ </span>= parse(<span class="kw-2">&amp;</span>source);
-<a href=#1051 id=1051 data-nosnippet>1051</a>        }
-<a href=#1052 id=1052 data-nosnippet>1052</a>
-<a href=#1053 id=1053 data-nosnippet>1053</a>        <span class="attr">#[test]
-<a href=#1054 id=1054 data-nosnippet>1054</a>        </span><span class="kw">fn </span>reference_uri_round_trips(id <span class="kw">in </span>any::&lt;u128&gt;(), kind_idx <span class="kw">in </span><span class="number">0u8</span>..<span class="number">4</span>) {
-<a href=#1055 id=1055 data-nosnippet>1055</a>            <span class="kw">let </span>id = Uuid::from_u128(id);
-<a href=#1056 id=1056 data-nosnippet>1056</a>            <span class="kw">let </span>reference = <span class="kw">match </span>kind_idx {
-<a href=#1057 id=1057 data-nosnippet>1057</a>                <span class="number">0 </span>=&gt; Reference::User(id),
-<a href=#1058 id=1058 data-nosnippet>1058</a>                <span class="number">1 </span>=&gt; Reference::Space(id),
-<a href=#1059 id=1059 data-nosnippet>1059</a>                <span class="number">2 </span>=&gt; Reference::Message(id),
-<a href=#1060 id=1060 data-nosnippet>1060</a>                <span class="kw">_ </span>=&gt; Reference::Community(id),
-<a href=#1061 id=1061 data-nosnippet>1061</a>            };
-<a href=#1062 id=1062 data-nosnippet>1062</a>
-<a href=#1063 id=1063 data-nosnippet>1063</a>            <span class="macro">prop_assert_eq!</span>(Reference::parse_uri(<span class="kw-2">&amp;</span>reference.uri()), <span class="prelude-val">Some</span>(reference.clone()));
+<a href=#994 id=994 data-nosnippet>994</a>    <span class="doccomment">/// Thread CPU time, not wall clock: a guard against super-linear blowup
+<a href=#995 id=995 data-nosnippet>995</a>    /// must not flip when sibling tests starve this thread of a core.
+<a href=#996 id=996 data-nosnippet>996</a>    </span><span class="kw">fn </span>cpu_time_bounded(label: <span class="kw-2">&amp;</span>str, source: <span class="kw-2">&amp;</span>str) {
+<a href=#997 id=997 data-nosnippet>997</a>        <span class="kw">let </span>start = cpu_time::ThreadTime::now();
+<a href=#998 id=998 data-nosnippet>998</a>        <span class="kw">let _ </span>= parse(source);
+<a href=#999 id=999 data-nosnippet>999</a>        <span class="kw">let </span>elapsed = start.elapsed();
+<a href=#1000 id=1000 data-nosnippet>1000</a>        <span class="macro">assert!</span>(
+<a href=#1001 id=1001 data-nosnippet>1001</a>            elapsed &lt; Duration::from_secs(<span class="number">2</span>),
+<a href=#1002 id=1002 data-nosnippet>1002</a>            <span class="string">"{label} took {elapsed:?} of CPU, over the 2s bound"
+<a href=#1003 id=1003 data-nosnippet>1003</a>        </span>);
+<a href=#1004 id=1004 data-nosnippet>1004</a>    }
+<a href=#1005 id=1005 data-nosnippet>1005</a>
+<a href=#1006 id=1006 data-nosnippet>1006</a>    <span class="attr">#[test]
+<a href=#1007 id=1007 data-nosnippet>1007</a>    </span><span class="kw">fn </span>pathological_unmatched_brackets() {
+<a href=#1008 id=1008 data-nosnippet>1008</a>        cpu_time_bounded(<span class="string">"50k unmatched ["</span>, <span class="kw-2">&amp;</span><span class="string">"["</span>.repeat(<span class="number">50_000</span>));
+<a href=#1009 id=1009 data-nosnippet>1009</a>    }
+<a href=#1010 id=1010 data-nosnippet>1010</a>
+<a href=#1011 id=1011 data-nosnippet>1011</a>    <span class="attr">#[test]
+<a href=#1012 id=1012 data-nosnippet>1012</a>    </span><span class="kw">fn </span>pathological_nested_blockquotes() {
+<a href=#1013 id=1013 data-nosnippet>1013</a>        cpu_time_bounded(<span class="string">"20k nested blockquotes"</span>, <span class="kw-2">&amp;</span><span class="string">"&gt; "</span>.repeat(<span class="number">20_000</span>));
+<a href=#1014 id=1014 data-nosnippet>1014</a>    }
+<a href=#1015 id=1015 data-nosnippet>1015</a>
+<a href=#1016 id=1016 data-nosnippet>1016</a>    <span class="attr">#[test]
+<a href=#1017 id=1017 data-nosnippet>1017</a>    </span><span class="kw">fn </span>pathological_unmatched_emphasis() {
+<a href=#1018 id=1018 data-nosnippet>1018</a>        cpu_time_bounded(<span class="string">"20k unmatched *"</span>, <span class="kw-2">&amp;</span><span class="string">"*"</span>.repeat(<span class="number">20_000</span>));
+<a href=#1019 id=1019 data-nosnippet>1019</a>    }
+<a href=#1020 id=1020 data-nosnippet>1020</a>
+<a href=#1021 id=1021 data-nosnippet>1021</a>    <span class="attr">#[test]
+<a href=#1022 id=1022 data-nosnippet>1022</a>    </span><span class="kw">fn </span>pathological_unmatched_spoilers() {
+<a href=#1023 id=1023 data-nosnippet>1023</a>        cpu_time_bounded(<span class="string">"4000 chars of ||"</span>, <span class="kw-2">&amp;</span><span class="string">"|"</span>.repeat(<span class="number">4_000</span>));
+<a href=#1024 id=1024 data-nosnippet>1024</a>    }
+<a href=#1025 id=1025 data-nosnippet>1025</a>
+<a href=#1026 id=1026 data-nosnippet>1026</a>    <span class="attr">#[test]
+<a href=#1027 id=1027 data-nosnippet>1027</a>    </span><span class="kw">fn </span>pathological_deeply_nested_lists() {
+<a href=#1028 id=1028 data-nosnippet>1028</a>        <span class="kw">let </span><span class="kw-2">mut </span>source = String::new();
+<a href=#1029 id=1029 data-nosnippet>1029</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">2_000 </span>{
+<a href=#1030 id=1030 data-nosnippet>1030</a>            source.push_str(<span class="kw-2">&amp;</span><span class="string">" "</span>.repeat(i * <span class="number">2</span>));
+<a href=#1031 id=1031 data-nosnippet>1031</a>            source.push_str(<span class="string">"- x\n"</span>);
+<a href=#1032 id=1032 data-nosnippet>1032</a>        }
+<a href=#1033 id=1033 data-nosnippet>1033</a>        cpu_time_bounded(<span class="string">"deeply nested lists"</span>, <span class="kw-2">&amp;</span>source);
+<a href=#1034 id=1034 data-nosnippet>1034</a>    }
+<a href=#1035 id=1035 data-nosnippet>1035</a>
+<a href=#1036 id=1036 data-nosnippet>1036</a>    <span class="attr">#[test]
+<a href=#1037 id=1037 data-nosnippet>1037</a>    </span><span class="kw">fn </span>pathological_unmatched_angle_brackets() {
+<a href=#1038 id=1038 data-nosnippet>1038</a>        cpu_time_bounded(<span class="string">"100k &lt;"</span>, <span class="kw-2">&amp;</span><span class="string">"&lt;"</span>.repeat(<span class="number">100_000</span>));
+<a href=#1039 id=1039 data-nosnippet>1039</a>    }
+<a href=#1040 id=1040 data-nosnippet>1040</a>
+<a href=#1041 id=1041 data-nosnippet>1041</a>    <span class="attr">#[test]
+<a href=#1042 id=1042 data-nosnippet>1042</a>    </span><span class="kw">fn </span>pathological_repeated_hound_prefixes() {
+<a href=#1043 id=1043 data-nosnippet>1043</a>        cpu_time_bounded(
+<a href=#1044 id=1044 data-nosnippet>1044</a>            <span class="string">"4000 chars of hound:user/ prefixes"</span>,
+<a href=#1045 id=1045 data-nosnippet>1045</a>            <span class="kw-2">&amp;</span><span class="string">"&lt;hound:user/"</span>.repeat(<span class="number">400</span>),
+<a href=#1046 id=1046 data-nosnippet>1046</a>        );
+<a href=#1047 id=1047 data-nosnippet>1047</a>    }
+<a href=#1048 id=1048 data-nosnippet>1048</a>
+<a href=#1049 id=1049 data-nosnippet>1049</a>    <span class="macro">proptest!</span> {
+<a href=#1050 id=1050 data-nosnippet>1050</a>        <span class="attr">#[test]
+<a href=#1051 id=1051 data-nosnippet>1051</a>        </span><span class="kw">fn </span>parse_never_panics(source <span class="kw">in </span><span class="string">".*"</span>) {
+<a href=#1052 id=1052 data-nosnippet>1052</a>            <span class="kw">let _ </span>= parse(<span class="kw-2">&amp;</span>source);
+<a href=#1053 id=1053 data-nosnippet>1053</a>        }
+<a href=#1054 id=1054 data-nosnippet>1054</a>
+<a href=#1055 id=1055 data-nosnippet>1055</a>        <span class="attr">#[test]
+<a href=#1056 id=1056 data-nosnippet>1056</a>        </span><span class="kw">fn </span>reference_uri_round_trips(id <span class="kw">in </span>any::&lt;u128&gt;(), kind_idx <span class="kw">in </span><span class="number">0u8</span>..<span class="number">4</span>) {
+<a href=#1057 id=1057 data-nosnippet>1057</a>            <span class="kw">let </span>id = Uuid::from_u128(id);
+<a href=#1058 id=1058 data-nosnippet>1058</a>            <span class="kw">let </span>reference = <span class="kw">match </span>kind_idx {
+<a href=#1059 id=1059 data-nosnippet>1059</a>                <span class="number">0 </span>=&gt; Reference::User(id),
+<a href=#1060 id=1060 data-nosnippet>1060</a>                <span class="number">1 </span>=&gt; Reference::Space(id),
+<a href=#1061 id=1061 data-nosnippet>1061</a>                <span class="number">2 </span>=&gt; Reference::Message(id),
+<a href=#1062 id=1062 data-nosnippet>1062</a>                <span class="kw">_ </span>=&gt; Reference::Community(id),
+<a href=#1063 id=1063 data-nosnippet>1063</a>            };
 <a href=#1064 id=1064 data-nosnippet>1064</a>
-<a href=#1065 id=1065 data-nosnippet>1065</a>            <span class="kw">let </span>autolinked = parse(<span class="kw-2">&amp;</span>reference.autolink());
-<a href=#1066 id=1066 data-nosnippet>1066</a>            <span class="macro">prop_assert_eq!</span>(references(<span class="kw-2">&amp;</span>autolinked), <span class="macro">vec!</span>[reference.clone()]);
-<a href=#1067 id=1067 data-nosnippet>1067</a>
-<a href=#1068 id=1068 data-nosnippet>1068</a>            <span class="kw">let </span>labelled = parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"[label]({})"</span>, reference.uri()));
-<a href=#1069 id=1069 data-nosnippet>1069</a>            <span class="macro">prop_assert_eq!</span>(references(<span class="kw-2">&amp;</span>labelled), <span class="macro">vec!</span>[reference]);
-<a href=#1070 id=1070 data-nosnippet>1070</a>        }
-<a href=#1071 id=1071 data-nosnippet>1071</a>    }
-<a href=#1072 id=1072 data-nosnippet>1072</a>}
+<a href=#1065 id=1065 data-nosnippet>1065</a>            <span class="macro">prop_assert_eq!</span>(Reference::parse_uri(<span class="kw-2">&amp;</span>reference.uri()), <span class="prelude-val">Some</span>(reference.clone()));
+<a href=#1066 id=1066 data-nosnippet>1066</a>
+<a href=#1067 id=1067 data-nosnippet>1067</a>            <span class="kw">let </span>autolinked = parse(<span class="kw-2">&amp;</span>reference.autolink());
+<a href=#1068 id=1068 data-nosnippet>1068</a>            <span class="macro">prop_assert_eq!</span>(references(<span class="kw-2">&amp;</span>autolinked), <span class="macro">vec!</span>[reference.clone()]);
+<a href=#1069 id=1069 data-nosnippet>1069</a>
+<a href=#1070 id=1070 data-nosnippet>1070</a>            <span class="kw">let </span>labelled = parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"[label]({})"</span>, reference.uri()));
+<a href=#1071 id=1071 data-nosnippet>1071</a>            <span class="macro">prop_assert_eq!</span>(references(<span class="kw-2">&amp;</span>labelled), <span class="macro">vec!</span>[reference]);
+<a href=#1072 id=1072 data-nosnippet>1072</a>        }
+<a href=#1073 id=1073 data-nosnippet>1073</a>    }
+<a href=#1074 id=1074 data-nosnippet>1074</a>}
 </code></pre></div></section></main></body></html>

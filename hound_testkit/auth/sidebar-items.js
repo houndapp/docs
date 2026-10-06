@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAIL_WAIT_TIMEOUT"],"fn":["fresh_client","request_code","sign_in_magic_link","wait_for_code"]};
+window.SIDEBAR_ITEMS = {"constant":["INBOX_POLL","MAIL_WAIT_TIMEOUT"],"enum":["MailSource"],"fn":["fresh_client","request_code","sign_in_magic_link","sign_in_magic_link_via","wait_for_code"],"trait":["Inbox"]};

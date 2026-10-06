@@ -820,113 +820,114 @@
 <a href=#820 id=820 data-nosnippet>820</a>        <span class="macro">assert_eq!</span>(runs[<span class="number">1</span>].<span class="number">0</span>, <span class="string">"a\\*b"</span>);
 <a href=#821 id=821 data-nosnippet>821</a>    }
 <a href=#822 id=822 data-nosnippet>822</a>
-<a href=#823 id=823 data-nosnippet>823</a>    <span class="kw">fn </span>wall_clock_bounded(label: <span class="kw-2">&amp;</span>str, source: <span class="kw-2">&amp;</span>str) {
-<a href=#824 id=824 data-nosnippet>824</a>        <span class="kw">let </span>start = Instant::now();
-<a href=#825 id=825 data-nosnippet>825</a>        <span class="kw">let _ </span>= highlight(source);
-<a href=#826 id=826 data-nosnippet>826</a>        <span class="kw">let </span>elapsed = start.elapsed();
-<a href=#827 id=827 data-nosnippet>827</a>        <span class="macro">assert!</span>(
-<a href=#828 id=828 data-nosnippet>828</a>            elapsed &lt; Duration::from_secs(<span class="number">2</span>),
-<a href=#829 id=829 data-nosnippet>829</a>            <span class="string">"{label} took {elapsed:?}, over the 2s bound"
-<a href=#830 id=830 data-nosnippet>830</a>        </span>);
-<a href=#831 id=831 data-nosnippet>831</a>    }
-<a href=#832 id=832 data-nosnippet>832</a>
-<a href=#833 id=833 data-nosnippet>833</a>    <span class="attr">#[test]
-<a href=#834 id=834 data-nosnippet>834</a>    </span><span class="kw">fn </span>pathological_unmatched_brackets() {
-<a href=#835 id=835 data-nosnippet>835</a>        wall_clock_bounded(<span class="string">"50k unmatched ["</span>, <span class="kw-2">&amp;</span><span class="string">"["</span>.repeat(<span class="number">50_000</span>));
-<a href=#836 id=836 data-nosnippet>836</a>    }
-<a href=#837 id=837 data-nosnippet>837</a>
-<a href=#838 id=838 data-nosnippet>838</a>    <span class="attr">#[test]
-<a href=#839 id=839 data-nosnippet>839</a>    </span><span class="kw">fn </span>pathological_nested_blockquotes() {
-<a href=#840 id=840 data-nosnippet>840</a>        wall_clock_bounded(<span class="string">"20k nested blockquotes"</span>, <span class="kw-2">&amp;</span><span class="string">"&gt; "</span>.repeat(<span class="number">20_000</span>));
-<a href=#841 id=841 data-nosnippet>841</a>    }
-<a href=#842 id=842 data-nosnippet>842</a>
-<a href=#843 id=843 data-nosnippet>843</a>    <span class="attr">#[test]
-<a href=#844 id=844 data-nosnippet>844</a>    </span><span class="kw">fn </span>pathological_unmatched_emphasis() {
-<a href=#845 id=845 data-nosnippet>845</a>        wall_clock_bounded(<span class="string">"20k unmatched *"</span>, <span class="kw-2">&amp;</span><span class="string">"*"</span>.repeat(<span class="number">20_000</span>));
-<a href=#846 id=846 data-nosnippet>846</a>    }
-<a href=#847 id=847 data-nosnippet>847</a>
-<a href=#848 id=848 data-nosnippet>848</a>    <span class="attr">#[test]
-<a href=#849 id=849 data-nosnippet>849</a>    </span><span class="kw">fn </span>pathological_unmatched_spoilers() {
-<a href=#850 id=850 data-nosnippet>850</a>        wall_clock_bounded(<span class="string">"4000 chars of ||"</span>, <span class="kw-2">&amp;</span><span class="string">"|"</span>.repeat(<span class="number">4_000</span>));
-<a href=#851 id=851 data-nosnippet>851</a>    }
-<a href=#852 id=852 data-nosnippet>852</a>
-<a href=#853 id=853 data-nosnippet>853</a>    <span class="attr">#[test]
-<a href=#854 id=854 data-nosnippet>854</a>    </span><span class="kw">fn </span>pathological_deeply_nested_lists() {
-<a href=#855 id=855 data-nosnippet>855</a>        <span class="kw">let </span><span class="kw-2">mut </span>source = String::new();
-<a href=#856 id=856 data-nosnippet>856</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">2_000 </span>{
-<a href=#857 id=857 data-nosnippet>857</a>            source.push_str(<span class="kw-2">&amp;</span><span class="string">" "</span>.repeat(i * <span class="number">2</span>));
-<a href=#858 id=858 data-nosnippet>858</a>            source.push_str(<span class="string">"- x\n"</span>);
-<a href=#859 id=859 data-nosnippet>859</a>        }
-<a href=#860 id=860 data-nosnippet>860</a>        wall_clock_bounded(<span class="string">"deeply nested lists"</span>, <span class="kw-2">&amp;</span>source);
-<a href=#861 id=861 data-nosnippet>861</a>    }
-<a href=#862 id=862 data-nosnippet>862</a>
-<a href=#863 id=863 data-nosnippet>863</a>    <span class="attr">#[test]
-<a href=#864 id=864 data-nosnippet>864</a>    </span><span class="kw">fn </span>pathological_unmatched_angle_brackets() {
-<a href=#865 id=865 data-nosnippet>865</a>        wall_clock_bounded(<span class="string">"100k &lt;"</span>, <span class="kw-2">&amp;</span><span class="string">"&lt;"</span>.repeat(<span class="number">100_000</span>));
-<a href=#866 id=866 data-nosnippet>866</a>    }
-<a href=#867 id=867 data-nosnippet>867</a>
-<a href=#868 id=868 data-nosnippet>868</a>    <span class="attr">#[test]
-<a href=#869 id=869 data-nosnippet>869</a>    </span><span class="kw">fn </span>pathological_repeated_hound_prefixes() {
-<a href=#870 id=870 data-nosnippet>870</a>        wall_clock_bounded(
-<a href=#871 id=871 data-nosnippet>871</a>            <span class="string">"4000 chars of hound:user/ prefixes"</span>,
-<a href=#872 id=872 data-nosnippet>872</a>            <span class="kw-2">&amp;</span><span class="string">"&lt;hound:user/"</span>.repeat(<span class="number">400</span>),
-<a href=#873 id=873 data-nosnippet>873</a>        );
-<a href=#874 id=874 data-nosnippet>874</a>    }
-<a href=#875 id=875 data-nosnippet>875</a>
-<a href=#876 id=876 data-nosnippet>876</a>    <span class="doccomment">/// A message at the composer's own length cap (`maxMessageChars`), styled
-<a href=#877 id=877 data-nosnippet>877</a>    /// on every keystroke. The bound is the interactive one — a keystroke must
-<a href=#878 id=878 data-nosnippet>878</a>    /// not cost a frame — and is measured on a DEBUG build, where the shared
-<a href=#879 id=879 data-nosnippet>879</a>    /// comrak parse dominates (the walk over its AST adds roughly a sixth on
-<a href=#880 id=880 data-nosnippet>880</a>    /// top of what [`crate::parse`] already costs on the same input).
-<a href=#881 id=881 data-nosnippet>881</a>    ///
-<a href=#882 id=882 data-nosnippet>882</a>    /// Best-of-N, not mean: the suite runs its tests in parallel, so any one
-<a href=#883 id=883 data-nosnippet>883</a>    /// sample can be a scheduler artefact. What the bound is about is whether
-<a href=#884 id=884 data-nosnippet>884</a>    /// the work fits in a keystroke, not how a loaded machine schedules it.
-<a href=#885 id=885 data-nosnippet>885</a>    </span><span class="attr">#[test]
-<a href=#886 id=886 data-nosnippet>886</a>    </span><span class="kw">fn </span>a_full_length_message_highlights_within_a_frame_budget() {
-<a href=#887 id=887 data-nosnippet>887</a>        <span class="kw">let </span>paragraph = <span class="string">"Some **bold** text with `code`, a [link](https://example.com), \
-<a href=#888 id=888 data-nosnippet>888</a>                         ||a spoiler|| and ~~a retraction~~. "</span>;
-<a href=#889 id=889 data-nosnippet>889</a>        <span class="kw">let </span><span class="kw-2">mut </span>source = String::new();
-<a href=#890 id=890 data-nosnippet>890</a>        <span class="kw">while </span>source.chars().count() &lt; <span class="number">4_000 </span>{
-<a href=#891 id=891 data-nosnippet>891</a>            source.push_str(paragraph);
-<a href=#892 id=892 data-nosnippet>892</a>        }
-<a href=#893 id=893 data-nosnippet>893</a>        source.truncate(
-<a href=#894 id=894 data-nosnippet>894</a>            source
-<a href=#895 id=895 data-nosnippet>895</a>                .char_indices()
-<a href=#896 id=896 data-nosnippet>896</a>                .nth(<span class="number">4_000</span>)
-<a href=#897 id=897 data-nosnippet>897</a>                .map_or(source.len(), |(byte, <span class="kw">_</span>)| byte),
-<a href=#898 id=898 data-nosnippet>898</a>        );
-<a href=#899 id=899 data-nosnippet>899</a>
-<a href=#900 id=900 data-nosnippet>900</a>        <span class="kw">let </span>best = (<span class="number">0</span>..<span class="number">25</span>)
-<a href=#901 id=901 data-nosnippet>901</a>            .map(|<span class="kw">_</span>| {
-<a href=#902 id=902 data-nosnippet>902</a>                <span class="kw">let </span>start = Instant::now();
-<a href=#903 id=903 data-nosnippet>903</a>                <span class="kw">let </span>runs = highlight(<span class="kw-2">&amp;</span>source);
-<a href=#904 id=904 data-nosnippet>904</a>                <span class="macro">assert!</span>(!runs.is_empty());
-<a href=#905 id=905 data-nosnippet>905</a>                start.elapsed()
-<a href=#906 id=906 data-nosnippet>906</a>            })
-<a href=#907 id=907 data-nosnippet>907</a>            .min()
-<a href=#908 id=908 data-nosnippet>908</a>            .expect(<span class="string">"at least one sample"</span>);
-<a href=#909 id=909 data-nosnippet>909</a>        <span class="macro">assert!</span>(
-<a href=#910 id=910 data-nosnippet>910</a>            best &lt; Duration::from_millis(<span class="number">2</span>),
-<a href=#911 id=911 data-nosnippet>911</a>            <span class="string">"4000-char highlight took {best:?}, over the 2ms keystroke budget"
-<a href=#912 id=912 data-nosnippet>912</a>        </span>);
-<a href=#913 id=913 data-nosnippet>913</a>    }
-<a href=#914 id=914 data-nosnippet>914</a>
-<a href=#915 id=915 data-nosnippet>915</a>    <span class="macro">proptest!</span> {
-<a href=#916 id=916 data-nosnippet>916</a>        <span class="doccomment">/// Runs are ordered, non-overlapping, non-empty and inside the text —
-<a href=#917 id=917 data-nosnippet>917</a>        /// the contract the composer's span builder indexes against, held for
-<a href=#918 id=918 data-nosnippet>918</a>        /// arbitrary (i.e. mostly malformed) input.
-<a href=#919 id=919 data-nosnippet>919</a>        </span><span class="attr">#[test]
-<a href=#920 id=920 data-nosnippet>920</a>        </span><span class="kw">fn </span>runs_are_well_formed_for_any_input(source <span class="kw">in </span><span class="string">".*"</span>) {
-<a href=#921 id=921 data-nosnippet>921</a>            <span class="kw">let </span>units = source.encode_utf16().count() <span class="kw">as </span>u32;
-<a href=#922 id=922 data-nosnippet>922</a>            <span class="kw">let </span><span class="kw-2">mut </span>previous = <span class="number">0</span>;
-<a href=#923 id=923 data-nosnippet>923</a>            <span class="kw">for </span>run <span class="kw">in </span>highlight(<span class="kw-2">&amp;</span>source) {
-<a href=#924 id=924 data-nosnippet>924</a>                <span class="macro">prop_assert!</span>(run.start &lt; run.end);
-<a href=#925 id=925 data-nosnippet>925</a>                <span class="macro">prop_assert!</span>(run.start &gt;= previous);
-<a href=#926 id=926 data-nosnippet>926</a>                <span class="macro">prop_assert!</span>(run.end &lt;= units);
-<a href=#927 id=927 data-nosnippet>927</a>                previous = run.end;
-<a href=#928 id=928 data-nosnippet>928</a>            }
-<a href=#929 id=929 data-nosnippet>929</a>        }
-<a href=#930 id=930 data-nosnippet>930</a>    }
-<a href=#931 id=931 data-nosnippet>931</a>}
+<a href=#823 id=823 data-nosnippet>823</a>    <span class="doccomment">/// Thread CPU time, not wall clock — see `parse`'s `cpu_time_bounded`.
+<a href=#824 id=824 data-nosnippet>824</a>    </span><span class="kw">fn </span>cpu_time_bounded(label: <span class="kw-2">&amp;</span>str, source: <span class="kw-2">&amp;</span>str) {
+<a href=#825 id=825 data-nosnippet>825</a>        <span class="kw">let </span>start = cpu_time::ThreadTime::now();
+<a href=#826 id=826 data-nosnippet>826</a>        <span class="kw">let _ </span>= highlight(source);
+<a href=#827 id=827 data-nosnippet>827</a>        <span class="kw">let </span>elapsed = start.elapsed();
+<a href=#828 id=828 data-nosnippet>828</a>        <span class="macro">assert!</span>(
+<a href=#829 id=829 data-nosnippet>829</a>            elapsed &lt; Duration::from_secs(<span class="number">2</span>),
+<a href=#830 id=830 data-nosnippet>830</a>            <span class="string">"{label} took {elapsed:?} of CPU, over the 2s bound"
+<a href=#831 id=831 data-nosnippet>831</a>        </span>);
+<a href=#832 id=832 data-nosnippet>832</a>    }
+<a href=#833 id=833 data-nosnippet>833</a>
+<a href=#834 id=834 data-nosnippet>834</a>    <span class="attr">#[test]
+<a href=#835 id=835 data-nosnippet>835</a>    </span><span class="kw">fn </span>pathological_unmatched_brackets() {
+<a href=#836 id=836 data-nosnippet>836</a>        cpu_time_bounded(<span class="string">"50k unmatched ["</span>, <span class="kw-2">&amp;</span><span class="string">"["</span>.repeat(<span class="number">50_000</span>));
+<a href=#837 id=837 data-nosnippet>837</a>    }
+<a href=#838 id=838 data-nosnippet>838</a>
+<a href=#839 id=839 data-nosnippet>839</a>    <span class="attr">#[test]
+<a href=#840 id=840 data-nosnippet>840</a>    </span><span class="kw">fn </span>pathological_nested_blockquotes() {
+<a href=#841 id=841 data-nosnippet>841</a>        cpu_time_bounded(<span class="string">"20k nested blockquotes"</span>, <span class="kw-2">&amp;</span><span class="string">"&gt; "</span>.repeat(<span class="number">20_000</span>));
+<a href=#842 id=842 data-nosnippet>842</a>    }
+<a href=#843 id=843 data-nosnippet>843</a>
+<a href=#844 id=844 data-nosnippet>844</a>    <span class="attr">#[test]
+<a href=#845 id=845 data-nosnippet>845</a>    </span><span class="kw">fn </span>pathological_unmatched_emphasis() {
+<a href=#846 id=846 data-nosnippet>846</a>        cpu_time_bounded(<span class="string">"20k unmatched *"</span>, <span class="kw-2">&amp;</span><span class="string">"*"</span>.repeat(<span class="number">20_000</span>));
+<a href=#847 id=847 data-nosnippet>847</a>    }
+<a href=#848 id=848 data-nosnippet>848</a>
+<a href=#849 id=849 data-nosnippet>849</a>    <span class="attr">#[test]
+<a href=#850 id=850 data-nosnippet>850</a>    </span><span class="kw">fn </span>pathological_unmatched_spoilers() {
+<a href=#851 id=851 data-nosnippet>851</a>        cpu_time_bounded(<span class="string">"4000 chars of ||"</span>, <span class="kw-2">&amp;</span><span class="string">"|"</span>.repeat(<span class="number">4_000</span>));
+<a href=#852 id=852 data-nosnippet>852</a>    }
+<a href=#853 id=853 data-nosnippet>853</a>
+<a href=#854 id=854 data-nosnippet>854</a>    <span class="attr">#[test]
+<a href=#855 id=855 data-nosnippet>855</a>    </span><span class="kw">fn </span>pathological_deeply_nested_lists() {
+<a href=#856 id=856 data-nosnippet>856</a>        <span class="kw">let </span><span class="kw-2">mut </span>source = String::new();
+<a href=#857 id=857 data-nosnippet>857</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">2_000 </span>{
+<a href=#858 id=858 data-nosnippet>858</a>            source.push_str(<span class="kw-2">&amp;</span><span class="string">" "</span>.repeat(i * <span class="number">2</span>));
+<a href=#859 id=859 data-nosnippet>859</a>            source.push_str(<span class="string">"- x\n"</span>);
+<a href=#860 id=860 data-nosnippet>860</a>        }
+<a href=#861 id=861 data-nosnippet>861</a>        cpu_time_bounded(<span class="string">"deeply nested lists"</span>, <span class="kw-2">&amp;</span>source);
+<a href=#862 id=862 data-nosnippet>862</a>    }
+<a href=#863 id=863 data-nosnippet>863</a>
+<a href=#864 id=864 data-nosnippet>864</a>    <span class="attr">#[test]
+<a href=#865 id=865 data-nosnippet>865</a>    </span><span class="kw">fn </span>pathological_unmatched_angle_brackets() {
+<a href=#866 id=866 data-nosnippet>866</a>        cpu_time_bounded(<span class="string">"100k &lt;"</span>, <span class="kw-2">&amp;</span><span class="string">"&lt;"</span>.repeat(<span class="number">100_000</span>));
+<a href=#867 id=867 data-nosnippet>867</a>    }
+<a href=#868 id=868 data-nosnippet>868</a>
+<a href=#869 id=869 data-nosnippet>869</a>    <span class="attr">#[test]
+<a href=#870 id=870 data-nosnippet>870</a>    </span><span class="kw">fn </span>pathological_repeated_hound_prefixes() {
+<a href=#871 id=871 data-nosnippet>871</a>        cpu_time_bounded(
+<a href=#872 id=872 data-nosnippet>872</a>            <span class="string">"4000 chars of hound:user/ prefixes"</span>,
+<a href=#873 id=873 data-nosnippet>873</a>            <span class="kw-2">&amp;</span><span class="string">"&lt;hound:user/"</span>.repeat(<span class="number">400</span>),
+<a href=#874 id=874 data-nosnippet>874</a>        );
+<a href=#875 id=875 data-nosnippet>875</a>    }
+<a href=#876 id=876 data-nosnippet>876</a>
+<a href=#877 id=877 data-nosnippet>877</a>    <span class="doccomment">/// A message at the composer's own length cap (`maxMessageChars`), styled
+<a href=#878 id=878 data-nosnippet>878</a>    /// on every keystroke. The bound is the interactive one — a keystroke must
+<a href=#879 id=879 data-nosnippet>879</a>    /// not cost a frame — and is measured on a DEBUG build, where the shared
+<a href=#880 id=880 data-nosnippet>880</a>    /// comrak parse dominates (the walk over its AST adds roughly a sixth on
+<a href=#881 id=881 data-nosnippet>881</a>    /// top of what [`crate::parse`] already costs on the same input).
+<a href=#882 id=882 data-nosnippet>882</a>    ///
+<a href=#883 id=883 data-nosnippet>883</a>    /// Best-of-N, not mean: the suite runs its tests in parallel, so any one
+<a href=#884 id=884 data-nosnippet>884</a>    /// sample can be a scheduler artefact. What the bound is about is whether
+<a href=#885 id=885 data-nosnippet>885</a>    /// the work fits in a keystroke, not how a loaded machine schedules it.
+<a href=#886 id=886 data-nosnippet>886</a>    </span><span class="attr">#[test]
+<a href=#887 id=887 data-nosnippet>887</a>    </span><span class="kw">fn </span>a_full_length_message_highlights_within_a_frame_budget() {
+<a href=#888 id=888 data-nosnippet>888</a>        <span class="kw">let </span>paragraph = <span class="string">"Some **bold** text with `code`, a [link](https://example.com), \
+<a href=#889 id=889 data-nosnippet>889</a>                         ||a spoiler|| and ~~a retraction~~. "</span>;
+<a href=#890 id=890 data-nosnippet>890</a>        <span class="kw">let </span><span class="kw-2">mut </span>source = String::new();
+<a href=#891 id=891 data-nosnippet>891</a>        <span class="kw">while </span>source.chars().count() &lt; <span class="number">4_000 </span>{
+<a href=#892 id=892 data-nosnippet>892</a>            source.push_str(paragraph);
+<a href=#893 id=893 data-nosnippet>893</a>        }
+<a href=#894 id=894 data-nosnippet>894</a>        source.truncate(
+<a href=#895 id=895 data-nosnippet>895</a>            source
+<a href=#896 id=896 data-nosnippet>896</a>                .char_indices()
+<a href=#897 id=897 data-nosnippet>897</a>                .nth(<span class="number">4_000</span>)
+<a href=#898 id=898 data-nosnippet>898</a>                .map_or(source.len(), |(byte, <span class="kw">_</span>)| byte),
+<a href=#899 id=899 data-nosnippet>899</a>        );
+<a href=#900 id=900 data-nosnippet>900</a>
+<a href=#901 id=901 data-nosnippet>901</a>        <span class="kw">let </span>best = (<span class="number">0</span>..<span class="number">25</span>)
+<a href=#902 id=902 data-nosnippet>902</a>            .map(|<span class="kw">_</span>| {
+<a href=#903 id=903 data-nosnippet>903</a>                <span class="kw">let </span>start = Instant::now();
+<a href=#904 id=904 data-nosnippet>904</a>                <span class="kw">let </span>runs = highlight(<span class="kw-2">&amp;</span>source);
+<a href=#905 id=905 data-nosnippet>905</a>                <span class="macro">assert!</span>(!runs.is_empty());
+<a href=#906 id=906 data-nosnippet>906</a>                start.elapsed()
+<a href=#907 id=907 data-nosnippet>907</a>            })
+<a href=#908 id=908 data-nosnippet>908</a>            .min()
+<a href=#909 id=909 data-nosnippet>909</a>            .expect(<span class="string">"at least one sample"</span>);
+<a href=#910 id=910 data-nosnippet>910</a>        <span class="macro">assert!</span>(
+<a href=#911 id=911 data-nosnippet>911</a>            best &lt; Duration::from_millis(<span class="number">2</span>),
+<a href=#912 id=912 data-nosnippet>912</a>            <span class="string">"4000-char highlight took {best:?}, over the 2ms keystroke budget"
+<a href=#913 id=913 data-nosnippet>913</a>        </span>);
+<a href=#914 id=914 data-nosnippet>914</a>    }
+<a href=#915 id=915 data-nosnippet>915</a>
+<a href=#916 id=916 data-nosnippet>916</a>    <span class="macro">proptest!</span> {
+<a href=#917 id=917 data-nosnippet>917</a>        <span class="doccomment">/// Runs are ordered, non-overlapping, non-empty and inside the text —
+<a href=#918 id=918 data-nosnippet>918</a>        /// the contract the composer's span builder indexes against, held for
+<a href=#919 id=919 data-nosnippet>919</a>        /// arbitrary (i.e. mostly malformed) input.
+<a href=#920 id=920 data-nosnippet>920</a>        </span><span class="attr">#[test]
+<a href=#921 id=921 data-nosnippet>921</a>        </span><span class="kw">fn </span>runs_are_well_formed_for_any_input(source <span class="kw">in </span><span class="string">".*"</span>) {
+<a href=#922 id=922 data-nosnippet>922</a>            <span class="kw">let </span>units = source.encode_utf16().count() <span class="kw">as </span>u32;
+<a href=#923 id=923 data-nosnippet>923</a>            <span class="kw">let </span><span class="kw-2">mut </span>previous = <span class="number">0</span>;
+<a href=#924 id=924 data-nosnippet>924</a>            <span class="kw">for </span>run <span class="kw">in </span>highlight(<span class="kw-2">&amp;</span>source) {
+<a href=#925 id=925 data-nosnippet>925</a>                <span class="macro">prop_assert!</span>(run.start &lt; run.end);
+<a href=#926 id=926 data-nosnippet>926</a>                <span class="macro">prop_assert!</span>(run.start &gt;= previous);
+<a href=#927 id=927 data-nosnippet>927</a>                <span class="macro">prop_assert!</span>(run.end &lt;= units);
+<a href=#928 id=928 data-nosnippet>928</a>                previous = run.end;
+<a href=#929 id=929 data-nosnippet>929</a>            }
+<a href=#930 id=930 data-nosnippet>930</a>        }
+<a href=#931 id=931 data-nosnippet>931</a>    }
+<a href=#932 id=932 data-nosnippet>932</a>}
 </code></pre></div></section></main></body></html>
