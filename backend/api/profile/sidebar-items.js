@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TAG"],"fn":["get_global_profile","patch_global_avatar","router"],"struct":["FindProfileParameters","PatchAvatarRequest","ProfileResponse"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_PROFILE_NAME_CHARS","TAG"],"fn":["get_global_profile","patch_global_profile","router","validate_profile_name"],"mod":["steam"],"struct":["FindProfileParameters","PatchProfileRequest","ProfileResponse","ResolvedProfile"]};

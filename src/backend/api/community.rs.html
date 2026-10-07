@@ -169,7 +169,7 @@
 <a href=#169 id=169 data-nosnippet>169</a>/// absent one as `None`. Paired with `#[serde(default)]` this is what makes
 <a href=#170 id=170 data-nosnippet>170</a>/// `Option&lt;Option&lt;T&gt;&gt;` mean "omitted / set / cleared" rather than collapsing
 <a href=#171 id=171 data-nosnippet>171</a>/// the last two.
-<a href=#172 id=172 data-nosnippet>172</a></span><span class="kw">fn </span>present_option&lt;<span class="lifetime">'de</span>, T, D&gt;(deserializer: D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="prelude-ty">Option</span>&lt;T&gt;&gt;, D::Error&gt;
+<a href=#172 id=172 data-nosnippet>172</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>present_option&lt;<span class="lifetime">'de</span>, T, D&gt;(deserializer: D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="prelude-ty">Option</span>&lt;T&gt;&gt;, D::Error&gt;
 <a href=#173 id=173 data-nosnippet>173</a><span class="kw">where
 <a href=#174 id=174 data-nosnippet>174</a>    </span>T: serde::Deserialize&lt;<span class="lifetime">'de</span>&gt;,
 <a href=#175 id=175 data-nosnippet>175</a>    D: serde::Deserializer&lt;<span class="lifetime">'de</span>&gt;,

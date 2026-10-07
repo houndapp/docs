@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FIRST_FRAME_DEADLINE","REOPEN_DELAY"],"fn":["capture_format","choice_of","open_error","preview_loop","release"],"struct":["CameraPreview","PreviewInfo"],"trait":["PreviewSource"]};

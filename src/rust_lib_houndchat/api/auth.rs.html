@@ -128,145 +128,149 @@
 <a href=#128 id=128 data-nosnippet>128</a>    <span class="prelude-val">Ok</span>(url)
 <a href=#129 id=129 data-nosnippet>129</a>}
 <a href=#130 id=130 data-nosnippet>130</a>
-<a href=#131 id=131 data-nosnippet>131</a><span class="doccomment">/// Link the pending Steam link token to the current session (settings flow).
-<a href=#132 id=132 data-nosnippet>132</a></span><span class="kw">pub async fn </span>link_steam_pending() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#133 id=133 data-nosnippet>133</a>    client()<span class="question-mark">?</span>.link_steam_pending().<span class="kw">await
-<a href=#134 id=134 data-nosnippet>134</a></span>}
-<a href=#135 id=135 data-nosnippet>135</a>
-<a href=#136 id=136 data-nosnippet>136</a><span class="doccomment">/// Link Steam to the current session via the local Steam client (settings,
-<a href=#137 id=137 data-nosnippet>137</a>/// in-Steam launch).
-<a href=#138 id=138 data-nosnippet>138</a></span><span class="kw">pub async fn </span>link_steam_via_ticket() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#139 id=139 data-nosnippet>139</a>    client()<span class="question-mark">?</span>.link_steam_via_ticket().<span class="kw">await
-<a href=#140 id=140 data-nosnippet>140</a></span>}
-<a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a><span class="comment">// ─── Email magic-link ─────────────────────────────────────────────────────────
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a></span><span class="doccomment">/// Begin an email magic-link login: binds the loopback listener and asks the
-<a href=#145 id=145 data-nosnippet>145</a>/// backend to email `email` a sign-in link (carrying our port/state) plus a
-<a href=#146 id=146 data-nosnippet>146</a>/// bare code for manual entry. No browser is opened — the link lives in the
-<a href=#147 id=147 data-nosnippet>147</a>/// email. Follow with [`magic_link_wait`] (same-device link click) and/or
-<a href=#148 id=148 data-nosnippet>148</a>/// [`magic_link_code`] (typed code); whichever completes first wins — cancel
-<a href=#149 id=149 data-nosnippet>149</a>/// the other with [`magic_link_cancel`].
-<a href=#150 id=150 data-nosnippet>150</a></span><span class="kw">pub async fn </span>magic_link_begin(email: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#151 id=151 data-nosnippet>151</a>    client()<span class="question-mark">?</span>.magic_login_begin(<span class="kw-2">&amp;</span>email).<span class="kw">await
-<a href=#152 id=152 data-nosnippet>152</a></span>}
-<a href=#153 id=153 data-nosnippet>153</a>
-<a href=#154 id=154 data-nosnippet>154</a><span class="doccomment">/// Await the loopback callback for the pending [`magic_link_begin`] flow. A
-<a href=#155 id=155 data-nosnippet>155</a>/// token callback signs in; an unknown-email callback parks a link token and
-<a href=#156 id=156 data-nosnippet>156</a>/// returns `EmailUnknown` for the create-or-link screen. Errors on timeout or
-<a href=#157 id=157 data-nosnippet>157</a>/// when [`magic_link_cancel`] interrupts it.
-<a href=#158 id=158 data-nosnippet>158</a></span><span class="kw">pub async fn </span>magic_link_wait() -&gt; <span class="prelude-ty">Result</span>&lt;AuthFlowOutcome, HoundError&gt; {
-<a href=#159 id=159 data-nosnippet>159</a>    client()<span class="question-mark">?</span>.magic_login_wait().<span class="kw">await
-<a href=#160 id=160 data-nosnippet>160</a></span>}
-<a href=#161 id=161 data-nosnippet>161</a>
-<a href=#162 id=162 data-nosnippet>162</a><span class="doccomment">/// Verify a manually-typed sign-in code directly over REST (no loopback
-<a href=#163 id=163 data-nosnippet>163</a>/// needed — works for a link opened on another device). Same outcome shape as
-<a href=#164 id=164 data-nosnippet>164</a>/// [`magic_link_wait`].
-<a href=#165 id=165 data-nosnippet>165</a></span><span class="kw">pub async fn </span>magic_link_code(code: String) -&gt; <span class="prelude-ty">Result</span>&lt;AuthFlowOutcome, HoundError&gt; {
-<a href=#166 id=166 data-nosnippet>166</a>    client()<span class="question-mark">?</span>.magic_login_code(<span class="kw-2">&amp;</span>code).<span class="kw">await
-<a href=#167 id=167 data-nosnippet>167</a></span>}
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a><span class="doccomment">/// "Continue as `email`": create a new account for the pending email
-<a href=#170 id=170 data-nosnippet>170</a>/// create-or-link decision.
-<a href=#171 id=171 data-nosnippet>171</a></span><span class="kw">pub async fn </span>magic_link_register(display_name: String) -&gt; <span class="prelude-ty">Result</span>&lt;AuthState, HoundError&gt; {
-<a href=#172 id=172 data-nosnippet>172</a>    client()<span class="question-mark">?</span>.magic_register(<span class="kw-2">&amp;</span>display_name).<span class="kw">await
-<a href=#173 id=173 data-nosnippet>173</a></span>}
-<a href=#174 id=174 data-nosnippet>174</a>
-<a href=#175 id=175 data-nosnippet>175</a><span class="doccomment">/// Cancel a pending magic-link login (idempotent; wakes a blocked wait).
-<a href=#176 id=176 data-nosnippet>176</a></span><span class="kw">pub async fn </span>magic_link_cancel() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#177 id=177 data-nosnippet>177</a>    client()<span class="question-mark">?</span>.magic_login_cancel().<span class="kw">await</span>;
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="prelude-val">Ok</span>(())
-<a href=#179 id=179 data-nosnippet>179</a>}
-<a href=#180 id=180 data-nosnippet>180</a>
-<a href=#181 id=181 data-nosnippet>181</a><span class="comment">// ─── Linked identities (settings) ────────────────────────────────────────────
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a></span><span class="doccomment">/// The signed-in account's login methods + passkey count.
-<a href=#184 id=184 data-nosnippet>184</a></span><span class="kw">pub async fn </span>list_identities() -&gt; <span class="prelude-ty">Result</span>&lt;Identities, HoundError&gt; {
-<a href=#185 id=185 data-nosnippet>185</a>    client()<span class="question-mark">?</span>.identities().<span class="kw">await
-<a href=#186 id=186 data-nosnippet>186</a></span>}
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a><span class="doccomment">/// Unlink a login method (`"email"` / `"steam"`). The backend refuses to strand
-<a href=#189 id=189 data-nosnippet>189</a>/// the account (400 → `HoundError::Http`).
-<a href=#190 id=190 data-nosnippet>190</a></span><span class="kw">pub async fn </span>unlink_identity(provider: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#191 id=191 data-nosnippet>191</a>    client()<span class="question-mark">?</span>.unlink_identity(<span class="kw-2">&amp;</span>provider).<span class="kw">await
-<a href=#192 id=192 data-nosnippet>192</a></span>}
-<a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a><span class="doccomment">/// Begin adding an email + passkey to the signed-in account (same options JSON
-<a href=#195 id=195 data-nosnippet>195</a>/// seam as [`register_start`]).
-<a href=#196 id=196 data-nosnippet>196</a></span><span class="kw">pub async fn </span>link_email_start(
-<a href=#197 id=197 data-nosnippet>197</a>    email: String,
-<a href=#198 id=198 data-nosnippet>198</a>    display_name: String,
-<a href=#199 id=199 data-nosnippet>199</a>) -&gt; <span class="prelude-ty">Result</span>&lt;RegisterStartDto, HoundError&gt; {
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">let </span>r = client()<span class="question-mark">?</span>.link_email_start(<span class="kw-2">&amp;</span>email, <span class="kw-2">&amp;</span>display_name).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="prelude-val">Ok</span>(RegisterStartDto {
-<a href=#202 id=202 data-nosnippet>202</a>        user_id: r.user_id,
-<a href=#203 id=203 data-nosnippet>203</a>        options_json: to_json(<span class="kw-2">&amp;</span>r.options)<span class="question-mark">?</span>,
-<a href=#204 id=204 data-nosnippet>204</a>    })
-<a href=#205 id=205 data-nosnippet>205</a>}
-<a href=#206 id=206 data-nosnippet>206</a>
-<a href=#207 id=207 data-nosnippet>207</a><span class="doccomment">/// Complete the email link with the authenticator credential JSON.
-<a href=#208 id=208 data-nosnippet>208</a></span><span class="kw">pub async fn </span>link_email_finish(credential_json: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">let </span>credential = parse_credential(<span class="kw-2">&amp;</span>credential_json)<span class="question-mark">?</span>;
-<a href=#210 id=210 data-nosnippet>210</a>    client()<span class="question-mark">?</span>.link_email_finish(credential).<span class="kw">await
-<a href=#211 id=211 data-nosnippet>211</a></span>}
-<a href=#212 id=212 data-nosnippet>212</a>
-<a href=#213 id=213 data-nosnippet>213</a><span class="doccomment">/// Begin the browser-deferred email-link ceremony (no system passkey provider,
-<a href=#214 id=214 data-nosnippet>214</a>/// e.g. Linux): the hosted auth page collects the email and runs the create
-<a href=#215 id=215 data-nosnippet>215</a>/// ceremony under a scoped token. Follow with [`browser_login_wait`], which
-<a href=#216 id=216 data-nosnippet>216</a>/// ends in `EmailLinked`.
-<a href=#217 id=217 data-nosnippet>217</a></span><span class="kw">pub async fn </span>link_email_browser_begin(auth_url: String) -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span>url = client()<span class="question-mark">?</span>.browser_link_email_begin(<span class="kw-2">&amp;</span>auth_url).<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#219 id=219 data-nosnippet>219</a>    hound_browser_auth::open_in_browser(<span class="kw-2">&amp;</span>url);
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="prelude-val">Ok</span>(url)
-<a href=#221 id=221 data-nosnippet>221</a>}
-<a href=#222 id=222 data-nosnippet>222</a>
-<a href=#223 id=223 data-nosnippet>223</a><span class="doccomment">/// Cancel a pending browser login (idempotent; wakes a blocked wait).
-<a href=#224 id=224 data-nosnippet>224</a></span><span class="kw">pub async fn </span>browser_login_cancel() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#225 id=225 data-nosnippet>225</a>    client()<span class="question-mark">?</span>.browser_login_cancel().<span class="kw">await</span>;
-<a href=#226 id=226 data-nosnippet>226</a>    <span class="prelude-val">Ok</span>(())
-<a href=#227 id=227 data-nosnippet>227</a>}
-<a href=#228 id=228 data-nosnippet>228</a>
-<a href=#229 id=229 data-nosnippet>229</a><span class="doccomment">/// Sign out: tear down realtime, clear the session, reset the observable snapshots.
-<a href=#230 id=230 data-nosnippet>230</a></span><span class="kw">pub async fn </span>logout() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
-<a href=#231 id=231 data-nosnippet>231</a>    client()<span class="question-mark">?</span>.logout().<span class="kw">await
-<a href=#232 id=232 data-nosnippet>232</a></span>}
-<a href=#233 id=233 data-nosnippet>233</a>
-<a href=#234 id=234 data-nosnippet>234</a><span class="comment">// ─── Wire DTOs (FRB-owned; flat, id-as-Uuid projections of the snapshots) ──────
-<a href=#235 id=235 data-nosnippet>235</a>
-<a href=#236 id=236 data-nosnippet>236</a></span><span class="doccomment">/// `register/start` result: provisional user id + opaque WebAuthn options JSON.
-<a href=#237 id=237 data-nosnippet>237</a></span><span class="attr">#[derive(Clone, Debug)]
-<a href=#238 id=238 data-nosnippet>238</a></span><span class="kw">pub struct </span>RegisterStartDto {
-<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">pub </span>user_id: Uuid,
-<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">pub </span>options_json: String,
-<a href=#241 id=241 data-nosnippet>241</a>}
-<a href=#242 id=242 data-nosnippet>242</a>
-<a href=#243 id=243 data-nosnippet>243</a><span class="doccomment">/// `login/start` result: user id + opaque WebAuthn request options JSON.
-<a href=#244 id=244 data-nosnippet>244</a></span><span class="attr">#[derive(Clone, Debug)]
-<a href=#245 id=245 data-nosnippet>245</a></span><span class="kw">pub struct </span>LoginStartDto {
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">pub </span>user_id: Uuid,
-<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">pub </span>options_json: String,
-<a href=#248 id=248 data-nosnippet>248</a>}
-<a href=#249 id=249 data-nosnippet>249</a>
-<a href=#250 id=250 data-nosnippet>250</a><span class="doccomment">/// Parse a Dart-supplied WebAuthn credential/assertion JSON string into the typed
-<a href=#251 id=251 data-nosnippet>251</a>/// `hound-passkey` type the client expects. The Dart `passkeys` package produces
-<a href=#252 id=252 data-nosnippet>252</a>/// these as JSON, so this seam owns the JSON→typed conversion (the Dart-facing
-<a href=#253 id=253 data-nosnippet>253</a>/// API stays JSON strings).
-<a href=#254 id=254 data-nosnippet>254</a></span><span class="kw">fn </span>parse_credential&lt;T: serde::de::DeserializeOwned&gt;(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;T, HoundError&gt; {
-<a href=#255 id=255 data-nosnippet>255</a>    serde_json::from_str(s).map_err(|e| {
-<a href=#256 id=256 data-nosnippet>256</a>        HoundError::decode(
-<a href=#257 id=257 data-nosnippet>257</a>            DecodeCode::CredentialJson,
-<a href=#258 id=258 data-nosnippet>258</a>            <span class="macro">format!</span>(<span class="string">"invalid credential json: {e}"</span>),
-<a href=#259 id=259 data-nosnippet>259</a>        )
-<a href=#260 id=260 data-nosnippet>260</a>    })
-<a href=#261 id=261 data-nosnippet>261</a>}
-<a href=#262 id=262 data-nosnippet>262</a>
-<a href=#263 id=263 data-nosnippet>263</a><span class="doccomment">/// Serialise a typed WebAuthn options value back to a JSON string for the Dart side.
-<a href=#264 id=264 data-nosnippet>264</a></span><span class="kw">fn </span>to_json&lt;T: serde::Serialize&gt;(value: <span class="kw-2">&amp;</span>T) -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
-<a href=#265 id=265 data-nosnippet>265</a>    serde_json::to_string(value).map_err(|e| {
-<a href=#266 id=266 data-nosnippet>266</a>        HoundError::decode(
-<a href=#267 id=267 data-nosnippet>267</a>            DecodeCode::OptionsJson,
-<a href=#268 id=268 data-nosnippet>268</a>            <span class="macro">format!</span>(<span class="string">"failed to serialise options: {e}"</span>),
-<a href=#269 id=269 data-nosnippet>269</a>        )
-<a href=#270 id=270 data-nosnippet>270</a>    })
-<a href=#271 id=271 data-nosnippet>271</a>}
+<a href=#131 id=131 data-nosnippet>131</a><span class="doccomment">/// Link the parked Steam identity to the current session, or report how the
+<a href=#132 id=132 data-nosnippet>132</a>/// sign-in's auto-link ended (the Link Steam page calls this after its sign-in).
+<a href=#133 id=133 data-nosnippet>133</a>/// `Ok` = linked; `Refused { status: 409, code: "conflict" }` = the Steam ID
+<a href=#134 id=134 data-nosnippet>134</a>/// belongs to another account or this one already has one;
+<a href=#135 id=135 data-nosnippet>135</a>/// `Auth { SteamLinkExpired, "steam_link_expired" }` = no live link token.
+<a href=#136 id=136 data-nosnippet>136</a></span><span class="kw">pub async fn </span>link_steam_pending() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#137 id=137 data-nosnippet>137</a>    client()<span class="question-mark">?</span>.link_steam_pending().<span class="kw">await
+<a href=#138 id=138 data-nosnippet>138</a></span>}
+<a href=#139 id=139 data-nosnippet>139</a>
+<a href=#140 id=140 data-nosnippet>140</a><span class="doccomment">/// Link Steam to the current session via the local Steam client (settings,
+<a href=#141 id=141 data-nosnippet>141</a>/// in-Steam launch).
+<a href=#142 id=142 data-nosnippet>142</a></span><span class="kw">pub async fn </span>link_steam_via_ticket() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#143 id=143 data-nosnippet>143</a>    client()<span class="question-mark">?</span>.link_steam_via_ticket().<span class="kw">await
+<a href=#144 id=144 data-nosnippet>144</a></span>}
+<a href=#145 id=145 data-nosnippet>145</a>
+<a href=#146 id=146 data-nosnippet>146</a><span class="comment">// ─── Email magic-link ─────────────────────────────────────────────────────────
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a></span><span class="doccomment">/// Begin an email magic-link login: binds the loopback listener and asks the
+<a href=#149 id=149 data-nosnippet>149</a>/// backend to email `email` a sign-in link (carrying our port/state) plus a
+<a href=#150 id=150 data-nosnippet>150</a>/// bare code for manual entry. No browser is opened — the link lives in the
+<a href=#151 id=151 data-nosnippet>151</a>/// email. Follow with [`magic_link_wait`] (same-device link click) and/or
+<a href=#152 id=152 data-nosnippet>152</a>/// [`magic_link_code`] (typed code); whichever completes first wins — cancel
+<a href=#153 id=153 data-nosnippet>153</a>/// the other with [`magic_link_cancel`].
+<a href=#154 id=154 data-nosnippet>154</a></span><span class="kw">pub async fn </span>magic_link_begin(email: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#155 id=155 data-nosnippet>155</a>    client()<span class="question-mark">?</span>.magic_login_begin(<span class="kw-2">&amp;</span>email).<span class="kw">await
+<a href=#156 id=156 data-nosnippet>156</a></span>}
+<a href=#157 id=157 data-nosnippet>157</a>
+<a href=#158 id=158 data-nosnippet>158</a><span class="doccomment">/// Await the loopback callback for the pending [`magic_link_begin`] flow. A
+<a href=#159 id=159 data-nosnippet>159</a>/// token callback signs in; an unknown-email callback parks a link token and
+<a href=#160 id=160 data-nosnippet>160</a>/// returns `EmailUnknown` for the create-or-link screen. Errors on timeout or
+<a href=#161 id=161 data-nosnippet>161</a>/// when [`magic_link_cancel`] interrupts it.
+<a href=#162 id=162 data-nosnippet>162</a></span><span class="kw">pub async fn </span>magic_link_wait() -&gt; <span class="prelude-ty">Result</span>&lt;AuthFlowOutcome, HoundError&gt; {
+<a href=#163 id=163 data-nosnippet>163</a>    client()<span class="question-mark">?</span>.magic_login_wait().<span class="kw">await
+<a href=#164 id=164 data-nosnippet>164</a></span>}
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a><span class="doccomment">/// Verify a manually-typed sign-in code directly over REST (no loopback
+<a href=#167 id=167 data-nosnippet>167</a>/// needed — works for a link opened on another device). Same outcome shape as
+<a href=#168 id=168 data-nosnippet>168</a>/// [`magic_link_wait`].
+<a href=#169 id=169 data-nosnippet>169</a></span><span class="kw">pub async fn </span>magic_link_code(code: String) -&gt; <span class="prelude-ty">Result</span>&lt;AuthFlowOutcome, HoundError&gt; {
+<a href=#170 id=170 data-nosnippet>170</a>    client()<span class="question-mark">?</span>.magic_login_code(<span class="kw-2">&amp;</span>code).<span class="kw">await
+<a href=#171 id=171 data-nosnippet>171</a></span>}
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a><span class="doccomment">/// "Continue as `email`": create a new account for the pending email
+<a href=#174 id=174 data-nosnippet>174</a>/// create-or-link decision.
+<a href=#175 id=175 data-nosnippet>175</a></span><span class="kw">pub async fn </span>magic_link_register(display_name: String) -&gt; <span class="prelude-ty">Result</span>&lt;AuthState, HoundError&gt; {
+<a href=#176 id=176 data-nosnippet>176</a>    client()<span class="question-mark">?</span>.magic_register(<span class="kw-2">&amp;</span>display_name).<span class="kw">await
+<a href=#177 id=177 data-nosnippet>177</a></span>}
+<a href=#178 id=178 data-nosnippet>178</a>
+<a href=#179 id=179 data-nosnippet>179</a><span class="doccomment">/// Cancel a pending magic-link login (idempotent; wakes a blocked wait).
+<a href=#180 id=180 data-nosnippet>180</a></span><span class="kw">pub async fn </span>magic_link_cancel() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#181 id=181 data-nosnippet>181</a>    client()<span class="question-mark">?</span>.magic_login_cancel().<span class="kw">await</span>;
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="prelude-val">Ok</span>(())
+<a href=#183 id=183 data-nosnippet>183</a>}
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a><span class="comment">// ─── Linked identities (settings) ────────────────────────────────────────────
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a></span><span class="doccomment">/// The signed-in account's login methods + passkey count.
+<a href=#188 id=188 data-nosnippet>188</a></span><span class="kw">pub async fn </span>list_identities() -&gt; <span class="prelude-ty">Result</span>&lt;Identities, HoundError&gt; {
+<a href=#189 id=189 data-nosnippet>189</a>    client()<span class="question-mark">?</span>.identities().<span class="kw">await
+<a href=#190 id=190 data-nosnippet>190</a></span>}
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a><span class="doccomment">/// Unlink a login method (`"email"` / `"steam"`). The backend refuses to strand
+<a href=#193 id=193 data-nosnippet>193</a>/// the account (400 → `HoundError::Http`).
+<a href=#194 id=194 data-nosnippet>194</a></span><span class="kw">pub async fn </span>unlink_identity(provider: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#195 id=195 data-nosnippet>195</a>    client()<span class="question-mark">?</span>.unlink_identity(<span class="kw-2">&amp;</span>provider).<span class="kw">await
+<a href=#196 id=196 data-nosnippet>196</a></span>}
+<a href=#197 id=197 data-nosnippet>197</a>
+<a href=#198 id=198 data-nosnippet>198</a><span class="doccomment">/// Begin adding an email + passkey to the signed-in account (same options JSON
+<a href=#199 id=199 data-nosnippet>199</a>/// seam as [`register_start`]).
+<a href=#200 id=200 data-nosnippet>200</a></span><span class="kw">pub async fn </span>link_email_start(
+<a href=#201 id=201 data-nosnippet>201</a>    email: String,
+<a href=#202 id=202 data-nosnippet>202</a>    display_name: String,
+<a href=#203 id=203 data-nosnippet>203</a>) -&gt; <span class="prelude-ty">Result</span>&lt;RegisterStartDto, HoundError&gt; {
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">let </span>r = client()<span class="question-mark">?</span>.link_email_start(<span class="kw-2">&amp;</span>email, <span class="kw-2">&amp;</span>display_name).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="prelude-val">Ok</span>(RegisterStartDto {
+<a href=#206 id=206 data-nosnippet>206</a>        user_id: r.user_id,
+<a href=#207 id=207 data-nosnippet>207</a>        options_json: to_json(<span class="kw-2">&amp;</span>r.options)<span class="question-mark">?</span>,
+<a href=#208 id=208 data-nosnippet>208</a>    })
+<a href=#209 id=209 data-nosnippet>209</a>}
+<a href=#210 id=210 data-nosnippet>210</a>
+<a href=#211 id=211 data-nosnippet>211</a><span class="doccomment">/// Complete the email link with the authenticator credential JSON.
+<a href=#212 id=212 data-nosnippet>212</a></span><span class="kw">pub async fn </span>link_email_finish(credential_json: String) -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">let </span>credential = parse_credential(<span class="kw-2">&amp;</span>credential_json)<span class="question-mark">?</span>;
+<a href=#214 id=214 data-nosnippet>214</a>    client()<span class="question-mark">?</span>.link_email_finish(credential).<span class="kw">await
+<a href=#215 id=215 data-nosnippet>215</a></span>}
+<a href=#216 id=216 data-nosnippet>216</a>
+<a href=#217 id=217 data-nosnippet>217</a><span class="doccomment">/// Begin the browser-deferred email-link ceremony (no system passkey provider,
+<a href=#218 id=218 data-nosnippet>218</a>/// e.g. Linux): the hosted auth page collects the email and runs the create
+<a href=#219 id=219 data-nosnippet>219</a>/// ceremony under a scoped token. Follow with [`browser_login_wait`], which
+<a href=#220 id=220 data-nosnippet>220</a>/// ends in `EmailLinked`.
+<a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">pub async fn </span>link_email_browser_begin(auth_url: String) -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">let </span>url = client()<span class="question-mark">?</span>.browser_link_email_begin(<span class="kw-2">&amp;</span>auth_url).<span class="kw">await</span><span class="question-mark">?</span>;
+<a href=#223 id=223 data-nosnippet>223</a>    hound_browser_auth::open_in_browser(<span class="kw-2">&amp;</span>url);
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="prelude-val">Ok</span>(url)
+<a href=#225 id=225 data-nosnippet>225</a>}
+<a href=#226 id=226 data-nosnippet>226</a>
+<a href=#227 id=227 data-nosnippet>227</a><span class="doccomment">/// Cancel a pending browser login (idempotent; wakes a blocked wait).
+<a href=#228 id=228 data-nosnippet>228</a></span><span class="kw">pub async fn </span>browser_login_cancel() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#229 id=229 data-nosnippet>229</a>    client()<span class="question-mark">?</span>.browser_login_cancel().<span class="kw">await</span>;
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="prelude-val">Ok</span>(())
+<a href=#231 id=231 data-nosnippet>231</a>}
+<a href=#232 id=232 data-nosnippet>232</a>
+<a href=#233 id=233 data-nosnippet>233</a><span class="doccomment">/// Sign out: tear down realtime, clear the session, reset the observable snapshots.
+<a href=#234 id=234 data-nosnippet>234</a></span><span class="kw">pub async fn </span>logout() -&gt; <span class="prelude-ty">Result</span>&lt;(), HoundError&gt; {
+<a href=#235 id=235 data-nosnippet>235</a>    client()<span class="question-mark">?</span>.logout().<span class="kw">await
+<a href=#236 id=236 data-nosnippet>236</a></span>}
+<a href=#237 id=237 data-nosnippet>237</a>
+<a href=#238 id=238 data-nosnippet>238</a><span class="comment">// ─── Wire DTOs (FRB-owned; flat, id-as-Uuid projections of the snapshots) ──────
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a></span><span class="doccomment">/// `register/start` result: provisional user id + opaque WebAuthn options JSON.
+<a href=#241 id=241 data-nosnippet>241</a></span><span class="attr">#[derive(Clone, Debug)]
+<a href=#242 id=242 data-nosnippet>242</a></span><span class="kw">pub struct </span>RegisterStartDto {
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">pub </span>user_id: Uuid,
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">pub </span>options_json: String,
+<a href=#245 id=245 data-nosnippet>245</a>}
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a><span class="doccomment">/// `login/start` result: user id + opaque WebAuthn request options JSON.
+<a href=#248 id=248 data-nosnippet>248</a></span><span class="attr">#[derive(Clone, Debug)]
+<a href=#249 id=249 data-nosnippet>249</a></span><span class="kw">pub struct </span>LoginStartDto {
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">pub </span>user_id: Uuid,
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">pub </span>options_json: String,
+<a href=#252 id=252 data-nosnippet>252</a>}
+<a href=#253 id=253 data-nosnippet>253</a>
+<a href=#254 id=254 data-nosnippet>254</a><span class="doccomment">/// Parse a Dart-supplied WebAuthn credential/assertion JSON string into the typed
+<a href=#255 id=255 data-nosnippet>255</a>/// `hound-passkey` type the client expects. The Dart `passkeys` package produces
+<a href=#256 id=256 data-nosnippet>256</a>/// these as JSON, so this seam owns the JSON→typed conversion (the Dart-facing
+<a href=#257 id=257 data-nosnippet>257</a>/// API stays JSON strings).
+<a href=#258 id=258 data-nosnippet>258</a></span><span class="kw">fn </span>parse_credential&lt;T: serde::de::DeserializeOwned&gt;(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;T, HoundError&gt; {
+<a href=#259 id=259 data-nosnippet>259</a>    serde_json::from_str(s).map_err(|e| {
+<a href=#260 id=260 data-nosnippet>260</a>        HoundError::decode(
+<a href=#261 id=261 data-nosnippet>261</a>            DecodeCode::CredentialJson,
+<a href=#262 id=262 data-nosnippet>262</a>            <span class="macro">format!</span>(<span class="string">"invalid credential json: {e}"</span>),
+<a href=#263 id=263 data-nosnippet>263</a>        )
+<a href=#264 id=264 data-nosnippet>264</a>    })
+<a href=#265 id=265 data-nosnippet>265</a>}
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a><span class="doccomment">/// Serialise a typed WebAuthn options value back to a JSON string for the Dart side.
+<a href=#268 id=268 data-nosnippet>268</a></span><span class="kw">fn </span>to_json&lt;T: serde::Serialize&gt;(value: <span class="kw-2">&amp;</span>T) -&gt; <span class="prelude-ty">Result</span>&lt;String, HoundError&gt; {
+<a href=#269 id=269 data-nosnippet>269</a>    serde_json::to_string(value).map_err(|e| {
+<a href=#270 id=270 data-nosnippet>270</a>        HoundError::decode(
+<a href=#271 id=271 data-nosnippet>271</a>            DecodeCode::OptionsJson,
+<a href=#272 id=272 data-nosnippet>272</a>            <span class="macro">format!</span>(<span class="string">"failed to serialise options: {e}"</span>),
+<a href=#273 id=273 data-nosnippet>273</a>        )
+<a href=#274 id=274 data-nosnippet>274</a>    })
+<a href=#275 id=275 data-nosnippet>275</a>}
 </code></pre></div></section></main></body></html>

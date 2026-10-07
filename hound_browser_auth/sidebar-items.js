@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["BrowserAuthError","CallbackResult","Mode"],"fn":["open_in_browser","random_state","read_request_line","respond_success","wait_for_callback"],"struct":["BrowserLogin","MagicLogin","Tokens"]};
+window.SIDEBAR_ITEMS = {"constant":["FAILURE_PAGE","SUCCESS_PAGE"],"enum":["BrowserAuthError","CallbackResult","Mode"],"fn":["open_in_browser","random_state","read_request_line","respond_page","wait_for_callback"],"macro":[["end_page",1]],"struct":["BrowserLogin","MagicLogin","Tokens"]};

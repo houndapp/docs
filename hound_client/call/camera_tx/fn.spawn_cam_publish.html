@@ -4,7 +4,7 @@
     self_user_id: <a class="struct" href="https://docs.rs/uuid/1.23.1/uuid/struct.Uuid.html" title="struct uuid::Uuid">Uuid</a>,
     self_id: PeerId,
     clock: CaptureClock,
-    device_rx: Receiver&lt;DeviceChoice&lt;CameraId&gt;&gt;,
+    device_rx: Receiver&lt;<a class="enum" href="../../../hound_engine/types/device/enum.DeviceChoice.html" title="enum hound_engine::types::device::DeviceChoice">DeviceChoice</a>&lt;<a class="struct" href="../../../hound_engine/types/device/struct.CameraId.html" title="struct hound_engine::types::device::CameraId">CameraId</a>&gt;&gt;,
     enabled: <a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="type" href="https://doc.rust-lang.org/1.98.1/core/sync/atomic/type.AtomicBool.html" title="type core::sync::atomic::AtomicBool">AtomicBool</a>&gt;,
     sink: <a class="struct" href="https://doc.rust-lang.org/1.98.1/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;dyn <a class="trait" href="../trait.VideoSink.html" title="trait hound_client::call::VideoSink">VideoSink</a>&gt;,
     control_outbound: UnboundedSender&lt;ClientMessage&gt;,

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["clear_avatar","import_steam_avatar","set_avatar","set_display_name"]};

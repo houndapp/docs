@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEVICE_OPEN_LEAD","DRAIN_TAIL","DURATION_MS","FADE_MS","FRAME_SAMPLES","FRAME_US","FREQ_HZ","LEVEL_DBFS","TONE_FLOOR_US"],"fn":["play","tone_samples"]};

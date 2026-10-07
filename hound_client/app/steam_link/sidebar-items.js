@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["STEAM_LINK_CONFLICT_CODE","STEAM_LINK_CONFLICT_COPY","STEAM_LINK_EXPIRED_MESSAGE"],"fn":["classify_link","verdict_to_result"]};
